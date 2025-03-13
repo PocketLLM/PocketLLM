@@ -65,6 +65,10 @@ class _ChatInterfaceState extends State<ChatInterface> {
     super.initState();
     _loadSelectedModel();
     _loadChatHistory();
+    // Add listener to update send button state
+    _messageController.addListener(() {
+      setState(() {}); // Trigger rebuild when text changes
+    });
   }
 
   Future<void> _loadSelectedModel() async {
@@ -136,7 +140,7 @@ class _ChatInterfaceState extends State<ChatInterface> {
 
   Future<void> _sendMessage() async {
     final message = _messageController.text.trim();
-    if (message.isEmpty) return;
+    if (message.isEmpty || _isLoading) return;
 
     setState(() {
       _messages.add(Message(
@@ -149,34 +153,37 @@ class _ChatInterfaceState extends State<ChatInterface> {
       _currentStreamingResponse = '';
     });
 
+    // Add a temporary "Thinking..." message
+    setState(() {
+      final thinkingMessage = Message(
+        content: "Thinking...",
+        isUser: false,
+        timestamp: DateTime.now(),
+        isThinking: true
+      );
+      _messages.add(thinkingMessage);
+    });
+    _scrollToBottom();
+
     try {
       final response = await ChatService.getModelResponse(
         message,
-        stream: true,
-        onToken: (token) {
-          setState(() {
-            _currentStreamingResponse += token;
-            // Update the last message if it's the model's response
-            if (_messages.isNotEmpty && !_messages.last.isUser) {
-              _messages.last.content = _currentStreamingResponse;
-            } else {
-              _messages.add(Message(
-                content: _currentStreamingResponse,
-                isUser: false,
-                timestamp: DateTime.now(),
-              ));
-            }
-          });
-        },
+        stream: false,
       );
 
       setState(() {
         _isLoading = false;
-        // Ensure the final response is set
-        if (_messages.isNotEmpty && !_messages.last.isUser) {
-          _messages.last.content = response;
-        }
+        // Remove thinking message
+        _messages.removeWhere((msg) => msg.isThinking);
+        // Add AI response
+        _messages.add(Message(
+          content: response,
+          isUser: false,
+          timestamp: DateTime.now(),
+        ));
       });
+      _scrollToBottom();
+      _saveChatHistory();
     } catch (e) {
       setState(() {
         _isLoading = false;

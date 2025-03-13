@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'dart:math' as math;
 import 'package:pocketllm/services/auth_service.dart';
 import '../../widgets/clear_text_field.dart';
 import 'user_survey_page.dart';
@@ -29,26 +28,25 @@ class _AuthPageState extends State<AuthPage> {
   bool _showSignupFields = false;
   bool _isLoading = false;
   bool _emailExists = false;
-  bool _passwordVisible = false;
-  bool _confirmPasswordVisible = false;
-  late String _randomAvatar;
+  String _selectedAvatar = 'assets/avatar1.jpg';
 
   @override
   void initState() {
     super.initState();
-    final random = math.Random();
-    _randomAvatar = random.nextBool() ? 'assets/avatar1.jpg' : 'assets/avatar2.jpg';
+    // Randomly select avatar1 or avatar2
+    _selectedAvatar = 'assets/avatar${(DateTime.now().millisecondsSinceEpoch % 2) + 1}.jpg';
   }
-
+  
   bool _validateEmail(String email) {
     return RegExp(r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$').hasMatch(email);
   }
   
   Future<void> _handleEmailCheck() async {
-    if (!_isValidEmail) return;
-
+    if (!mounted) return;
     try {
-      setState(() => _isLoading = true);
+      setState(() {
+        _isLoading = true;
+      });
       
       final exists = await _authService.checkEmailExists(_emailController.text);
       
@@ -57,26 +55,16 @@ class _AuthPageState extends State<AuthPage> {
         _emailExists = exists;
         _isLoading = false;
         _showPasswordField = true;
-        _showSignupFields = !exists;
-        if (exists) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Email already registered. Please sign in.'),
-              backgroundColor: Color(0xFF8B5CF6),
-            ),
-          );
-        } else {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('New email detected. Please create an account.'),
-              backgroundColor: Color(0xFF8B5CF6),
-            ),
-          );
+        
+        if (!exists) {
+          _showSignupFields = true;
         }
       });
     } catch (e) {
       if (!mounted) return;
-      setState(() => _isLoading = false);
+      setState(() {
+        _isLoading = false;
+      });
       _showErrorSnackBar('Error checking email: ${e.toString()}');
     }
   }
@@ -96,8 +84,11 @@ class _AuthPageState extends State<AuthPage> {
       return;
     }
     
+    if (!mounted) return;
     try {
-      setState(() => _isLoading = true);
+      setState(() {
+        _isLoading = true;
+      });
       
       final response = await _authService.signIn(
         email: _emailController.text,
@@ -105,14 +96,19 @@ class _AuthPageState extends State<AuthPage> {
       );
       
       if (!mounted) return;
-      setState(() => _isLoading = false);
+      setState(() {
+        _isLoading = false;
+      });
       
       if (response.user != null) {
         widget.onLoginSuccess(_emailController.text);
       }
     } catch (e) {
       if (!mounted) return;
-      setState(() => _isLoading = false);
+      setState(() {
+        _isLoading = false;
+      });
+      
       _showErrorSnackBar('Login failed: ${e.toString()}');
     }
   }
@@ -133,8 +129,11 @@ class _AuthPageState extends State<AuthPage> {
       return;
     }
     
+    if (!mounted) return;
     try {
-      setState(() => _isLoading = true);
+      setState(() {
+        _isLoading = true;
+      });
       
       final response = await _authService.signUp(
         email: _emailController.text,
@@ -142,30 +141,52 @@ class _AuthPageState extends State<AuthPage> {
       );
       
       if (!mounted) return;
-      setState(() => _isLoading = false);
+      setState(() {
+        _isLoading = false;
+      });
       
       if (response.user != null) {
+        // Clear any previous error messages
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).clearSnackBars();
+        
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('Account created! Please complete your profile.'),
+            content: Text('Account created successfully! Complete your profile to get started.'),
             backgroundColor: Color(0xFF8B5CF6),
+            duration: Duration(seconds: 3),
           ),
         );
         
-        Navigator.push(
+        // Navigate to user survey page using pushAndRemoveUntil to clear the stack
+        Navigator.pushAndRemoveUntil(
           context,
           MaterialPageRoute(
             builder: (context) => UserSurveyPage(
               userId: response.user!.id,
-              onComplete: () => widget.onLoginSuccess(_emailController.text),
+              onComplete: () {
+                widget.onLoginSuccess(_emailController.text);
+              },
             ),
           ),
+          (route) => false, // This will remove all previous routes
         );
       }
     } catch (e) {
       if (!mounted) return;
-      setState(() => _isLoading = false);
-      _showErrorSnackBar('Signup failed: ${e.toString()}');
+      setState(() {
+        _isLoading = false;
+      });
+      
+      if (e.toString().toLowerCase().contains('email is already in use')) {
+        _showErrorSnackBar('This email is already registered. Please login instead.');
+        setState(() {
+          _emailExists = true;
+          _showSignupFields = false;
+        });
+      } else {
+        _showErrorSnackBar('Signup failed: ${e.toString()}');
+      }
     }
   }
 
@@ -192,8 +213,10 @@ class _AuthPageState extends State<AuthPage> {
               
               try {
                 await _authService.resetPassword(_emailController.text);
-                if (!mounted) return;
+                
                 setState(() => _isLoading = false);
+                
+                if (!mounted) return;
                 ScaffoldMessenger.of(context).showSnackBar(
                   const SnackBar(
                     content: Text('Password reset instructions sent to your email'),
@@ -201,8 +224,9 @@ class _AuthPageState extends State<AuthPage> {
                   ),
                 );
               } catch (e) {
-                if (!mounted) return;
                 setState(() => _isLoading = false);
+                
+                if (!mounted) return;
                 _showErrorSnackBar('Error sending reset instructions: ${e.toString()}');
               }
             },
@@ -227,9 +251,16 @@ class _AuthPageState extends State<AuthPage> {
           children: [
             const SizedBox(height: 20),
             Center(
-              child: CircleAvatar(
-                radius: 40,
-                backgroundImage: AssetImage(_randomAvatar),
+              child: Container(
+                height: 80,
+                width: 80,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  image: DecorationImage(
+                    image: AssetImage(_selectedAvatar),
+                    fit: BoxFit.cover,
+                  ),
+                ),
               ),
             ),
             const SizedBox(height: 40),
@@ -254,7 +285,9 @@ class _AuthPageState extends State<AuthPage> {
               ),
               const SizedBox(height: 16),
               ElevatedButton(
-                onPressed: _isValidEmail && !_isLoading ? _handleEmailCheck : null,
+                onPressed: _isValidEmail && !_isLoading
+                    ? _handleEmailCheck
+                    : null,
                 style: ElevatedButton.styleFrom(
                   backgroundColor: const Color(0xFF8B5CF6),
                   foregroundColor: Colors.white,
@@ -281,13 +314,16 @@ class _AuthPageState extends State<AuthPage> {
             if (_showPasswordField && !_showSignupFields) ...[
               Text(
                 _emailController.text,
-                style: TextStyle(fontSize: 16, color: Colors.grey[600]),
+                style: TextStyle(
+                  fontSize: 16,
+                  color: Colors.grey[600],
+                ),
                 textAlign: TextAlign.center,
               ),
               const SizedBox(height: 16),
               TextField(
                 controller: _passwordController,
-                obscureText: !_passwordVisible,
+                obscureText: true,
                 decoration: InputDecoration(
                   hintText: 'Password',
                   filled: true,
@@ -295,13 +331,6 @@ class _AuthPageState extends State<AuthPage> {
                   border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(12),
                     borderSide: BorderSide.none,
-                  ),
-                  suffixIcon: IconButton(
-                    icon: Icon(
-                      _passwordVisible ? Icons.visibility : Icons.visibility_off,
-                      color: Colors.grey[600],
-                    ),
-                    onPressed: () => setState(() => _passwordVisible = !_passwordVisible),
                   ),
                 ),
               ),
@@ -322,13 +351,18 @@ class _AuthPageState extends State<AuthPage> {
                   Expanded(
                     child: TextButton.icon(
                       onPressed: !_isLoading 
-                        ? () => setState(() {
-                            _showPasswordField = false;
-                            _passwordController.clear();
-                          })
+                        ? () {
+                            setState(() {
+                              _showPasswordField = false;
+                              _passwordController.clear();
+                            });
+                          }
                         : null,
                       icon: const Icon(Icons.arrow_back),
                       label: const Text('Back'),
+                      style: TextButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(vertical: 16),
+                      ),
                     ),
                   ),
                   const SizedBox(width: 16),
@@ -354,17 +388,36 @@ class _AuthPageState extends State<AuthPage> {
                   ),
                 ],
               ),
+              const SizedBox(height: 16),
+              TextButton(
+                onPressed: !_isLoading 
+                  ? () {
+                      setState(() {
+                        _showSignupFields = true;
+                        _passwordController.clear();
+                        _confirmPasswordController.clear();
+                      });
+                    }
+                  : null,
+                child: const Text(
+                  'Create a new account instead',
+                  style: TextStyle(color: Color(0xFF8B5CF6)),
+                ),
+              ),
             ],
             if (_showSignupFields) ...[
               Text(
                 _emailController.text,
-                style: TextStyle(fontSize: 16, color: Colors.grey[600]),
+                style: TextStyle(
+                  fontSize: 16,
+                  color: Colors.grey[600],
+                ),
                 textAlign: TextAlign.center,
               ),
               const SizedBox(height: 16),
               TextField(
                 controller: _passwordController,
-                obscureText: !_passwordVisible,
+                obscureText: true,
                 decoration: InputDecoration(
                   hintText: 'Create Password',
                   filled: true,
@@ -373,19 +426,12 @@ class _AuthPageState extends State<AuthPage> {
                     borderRadius: BorderRadius.circular(12),
                     borderSide: BorderSide.none,
                   ),
-                  suffixIcon: IconButton(
-                    icon: Icon(
-                      _passwordVisible ? Icons.visibility : Icons.visibility_off,
-                      color: Colors.grey[600],
-                    ),
-                    onPressed: () => setState(() => _passwordVisible = !_passwordVisible),
-                  ),
                 ),
               ),
               const SizedBox(height: 16),
               TextField(
                 controller: _confirmPasswordController,
-                obscureText: !_confirmPasswordVisible,
+                obscureText: true,
                 decoration: InputDecoration(
                   hintText: 'Confirm Password',
                   filled: true,
@@ -393,13 +439,6 @@ class _AuthPageState extends State<AuthPage> {
                   border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(12),
                     borderSide: BorderSide.none,
-                  ),
-                  suffixIcon: IconButton(
-                    icon: Icon(
-                      _confirmPasswordVisible ? Icons.visibility : Icons.visibility_off,
-                      color: Colors.grey[600],
-                    ),
-                    onPressed: () => setState(() => _confirmPasswordVisible = !_confirmPasswordVisible),
                   ),
                 ),
               ),
@@ -409,15 +448,20 @@ class _AuthPageState extends State<AuthPage> {
                   Expanded(
                     child: TextButton.icon(
                       onPressed: !_isLoading 
-                        ? () => setState(() {
-                            _showPasswordField = false;
-                            _showSignupFields = false;
-                            _passwordController.clear();
-                            _confirmPasswordController.clear();
-                          })
+                        ? () {
+                            setState(() {
+                              _showPasswordField = false;
+                              _showSignupFields = false;
+                              _passwordController.clear();
+                              _confirmPasswordController.clear();
+                            });
+                          }
                         : null,
                       icon: const Icon(Icons.arrow_back),
                       label: const Text('Back'),
+                      style: TextButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(vertical: 16),
+                      ),
                     ),
                   ),
                   const SizedBox(width: 16),
@@ -448,12 +492,18 @@ class _AuthPageState extends State<AuthPage> {
               const SizedBox(height: 24),
               Row(
                 children: [
-                  Expanded(child: Divider(color: Colors.grey[300])),
+                  Expanded(child: Divider(color: Colors.grey[300] ?? Colors.white)),
                   Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 16),
-                    child: Text('or', style: TextStyle(color: Colors.grey[600], fontSize: 14)),
+                    child: Text(
+                      'or',
+                      style: TextStyle(
+                        color: Colors.grey[600] ?? Colors.white,
+                        fontSize: 14,
+                      ),
+                    ),
                   ),
-                  Expanded(child: Divider(color: Colors.grey[300])),
+                  Expanded(child: Divider(color: Colors.grey[300] ?? Colors.white)),
                 ],
               ),
               const SizedBox(height: 24),
@@ -467,15 +517,23 @@ class _AuthPageState extends State<AuthPage> {
                     ),
                   );
                 },
-                icon: Image.asset('assets/google.png', height: 24),
-                label: const Text(
+                icon: Image.asset(
+                  'assets/google.png',
+                  height: 24,
+                ),
+                label: Text(
                   'Continue with Google',
-                  style: TextStyle(color: Colors.black, fontSize: 16),
+                  style: TextStyle(
+                    color: Colors.black,
+                    fontSize: 16,
+                  ),
                 ),
                 style: OutlinedButton.styleFrom(
                   padding: const EdgeInsets.symmetric(vertical: 16),
-                  side: BorderSide(color: Colors.grey[300]!),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  side: BorderSide(color: Colors.grey[300] ?? Colors.white),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
                 ),
               ),
             ],
@@ -484,19 +542,25 @@ class _AuthPageState extends State<AuthPage> {
       ),
     );
 
-    return widget.showAppBar
-        ? Scaffold(
-            backgroundColor: Colors.grey[50],
-            appBar: AppBar(
-              backgroundColor: Colors.grey[50],
-              elevation: 0,
-              title: const Text(
-                'Account',
-                style: TextStyle(color: Colors.black, fontSize: 32, fontWeight: FontWeight.bold),
-              ),
+    if (widget.showAppBar) {
+      return Scaffold(
+        backgroundColor: Colors.grey[50],
+        appBar: AppBar(
+          backgroundColor: Colors.grey[50],
+          elevation: 0,
+          title: const Text(
+            'Account',
+            style: TextStyle(
+              color: Colors.black,
+              fontSize: 32,
+              fontWeight: FontWeight.bold,
             ),
-            body: content,
-          )
-        : content;
+          ),
+        ),
+        body: content,
+      );
+    } else {
+      return content;
+    }
   }
 }

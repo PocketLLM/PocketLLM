@@ -20,6 +20,8 @@ void main() async {
   await authService.restoreSession();
 
   await PocketLLMService.initializeApiKey(); // Initialize API key
+  final apiKey = await PocketLLMService.getApiKey();
+  debugPrint('PocketLLM API Key initialized: $apiKey'); // Add this for debugging
   await ModelState().init(); // Initialize the model state
 
   runApp(MyApp()); // test

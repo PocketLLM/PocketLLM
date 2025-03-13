@@ -233,19 +233,20 @@ class _CustomAppBarState extends State<CustomAppBar> {
 
     showModalBottomSheet(
       context: context,
-      isScrollControlled: true, // Allows the bottom sheet to adjust height dynamically
-      backgroundColor: Colors.transparent, // Transparent background for glassmorphism
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      constraints: const BoxConstraints(maxHeight: 400), // Limit maximum height
       builder: (context) {
         return ClipRRect(
           borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
           child: BackdropFilter(
-            filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10), // Blur effect
+            filter: ImageFilter.blur(sigmaX: 5, sigmaY: 5), // Reduced blur for better visibility
             child: Container(
               decoration: BoxDecoration(
-                color: Colors.white.withOpacity(0.1), // Semi-transparent white
+                color: Colors.white.withOpacity(0.85), // Increased opacity for better visibility
                 borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
                 border: Border.all(
-                  color: Colors.white.withOpacity(0.2), // Subtle border
+                  color: Colors.white.withOpacity(0.3),
                   width: 1,
                 ),
               ),
@@ -271,12 +272,12 @@ class _CustomAppBarState extends State<CustomAppBar> {
                         style: TextStyle(
                           fontSize: 20,
                           fontWeight: FontWeight.bold,
-                          color: Colors.white.withOpacity(0.9), // High contrast text
+                          color: Colors.black87, // Updated for better contrast
                         ),
                       ),
                     ),
                     const Divider(
-                      color: Colors.white24, // Subtle divider
+                      color: Colors.black12, // Updated divider color
                       height: 1,
                     ),
                     // Model list
@@ -293,7 +294,7 @@ class _CustomAppBarState extends State<CustomAppBar> {
                               model.name,
                               style: TextStyle(
                                 fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-                                color: Colors.white.withOpacity(0.9),
+                                color: Colors.black87,
                               ),
                             ),
                             subtitle: Text(

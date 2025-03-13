@@ -5,7 +5,6 @@ import '../component/model_list_item.dart';
 import '../services/auth_service.dart';
 import '../services/pocket_llm_service.dart';
 import 'auth/auth_page.dart';
-import '../services/model_state.dart'; // Add this import
 
 class ModelSettingsPage extends StatefulWidget {
   const ModelSettingsPage({Key? key}) : super(key: key);
@@ -63,31 +62,29 @@ class _ModelSettingsPageState extends State<ModelSettingsPage> {
     }
   }
 
-Future<List<ModelConfig>> _fetchPocketLLMModels() async {
-  try {
-    final models = await PocketLLMService.getAvailableModels();
-    return models.map((model) {
-      // Use the 'id' field as both the ID and display name if no explicit display_name exists
-      final modelId = model['id']?.toString() ?? 'unnamed-model';
-      final modelName = model['display_name']?.toString() ?? modelId; // Fallback to ID if no display_name
-      
-      return ModelConfig(
-        id: modelId,
-        name: modelName,
-        provider: ModelProvider.pocketLLM,
-        baseUrl: '',  // Hide sensitive information
-        apiKey: '',   // Hide sensitive information
-        additionalParams: {
-          'temperature': 0.7,
-          'systemPrompt': 'You are a helpful AI assistant.',
-        },
-      );
-    }).toList();
-  } catch (e) {
-    print('Error fetching PocketLLM models: $e');
-    return [];
+  Future<List<ModelConfig>> _fetchPocketLLMModels() async {
+    try {
+      final models = await PocketLLMService.getAvailableModels();
+      return models.map((model) {
+        final modelName = model['display_name'] ?? model['name'] ?? 'Unnamed Model';
+        final modelId = model['id'] ?? model['name'] ?? modelName;
+        return ModelConfig(
+          id: modelId,
+          name: modelName,
+          provider: ModelProvider.pocketLLM,
+          baseUrl: '',  // Hide sensitive information
+          apiKey: '',   // Hide sensitive information
+          additionalParams: {
+            'temperature': 0.7,
+            'systemPrompt': 'You are a helpful AI assistant.',
+          },
+        );
+      }).toList();
+    } catch (e) {
+      print('Error fetching PocketLLM models: $e');
+      return [];
+    }
   }
-}
 
   void _addNewModel() {
     if (!_authService.isLoggedIn && _modelConfigs.every((c) => c.provider != ModelProvider.pocketLLM)) {
@@ -100,7 +97,7 @@ Future<List<ModelConfig>> _fetchPocketLLMModels() async {
         onSave: (config) async {
           await ModelService.saveModelConfig(config);
           if (_modelConfigs.isEmpty) {
-            await ModelState().setSelectedModel(config.id);
+            await ModelService.setSelectedModel(config.id);
           }
           _loadModelConfigs();
         },
@@ -115,12 +112,12 @@ Future<List<ModelConfig>> _fetchPocketLLMModels() async {
 
   void _deleteModel(String id) async {
     await ModelService.deleteModelConfig(id);
-    if (ModelState().selectedModelId.value == id && _modelConfigs.isNotEmpty) {
+    if (_selectedModelId == id && _modelConfigs.isNotEmpty) {
       final remainingConfigs = _modelConfigs.where((c) => c.id != id).toList();
       if (remainingConfigs.isNotEmpty) {
-        await ModelState().setSelectedModel(remainingConfigs.first.id);
+        await ModelService.setSelectedModel(remainingConfigs.first.id);
       } else {
-        await ModelState().clearSelectedModel();
+        await ModelService.clearSelectedModel();
       }
     }
     _loadModelConfigs();
@@ -132,7 +129,10 @@ Future<List<ModelConfig>> _fetchPocketLLMModels() async {
       _showSignInPrompt();
       return;
     }
-    await ModelState().setSelectedModel(id); // Update global state
+    await ModelService.setSelectedModel(id);
+    setState(() {
+      _selectedModelId = id;
+    });
   }
 
   void _showSignInPrompt() {
@@ -237,17 +237,12 @@ Future<List<ModelConfig>> _fetchPocketLLMModels() async {
                         itemCount: _modelConfigs.length,
                         itemBuilder: (context, index) {
                           final model = _modelConfigs[index];
-                          return ValueListenableBuilder<String?>(
-                            valueListenable: ModelState().selectedModelId,
-                            builder: (context, selectedId, child) {
-                              return ModelListItem(
-                                model: model,
-                                isSelected: model.id == selectedId,
-                                onDelete: () => _deleteModel(model.id),
-                                onEdit: _editModel,
-                                onSelect: () => _selectModel(model.id),
-                              );
-                            },
+                          return ModelListItem(
+                            model: model,
+                            isSelected: model.id == _selectedModelId,
+                            onDelete: () => _deleteModel(model.id),
+                            onEdit: _editModel,
+                            onSelect: () => _selectModel(model.id),
                           );
                         },
                       ),

@@ -98,12 +98,12 @@ extension ModelProviderExtension on ModelProvider {
 
 // Model configuration class
 class ModelConfig {
-  final String id;
-  final String name;
-  final ModelProvider provider;
-  final String baseUrl;
-  final String? apiKey;
-  final Map<String, dynamic>? additionalParams;
+  String id;
+  String name;
+  ModelProvider provider;
+  String baseUrl;
+  String? apiKey;
+  Map<String, dynamic>? additionalParams;
 
   ModelConfig({
     required this.id,

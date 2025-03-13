@@ -27,7 +27,7 @@ class ChatService {
       // Call the appropriate provider based on the model configuration
       switch (modelConfig.provider) {
         case ModelProvider.pocketLLM:
-          return await _getPocketLLMResponse(modelConfig, userMessage, stream, onToken);
+          return await PocketLLMService.getPocketLLMResponse(modelConfig, userMessage);
         
         case ModelProvider.ollama:
           return await _getOllamaResponse(modelConfig, userMessage, stream, onToken);
@@ -419,141 +419,7 @@ class ChatService {
     }
   }
 
-  // Get response from PocketLLM
-  static Future<String> _getPocketLLMResponse(
-    ModelConfig config,
-    String userMessage,
-    bool stream,
-    Function(String)? onToken,
-  ) async {
-    try {
-      final client = http.Client();
-      final completer = Completer<String>();
-      final buffer = StringBuffer();
-      StreamSubscription? subscription;
 
-      void cleanupAndComplete([String? error]) {
-        subscription?.cancel();
-        client.close();
-        if (error != null) {
-          completer.completeError(error);
-        } else if (!completer.isCompleted) {
-          completer.complete(buffer.toString());
-        }
-      }
-
-      try {
-        final apiKey = await PocketLLMService.getApiKey();
-        if (apiKey == null) {
-          throw Exception('PocketLLM API key not found');
-        }
-
-        final messages = [
-          {'role': 'user', 'content': userMessage}
-        ];
-        
-        final temperature = config.additionalParams?['temperature'] ?? 0.7;
-        
-        final request = http.Request(
-          'POST',
-          Uri.parse('${config.baseUrl}/chat/completions'),
-        );
-        
-        request.headers['Authorization'] = 'Bearer $apiKey';
-        request.headers['Content-Type'] = 'application/json';
-        request.body = jsonEncode({
-          'model': config.id,
-          'messages': messages,
-          'stream': true,
-          'temperature': temperature,
-        });
-
-        final response = await client.send(request);
-        
-        if (response.statusCode == 200) {
-          subscription = response.stream
-            .transform(utf8.decoder)
-            .transform(const LineSplitter())
-            .listen(
-              (line) {
-                if (line.trim().isNotEmpty) {
-                  try {
-                    // Handle SSE format with 'data: ' prefix
-                    if (line.startsWith('data: ')) {
-                      line = line.substring(6).trim();
-                    }
-                    
-                    // Skip empty lines and [DONE] marker
-                    if (line.isEmpty || line == '[DONE]') {
-                      if (line == '[DONE]') {
-                        cleanupAndComplete();
-                      }
-                      return;
-                    }
-                    
-                    // Try to parse the JSON data
-                    Map<String, dynamic> data;
-                    try {
-                      data = jsonDecode(line);
-                    } catch (jsonError) {
-                      debugPrint('Warning: Invalid JSON in streaming response: $jsonError\nLine: $line');
-                      return; // Skip this line and continue
-                    }
-                    
-                    String? content;
-                    
-                    // Handle different response formats based on API patterns
-                    // OpenAI/compatible format
-                    if (data['choices'] != null && data['choices'].isNotEmpty) {
-                      if (data['choices'][0]['delta'] != null && data['choices'][0]['delta']['content'] != null) {
-                        content = data['choices'][0]['delta']['content'];
-                      } else if (data['choices'][0]['message'] != null && data['choices'][0]['message']['content'] != null) {
-                        content = data['choices'][0]['message']['content'];
-                      }
-                    }
-                    // Ollama specific format
-                    else if (data['message'] != null && data['message']['content'] != null) {
-                      content = data['message']['content'];
-                    }
-                    // Simple response format
-                    else if (data['response'] != null) {
-                      content = data['response'];
-                    }
-                    // Text field format
-                    else if (data['text'] != null) {
-                      content = data['text'];
-                    }
-                    
-                    if (content != null && content.isNotEmpty) {
-                      buffer.write(content);
-                      if (stream && onToken != null) {
-                        onToken(content);
-                      }
-                    }
-                  } catch (e) {
-                    debugPrint('Warning: Error parsing streaming response line: $e');
-                    // Don't throw here - continue processing other lines
-                  }
-                }
-              },
-              onDone: () => cleanupAndComplete(),
-              onError: (e) => cleanupAndComplete('Error streaming response: $e'),
-              cancelOnError: false  // Don't cancel on parsing errors
-            );
-        } else {
-          cleanupAndComplete('Failed to get response: ${response.statusCode}');
-        }
-
-        return await completer.future;
-      } catch (e) {
-        cleanupAndComplete('Error in PocketLLM response: $e');
-        rethrow;
-      }
-    } catch (e) {
-      debugPrint('Error getting response: $e');
-      throw Exception('Error connecting to service: $e');
-    }
-  }
 
   // Get response from Mistral
   static Future<String> _getMistralResponse(
@@ -684,7 +550,7 @@ class ChatService {
           rethrow;
         }
       } else {
-        // Handle non-streaming response
+        // Non-streaming response
         final response = await http.post(
           Uri.parse('${config.baseUrl}/chat/completions'),
           headers: {
@@ -697,13 +563,19 @@ class ChatService {
             'temperature': temperature,
           }),
         );
-        
+
         if (response.statusCode == 200) {
           final data = jsonDecode(response.body);
-          return data['choices'][0]['message']['content'];
+          return data['choices']?[0]?['message']?['content'] ?? 'No response content';
         } else {
-          debugPrint('Mistral API error: ${response.statusCode} ${response.body}');
-          return 'Failed to get response: ${response.statusCode} - ${response.body}';
+          Map<String, dynamic> errorData;
+          try {
+            errorData = jsonDecode(response.body);
+            final errorMessage = errorData['error']?['message'] ?? 'Unknown error';
+            throw Exception('Failed to get response: $errorMessage');
+          } catch (e) {
+            throw Exception('Failed to get response: ${response.statusCode}');
+          }
         }
       }
     } catch (e) {
