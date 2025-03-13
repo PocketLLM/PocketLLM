@@ -154,22 +154,28 @@ class _ChatInterfaceState extends State<ChatInterface> {
     });
 
     // Add a temporary "Thinking..." message
+    final thinkingMessage = Message(
+      content: "Thinking...",
+      isUser: false,
+      timestamp: DateTime.now(),
+      isThinking: true
+    );
     setState(() {
-      final thinkingMessage = Message(
-        content: "Thinking...",
-        isUser: false,
-        timestamp: DateTime.now(),
-        isThinking: true
-      );
       _messages.add(thinkingMessage);
     });
     _scrollToBottom();
 
     try {
+      if (_selectedModelConfig == null) {
+        throw Exception('No model selected. Please configure a model in Settings.');
+      }
+
       final response = await ChatService.getModelResponse(
         message,
         stream: false,
       );
+
+      if (!mounted) return;
 
       setState(() {
         _isLoading = false;
@@ -177,7 +183,7 @@ class _ChatInterfaceState extends State<ChatInterface> {
         _messages.removeWhere((msg) => msg.isThinking);
         // Add AI response
         _messages.add(Message(
-          content: response,
+          content: _cleanUpResponse(response),
           isUser: false,
           timestamp: DateTime.now(),
         ));
@@ -185,15 +191,19 @@ class _ChatInterfaceState extends State<ChatInterface> {
       _scrollToBottom();
       _saveChatHistory();
     } catch (e) {
+      if (!mounted) return;
+
       setState(() {
         _isLoading = false;
+        _messages.removeWhere((msg) => msg.isThinking);
         _messages.add(Message(
-          content: 'Error: $e',
+          content: 'Error: ${e.toString()}',
           isUser: false,
           timestamp: DateTime.now(),
           isError: true,
         ));
       });
+      _scrollToBottom();
     }
   }
 
@@ -575,6 +585,8 @@ class _ChatInterfaceState extends State<ChatInterface> {
 
   Widget _buildMessageBubble(Message message) {
     final formattedTime = '${message.timestamp.hour}:${message.timestamp.minute.toString().padLeft(2, '0')}';
+    final theme = Theme.of(context);
+    final isDarkMode = theme.brightness == Brightness.dark;
     
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -589,15 +601,17 @@ class _ChatInterfaceState extends State<ChatInterface> {
                 Padding(
                   padding: const EdgeInsets.only(right: 8.0, top: 4.0),
                   child: CircleAvatar(
-                    backgroundColor: const Color(0xFF8B5CF6),
+                    backgroundColor: message.isError ? Colors.red : const Color.fromARGB(255, 255, 255, 255),
                     radius: 16,
-                    child: ClipOval(
-                      child: Image.asset(
-                        'assets/icons/logo.png',
-                        width: 32,
-                        height: 32,
-                        fit: BoxFit.cover,
-                      ),
+                    child: message.isError
+                        ? const Icon(Icons.error_outline, color: Colors.white, size: 18)
+                        : ClipOval(
+                            child: Image.asset(
+                              'assets/icons/logo.png',
+                              width: 32,
+                              height: 32,
+                              fit: BoxFit.cover,
+                            ),
                     ),
                   ),
                 ),
@@ -609,15 +623,17 @@ class _ChatInterfaceState extends State<ChatInterface> {
                     color: message.isUser 
                         ? const Color(0xFF8B5CF6) 
                         : message.isThinking 
-                            ? const Color(0xFFF3F4F6)
-                            : Colors.white,
+                            ? (isDarkMode ? Colors.grey[800] : const Color(0xFFF3F4F6))
+                            : message.isError
+                                ? (isDarkMode ? Colors.red[900] : Colors.red[50])
+                                : (isDarkMode ? Colors.grey[900] : Colors.white),
                     borderRadius: BorderRadius.circular(16),
                     border: !message.isUser && !message.isThinking
-                        ? Border.all(color: const Color(0xFFE5E7EB))
+                        ? Border.all(color: isDarkMode ? Colors.grey[700]! : const Color(0xFFE5E7EB))
                         : null,
                     boxShadow: [
                       BoxShadow(
-                        color: Colors.black.withOpacity(0.05),
+                        color: (isDarkMode ? Colors.black : Colors.black.withOpacity(0.05)),
                         blurRadius: 3,
                         offset: const Offset(0, 1),
                       ),
@@ -669,21 +685,21 @@ class _ChatInterfaceState extends State<ChatInterface> {
                         MarkdownBody(
                           data: message.content,
                           styleSheet: MarkdownStyleSheet(
-                            p: const TextStyle(
-                              color: Color(0xFF1F2937),
+                            p: TextStyle(
+                              color: isDarkMode ? Colors.grey[200] : const Color(0xFF1F2937),
                               fontSize: 16,
                               height: 1.5,
                             ),
                             code: TextStyle(
-                              backgroundColor: Colors.grey[100],
-                              color: const Color(0xFF1F2937),
+                              backgroundColor: isDarkMode ? Colors.grey[800] : Colors.grey[100],
+                              color: isDarkMode ? Colors.grey[200] : const Color(0xFF1F2937),
                               fontFamily: 'monospace',
                               fontSize: 14,
                             ),
                             codeblockDecoration: BoxDecoration(
-                              color: const Color(0xFFF9FAFB),
+                              color: isDarkMode ? Colors.grey[900] : const Color(0xFFF9FAFB),
                               borderRadius: BorderRadius.circular(8),
-                              border: Border.all(color: const Color(0xFFE5E7EB)),
+                              border: Border.all(color: isDarkMode ? Colors.grey[700]! : const Color(0xFFE5E7EB)),
                             ),
                           ),
                           selectable: true,

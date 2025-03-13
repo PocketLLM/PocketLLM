@@ -90,7 +90,10 @@ class PocketLLMService {
           'model': config.id,
           'messages': messages,
           'temperature': temperature,
-          'stream': false
+          'stream': false,
+          'max_tokens': 2000,
+          'presence_penalty': 0,
+          'frequency_penalty': 0
         }),
       );
 
