@@ -399,113 +399,69 @@ class _ChatInterfaceState extends State<ChatInterface> {
                   offset: const Offset(0, 2),
                 )],
               ),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                 children: [
-                  _buildAttachmentOption(
-                    Icons.image, 
-                    'Image',
-                    onTap: () {
-                      setState(() => _showAttachmentOptions = false);
-                    },
-                  ),
-                  const SizedBox(height: 12),
-                  _buildAttachmentOption(
-                    Icons.file_copy, 
-                    'Document',
-                    onTap: () {
-                      setState(() => _showAttachmentOptions = false);
-                    },
-                  ),
-                  const SizedBox(height: 12),
-                  _buildAttachmentOption(
-                    Icons.mic, 
-                    'Audio',
-                    onTap: () {
-                      setState(() => _showAttachmentOptions = false);
-                    },
-                  ),
+                  _buildAttachmentOption(Icons.image, 'Image', _pickImage),
+                  _buildAttachmentOption(Icons.attach_file, 'File', _pickFile),
+                  _buildAttachmentOption(Icons.camera_alt, 'Camera', _takePhoto),
                 ],
               ),
             ),
-          Padding(
-            padding: const EdgeInsets.all(16.0),
-            child: Container(
-              decoration: BoxDecoration(
-                color: const Color(0xFFF3F4F6),
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.end,
-                children: [
-                  IconButton(
-                    icon: Icon(
-                      Icons.attach_file,
-                      color: _showAttachmentOptions ? const Color(0xFF8B5CF6) : Colors.grey[600],
-                    ),
-                    onPressed: () {
-                      setState(() {
-                        _showAttachmentOptions = !_showAttachmentOptions;
-                      });
-                    },
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            child: Row(
+              children: [
+                IconButton(
+                  icon: Icon(
+                    _showAttachmentOptions ? Icons.close : Icons.add,
+                    color: Colors.grey[600],
                   ),
-                  Expanded(
-                    child: TextField(
-                      controller: _messageController,
-                      maxLines: null,
-                      onChanged: (text) {
-                        setState(() {}); // Trigger rebuild to update send button color
-                      },
-                      decoration: const InputDecoration(
-                        hintText: 'Type a message...',
-                        border: InputBorder.none,
-                        contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                  onPressed: () {
+                    setState(() {
+                      _showAttachmentOptions = !_showAttachmentOptions;
+                    });
+                  },
+                ),
+                Expanded(
+                  child: Container(
+                    constraints: BoxConstraints(
+                      maxHeight: _maxInputHeight,
+                    ),
+                    child: SingleChildScrollView(
+                      child: TextField(
+                        controller: _messageController,
+                        maxLines: null,
+                        decoration: InputDecoration(
+                          hintText: 'Type a message...',
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(25),
+                            borderSide: BorderSide.none,
+                          ),
+                          filled: true,
+                          fillColor: Colors.grey[100],
+                          contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 20,
+                            vertical: 10,
+                          ),
+                        ),
+                        onSubmitted: (_) => _sendMessage(),
                       ),
                     ),
                   ),
-                  IconButton(
-                    icon: Icon(
-                      Icons.public,
-                      color: _isOnline ? Colors.green : Colors.grey[600],
-                    ),
-                    onPressed: () {
-                      setState(() {
-                        _isOnline = !_isOnline;
-                      });
-                      final snackBar = SnackBar(
-                        content: Container(
-                          padding: const EdgeInsets.symmetric(vertical: 8),
-                          child: Row(
-                            children: [
-                              Icon(
-                                _isOnline ? Icons.check_circle : Icons.info,
-                                color: _isOnline ? Colors.green : Colors.grey,
-                              ),
-                              const SizedBox(width: 12),
-                              Text(
-                                _isOnline ? 'Web search enabled' : 'Web search disabled',
-                                style: const TextStyle(fontSize: 16),
-                              ),
-                            ],
-                          ),
-                        ),
-                        behavior: SnackBarBehavior.floating,
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                        backgroundColor: const Color.fromARGB(255, 0, 0, 0),
-                        elevation: 4,
-                      );
-                      ScaffoldMessenger.of(context).showSnackBar(snackBar);
-                    },
+                ),
+                IconButton(
+                  icon: Icon(
+                    Icons.send,
+                    color: _messageController.text.trim().isEmpty
+                        ? Colors.grey[400]
+                        : const Color(0xFF8B5CF6),
                   ),
-                  IconButton(
-                    icon: const Icon(Icons.send),
-                    color: _messageController.text.trim().isNotEmpty
-                        ? const Color(0xFF8B5CF6)
-                        : Colors.grey[400],
-                    onPressed: _messageController.text.trim().isNotEmpty ? _sendMessage : null,
-                  ),
-                ],
-              ),
+                  onPressed: _messageController.text.trim().isEmpty
+                      ? null
+                      : _sendMessage,
+                ),
+              ],
             ),
           ),
         ],
@@ -513,26 +469,66 @@ class _ChatInterfaceState extends State<ChatInterface> {
     );
   }
 
-  Widget _buildAttachmentOption(IconData icon, String label, {VoidCallback? onTap}) {
+  Future<void> _pickImage() async {
+    final ImagePicker picker = ImagePicker();
+    try {
+      final XFile? image = await picker.pickImage(source: ImageSource.gallery);
+      if (image != null) {
+        // Handle the selected image
+        final File imageFile = File(image.path);
+        // Add image handling logic here
+      }
+    } catch (e) {
+      print('Error picking image: $e');
+    }
+  }
+
+  Future<void> _pickFile() async {
+    try {
+      FilePickerResult? result = await FilePicker.platform.pickFiles();
+      if (result != null) {
+        File file = File(result.files.single.path!);
+        // Add file handling logic here
+      }
+    } catch (e) {
+      print('Error picking file: $e');
+    }
+  }
+
+  Future<void> _takePhoto() async {
+    final ImagePicker picker = ImagePicker();
+    try {
+      final XFile? photo = await picker.pickImage(source: ImageSource.camera);
+      if (photo != null) {
+        // Handle the captured photo
+        final File photoFile = File(photo.path);
+        // Add photo handling logic here
+      }
+    } catch (e) {
+      print('Error taking photo: $e');
+    }
+  }
+  Widget _buildAttachmentOption(IconData icon, String label, VoidCallback? onTap) {
     return InkWell(
       onTap: onTap,
       borderRadius: BorderRadius.circular(8),
       child: Container(
-        width: double.infinity,
+        width: 100,
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
         margin: const EdgeInsets.symmetric(horizontal: 8),
         decoration: BoxDecoration(
           color: const Color(0xFFF3F4F6),
           borderRadius: BorderRadius.circular(8),
         ),
-        child: Row(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
           children: [
             Icon(icon, size: 24, color: const Color(0xFF8B5CF6)),
-            const SizedBox(width: 12),
+            const SizedBox(height: 8),
             Text(
               label,
               style: const TextStyle(
-                fontSize: 16,
+                fontSize: 14,
                 color: Colors.black87,
                 fontWeight: FontWeight.w500,
               ),
@@ -542,7 +538,6 @@ class _ChatInterfaceState extends State<ChatInterface> {
       ),
     );
   }
-
   Widget _buildQuickAction(IconData icon, String label, VoidCallback onTap) {
     return InkWell(
       onTap: onTap,
