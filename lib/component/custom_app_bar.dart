@@ -260,7 +260,7 @@ class _CustomAppBarState extends State<CustomAppBar> {
                       width: 40,
                       height: 4,
                       decoration: BoxDecoration(
-                        color: const Color.fromARGB(255, 0, 0, 0).withOpacity(0.5),
+                        color: Colors.white.withOpacity(0.5),
                         borderRadius: BorderRadius.circular(2),
                       ),
                     ),
@@ -300,7 +300,7 @@ class _CustomAppBarState extends State<CustomAppBar> {
                             subtitle: Text(
                               model.provider.displayName,
                               style: TextStyle(
-                                color: const Color.fromARGB(255, 36, 36, 36).withOpacity(0.6),
+                                color: Colors.white.withOpacity(0.6),
                               ),
                             ),
                             trailing: isSelected
@@ -335,7 +335,7 @@ class _CustomAppBarState extends State<CustomAppBar> {
                       title: Text(
                         'Add New Model',
                         style: TextStyle(
-                          color: const Color.fromARGB(255, 15, 15, 15).withOpacity(0.9),
+                          color: Colors.white.withOpacity(0.9),
                         ),
                       ),
                       onTap: () {

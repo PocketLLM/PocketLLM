@@ -2,9 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'component/splash_screen.dart';
 import 'component/home_screen.dart';
+import 'component/onboarding_screens/onboarding_screen.dart';
 import 'services/auth_service.dart';
 import 'package:pocketllm/services/pocket_llm_service.dart';
-import 'services/model_state.dart'; // Add this import
+import 'services/model_state.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -41,11 +43,7 @@ class MyApp extends StatelessWidget {
         ),
       ),
       debugShowCheckedModeBanner: false,
-      initialRoute: '/',
-      routes: {
-        '/': (context) => SplashLoader(),
-        '/home': (context) => HomeScreen(),
-      },
+      home: SplashLoader(),
     );
   }
 }
@@ -56,14 +54,31 @@ class SplashLoader extends StatefulWidget {
 }
 
 class _SplashLoaderState extends State<SplashLoader> {
-  void _onAnimationComplete() {
+  @override
+  void initState() {
+    super.initState();
+    _checkOnboardingStatus();
+  }
+
+  Future<void> _checkOnboardingStatus() async {
+    final prefs = await SharedPreferences.getInstance();
+    final bool showHome = prefs.getBool('showHome') ?? false;
+
+    await Future.delayed(const Duration(seconds: 3));
+
+    if (!mounted) return;
+
     Navigator.of(context).pushReplacement(
-      MaterialPageRoute(builder: (context) => HomeScreen()),
+      MaterialPageRoute(
+        builder: (context) => showHome ? const HomeScreen() : const OnboardingScreen(),
+      ),
     );
   }
 
   @override
   Widget build(BuildContext context) {
-    return SplashScreen(onAnimationComplete: _onAnimationComplete);
+    return SplashScreen(
+      onAnimationComplete: () {},
+    );
   }
 }

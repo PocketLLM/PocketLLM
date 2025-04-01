@@ -17,7 +17,8 @@ import 'package:permission_handler/permission_handler.dart';
 import 'dart:convert';
 import 'dart:math';
 import 'dart:async';
-import '../services/model_state.dart'; // Add this import
+import '../services/model_state.dart';
+import '../services/theme_service.dart'; // Add this import
 
 class ChatInterface extends StatefulWidget {
   const ChatInterface({Key? key}) : super(key: key);
@@ -267,8 +268,9 @@ class _ChatInterfaceState extends State<ChatInterface> {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = ThemeService().isDarkMode;
     return Scaffold(
-      backgroundColor: Colors.white,
+      backgroundColor: isDark ? const Color(0xFF121212) : Colors.white,
       body: Column(
         children: [
           Expanded(
@@ -362,9 +364,9 @@ class _ChatInterfaceState extends State<ChatInterface> {
         width: MediaQuery.of(context).size.width * 0.9,
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
-          color: Colors.grey[50],
+          color: ThemeService().isDarkMode ? const Color(0xFF2D2D2D) : Colors.grey[50],
           borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: Colors.grey[200]!),
+          border: Border.all(color: ThemeService().isDarkMode ? Colors.grey[800]! : Colors.grey[200]!),
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -393,7 +395,7 @@ class _ChatInterfaceState extends State<ChatInterface> {
   Widget _buildInputArea() {
     return Container(
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: ThemeService().isDarkMode ? const Color(0xFF1E1E1E) : Colors.white,
         boxShadow: [BoxShadow(
           color: Colors.black.withOpacity(0.05),
           blurRadius: 5,
@@ -586,7 +588,7 @@ class _ChatInterfaceState extends State<ChatInterface> {
   Widget _buildMessageBubble(Message message) {
     final formattedTime = '${message.timestamp.hour}:${message.timestamp.minute.toString().padLeft(2, '0')}';
     final theme = Theme.of(context);
-    final isDarkMode = theme.brightness == Brightness.dark;
+    final isDark = ThemeService().isDarkMode;
     
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -623,17 +625,17 @@ class _ChatInterfaceState extends State<ChatInterface> {
                     color: message.isUser 
                         ? const Color(0xFF8B5CF6) 
                         : message.isThinking 
-                            ? (isDarkMode ? Colors.grey[800] : const Color(0xFFF3F4F6))
+                            ? (isDark ? Colors.grey[800] : const Color(0xFFF3F4F6))
                             : message.isError
-                                ? (isDarkMode ? Colors.red[900] : Colors.red[50])
-                                : (isDarkMode ? Colors.grey[900] : Colors.white),
+                                ? (isDark ? Colors.red[900] : Colors.red[50])
+                                : (isDark ? Colors.grey[900] : Colors.white),
                     borderRadius: BorderRadius.circular(16),
                     border: !message.isUser && !message.isThinking
-                        ? Border.all(color: isDarkMode ? Colors.grey[700]! : const Color(0xFFE5E7EB))
+                        ? Border.all(color: isDark ? Colors.grey[700]! : const Color(0xFFE5E7EB))
                         : null,
                     boxShadow: [
                       BoxShadow(
-                        color: (isDarkMode ? Colors.black : Colors.black.withOpacity(0.05)),
+                        color: (ThemeService().isDarkMode ? Colors.black : Colors.black.withOpacity(0.05)),
                         blurRadius: 3,
                         offset: const Offset(0, 1),
                       ),
@@ -686,20 +688,20 @@ class _ChatInterfaceState extends State<ChatInterface> {
                           data: message.content,
                           styleSheet: MarkdownStyleSheet(
                             p: TextStyle(
-                              color: isDarkMode ? Colors.grey[200] : const Color(0xFF1F2937),
+                              color: isDark ? Colors.grey[200] : const Color(0xFF1F2937),
                               fontSize: 16,
                               height: 1.5,
                             ),
                             code: TextStyle(
-                              backgroundColor: isDarkMode ? Colors.grey[800] : Colors.grey[100],
-                              color: isDarkMode ? Colors.grey[200] : const Color(0xFF1F2937),
+                              backgroundColor: ThemeService().isDarkMode ? Colors.grey[800] : Colors.grey[100],
+                              color: isDark ? Colors.grey[200] : const Color(0xFF1F2937),
                               fontFamily: 'monospace',
                               fontSize: 14,
                             ),
                             codeblockDecoration: BoxDecoration(
-                              color: isDarkMode ? Colors.grey[900] : const Color(0xFFF9FAFB),
+                              color: ThemeService().isDarkMode ? Colors.grey[900] : const Color(0xFFF9FAFB),
                               borderRadius: BorderRadius.circular(8),
-                              border: Border.all(color: isDarkMode ? Colors.grey[700]! : const Color(0xFFE5E7EB)),
+                              border: Border.all(color: ThemeService().isDarkMode ? Colors.grey[700]! : const Color(0xFFE5E7EB)),
                             ),
                           ),
                           selectable: true,
