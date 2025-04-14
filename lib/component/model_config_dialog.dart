@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../services/model_service.dart';
+import '../component/models.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
 
@@ -19,6 +20,8 @@ class ModelConfigDialog extends StatefulWidget {
 
 class _ModelConfigDialogState extends State<ModelConfigDialog> {
   final _formKey = GlobalKey<FormState>();
+  final _modelService = ModelService();
+  
   late TextEditingController _nameController;
   late TextEditingController _modelIdController;
   late TextEditingController _baseUrlController;
@@ -48,14 +51,15 @@ class _ModelConfigDialogState extends State<ModelConfigDialog> {
       _apiKeyController = TextEditingController(text: widget.existingConfig!.apiKey ?? '');
       
       // Initialize additional parameters
-      final additionalParams = widget.existingConfig!.additionalParams ?? {};
-      _systemPromptController = TextEditingController(text: additionalParams['systemPrompt'] ?? '');
-      _temperatureController = TextEditingController(text: (additionalParams['temperature'] ?? 0.7).toString());
-      _apiUrlController = TextEditingController(text: additionalParams['apiUrl'] ?? '');
+      _systemPromptController = TextEditingController(text: widget.existingConfig!.systemPrompt);
+      _temperatureController = TextEditingController(text: widget.existingConfig!.temperature.toString());
+      _apiUrlController = TextEditingController();
+      
+      _selectedProvider = widget.existingConfig!.provider;
     } else {
       _nameController = TextEditingController();
       _modelIdController = TextEditingController();
-      _baseUrlController = TextEditingController(text: ModelService.defaultOllamaUrl);
+      _baseUrlController = TextEditingController(text: ModelProvider.ollama.defaultBaseUrl);
       _apiKeyController = TextEditingController();
       _systemPromptController = TextEditingController();
       _temperatureController = TextEditingController(text: '0.7');
@@ -89,7 +93,7 @@ class _ModelConfigDialogState extends State<ModelConfigDialog> {
     });
     
     try {
-      final models = await ModelService.getOllamaModels(_baseUrlController.text);
+      final models = await _modelService.getOllamaModels(_baseUrlController.text);
       setState(() {
         _availableModels = models;
         _isLoadingModels = false;
@@ -195,19 +199,23 @@ class _ModelConfigDialogState extends State<ModelConfigDialog> {
         provider: _selectedProvider,
         baseUrl: _baseUrlController.text,
         apiKey: _apiKeyController.text.isNotEmpty ? _apiKeyController.text : null,
-        additionalParams: {
-          'systemPrompt': _systemPromptController.text,
-          'temperature': double.tryParse(_temperatureController.text) ?? 0.7,
-          'apiUrl': _apiUrlController.text,
-        },
+        model: _modelIdController.text,
+        systemPrompt: _systemPromptController.text,
+        temperature: double.tryParse(_temperatureController.text) ?? 0.7,
+        createdAt: DateTime.now(),
+        updatedAt: DateTime.now(),
       );
       
-      final success = await ModelService.testConnection(config);
+      final success = await _modelService.testConnection(config);
       
       setState(() {
         _isTestingConnection = false;
         _connectionSuccess = success;
       });
+      
+      if (success && _selectedProvider == ModelProvider.ollama) {
+        _loadOllamaModels();
+      }
       
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -215,53 +223,40 @@ class _ModelConfigDialogState extends State<ModelConfigDialog> {
           backgroundColor: success ? Colors.green : Colors.red,
         ),
       );
-      
-      if (success && _selectedProvider == ModelProvider.ollama) {
-        _loadOllamaModels();
-      }
     } catch (e) {
       setState(() {
         _isTestingConnection = false;
         _connectionSuccess = false;
       });
-      
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Connection test failed: $e'),
+          content: Text('Error testing connection: $e'),
           backgroundColor: Colors.red,
         ),
       );
     }
   }
 
-  // Save the model configuration
-  void _saveConfig() {
-    if (_formKey.currentState!.validate()) {
-      setState(() {
-        _isLoading = true;
-      });
-      
-      final config = ModelConfig(
-        id: _modelIdController.text,
-        name: _nameController.text,
-        provider: _selectedProvider,
-        baseUrl: _baseUrlController.text,
-        apiKey: _apiKeyController.text.isNotEmpty ? _apiKeyController.text : null,
-        additionalParams: {
-          'systemPrompt': _systemPromptController.text,
-          'temperature': double.tryParse(_temperatureController.text) ?? 0.7,
-          'apiUrl': _apiUrlController.text,
-        },
-      );
-      
-      widget.onSave(config);
-      
-      setState(() {
-        _isLoading = false;
-      });
-      
-      Navigator.of(context).pop();
+  void _saveModel() {
+    if (!_formKey.currentState!.validate()) {
+      return;
     }
+    
+    final config = ModelConfig(
+      id: _modelIdController.text,
+      name: _nameController.text,
+      provider: _selectedProvider,
+      baseUrl: _baseUrlController.text,
+      apiKey: _apiKeyController.text.isNotEmpty ? _apiKeyController.text : null,
+      model: _modelIdController.text,
+      systemPrompt: _systemPromptController.text,
+      temperature: double.tryParse(_temperatureController.text) ?? 0.7,
+      createdAt: DateTime.now(),
+      updatedAt: DateTime.now(),
+    );
+    
+    widget.onSave(config);
+    Navigator.pop(context);
   }
 
   @override
@@ -335,7 +330,7 @@ class _ModelConfigDialogState extends State<ModelConfigDialog> {
                             
                             // Set default URL based on provider
                             if (value == ModelProvider.ollama) {
-                              _baseUrlController.text = ModelService.defaultOllamaUrl;
+                              _baseUrlController.text = ModelProvider.ollama.defaultBaseUrl;
                               _loadOllamaModels();
                             } else if (value == ModelProvider.openAI) {
                               _baseUrlController.text = 'https://api.openai.com/v1';
@@ -559,7 +554,7 @@ class _ModelConfigDialogState extends State<ModelConfigDialog> {
                             borderRadius: BorderRadius.circular(12),
                           ),
                           hintText: _selectedProvider == ModelProvider.ollama 
-                              ? ModelService.defaultOllamaUrl 
+                              ? ModelProvider.ollama.defaultBaseUrl 
                               : 'Enter API URL',
                         ),
                         validator: (value) {
@@ -708,7 +703,7 @@ class _ModelConfigDialogState extends State<ModelConfigDialog> {
                     SizedBox(width: 12),
                     Expanded(
                       child: ElevatedButton(
-                        onPressed: _isLoading ? null : _saveConfig,
+                        onPressed: _isLoading ? null : _saveModel,
                         style: ElevatedButton.styleFrom(
                           padding: EdgeInsets.symmetric(vertical: 12),
                           backgroundColor: Color(0xFF8B5CF6),

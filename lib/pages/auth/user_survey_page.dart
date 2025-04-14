@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
+// import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:image_picker/image_picker.dart';
-import '../../services/auth_service.dart';
+// import '../../services/auth_service.dart';
+import '../../services/local_db_service.dart';
 import '../../pages/settings/profile_settings.dart';
 import 'dart:math' as math;
 import 'dart:io';
@@ -30,8 +31,9 @@ class _UserSurveyPageState extends State<UserSurveyPage> with SingleTickerProvid
   String? _selectedSource;
   bool _isSubmitting = false;
   String? _errorMessage;
-  final _supabase = Supabase.instance.client;
-  final _authService = AuthService();
+  // final _supabase = Supabase.instance.client;
+  // final _authService = AuthService();
+  final _localDBService = LocalDBService();
   File? _profileImage;
   String? _selectedAvatar;
   double _progressValue = 0.0;
@@ -168,20 +170,21 @@ class _UserSurveyPageState extends State<UserSurveyPage> with SingleTickerProvid
         });
 
         String? avatarUrl = _selectedAvatar;
+        // If using profile image, store it locally instead of Supabase
         if (_profileImage != null) {
-          final String path = 'avatars/${widget.userId}_${DateTime.now().millisecondsSinceEpoch}.jpg';
-          await _supabase.storage.from('avatars').upload(path, _profileImage!);
-          avatarUrl = _supabase.storage.from('avatars').getPublicUrl(path);
+          // In a real app, you'd copy the file to app documents directory
+          // For now, just use the path
+          avatarUrl = _profileImage!.path;
         }
 
-        await _authService.updateUserProfile(
+        // Use LocalDBService to update user profile
+        await _localDBService.updateUserProfile(
           userId: widget.userId,
           fullName: _nameController.text,
           username: _usernameController.text,
           bio: _bioController.text,
           dateOfBirth: _selectedDate,
           profession: _selectedProfession,
-          heardFrom: _selectedSource,
           avatarUrl: avatarUrl,
           surveyCompleted: true,
         );

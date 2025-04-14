@@ -8,6 +8,7 @@ import '../services/termux_service.dart';
 import '../component/model_input_dialog.dart';
 import '../component/ollama_model.dart';
 import '../component/model_parameter_dialog.dart';
+import '../services/model_service.dart';
 
 class LibraryPage extends StatefulWidget {
   const LibraryPage({Key? key}) : super(key: key);
@@ -17,6 +18,7 @@ class LibraryPage extends StatefulWidget {
 }
 
 class _LibraryPageState extends State<LibraryPage> with TickerProviderStateMixin {
+  final ModelService _modelService = ModelService();
   String _filterText = '';
   String _selectedCategory = 'All Models';
   final List<String> _categories = ['All Models', 'Text', 'Vision', 'Code', 'Embedding', 'Audio'];
@@ -244,14 +246,17 @@ class _LibraryPageState extends State<LibraryPage> with TickerProviderStateMixin
 
   void _configureModel(Map<String, dynamic> model) async {
     try {
-      final config = service.ModelConfig(
+      final config = ModelConfig(
         id: model['name'],
         name: model['name'],
-        provider: service.ModelProvider.ollama,
+        provider: ModelProvider.ollama,
         baseUrl: 'http://localhost:11434',
+        model: model['name'],
+        createdAt: DateTime.now(),
+        updatedAt: DateTime.now(),
       );
-      await service.ModelService.saveModelConfig(config);
-      await service.ModelService.setSelectedModel(config.id);
+      await _modelService.saveModel(config);
+      await _modelService.setDefaultModel(config.id);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Model configured successfully')),
@@ -305,6 +310,32 @@ class _LibraryPageState extends State<LibraryPage> with TickerProviderStateMixin
         onCancel: () => Navigator.pop(context),
       ),
     );
+  }
+
+  Future<void> _addModelToSettings(AIModel model) async {
+    try {
+      final config = ModelConfig(
+        id: model.id,
+        name: model.name,
+        provider: ModelProvider.pocketLLM,
+        baseUrl: '',
+        apiKey: '',
+        model: model.id,
+        createdAt: DateTime.now(),
+        updatedAt: DateTime.now(),
+      );
+
+      await _modelService.saveModel(config);
+      await _modelService.setDefaultModel(config.id);
+      
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Model added successfully')),
+      );
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed to add model: $e')),
+      );
+    }
   }
 
   @override

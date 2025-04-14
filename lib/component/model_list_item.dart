@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import '../services/model_service.dart';
+import '../component/models.dart';
 import 'model_config_dialog.dart';
 
 class ModelListItem extends StatelessWidget {
@@ -188,6 +188,11 @@ class ModelListItem extends StatelessWidget {
   }
 
   Widget _buildApiKeyRow(BuildContext context) {
+    // Don't show API key row for PocketLLM models
+    if (model.provider == ModelProvider.pocketLLM) {
+      return const SizedBox.shrink();
+    }
+    
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -203,34 +208,14 @@ class ModelListItem extends StatelessWidget {
           ),
         ),
         Expanded(
-          child: Row(
-            children: [
-              Text(
-                '••••••••••••••••',
-                style: TextStyle(
-                  fontSize: 14,
-                  color: Colors.black87,
-                ),
-              ),
-              IconButton(
-                icon: Icon(Icons.visibility, size: 16),
-                padding: EdgeInsets.zero,
-                constraints: BoxConstraints(),
-                onPressed: () {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text('API Key: ${model.apiKey}'),
-                      action: SnackBarAction(
-                        label: 'Copy',
-                        onPressed: () {
-                          // Copy to clipboard functionality
-                        },
-                      ),
-                    ),
-                  );
-                },
-              ),
-            ],
+          child: Text(
+            model.apiKey != null && model.apiKey!.isNotEmpty
+                ? '••••••••••••••••${model.apiKey!.substring(model.apiKey!.length > 4 ? model.apiKey!.length - 4 : 0)}'
+                : 'Not set',
+            style: TextStyle(
+              fontSize: 14,
+              color: Colors.black87,
+            ),
           ),
         ),
       ],

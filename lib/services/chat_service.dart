@@ -4,52 +4,92 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'model_service.dart';
 import 'pocket_llm_service.dart';
+import '../component/models.dart';
 
 class ChatService {
+  static final ModelService _modelService = ModelService();
+  
   // Get response from the selected model
   static Future<String> getModelResponse(String userMessage, {
-    bool stream = false,
-    Function(String)? onToken,
+    required String conversationId,
+    required String modelId,
   }) async {
     try {
-      // Get the selected model configuration
-      final selectedModelId = await ModelService.getSelectedModel();
-      if (selectedModelId == null) {
-        return 'No model selected. Please configure a model in Settings.';
+      final modelService = ModelService();
+      debugPrint('Getting response for model ID: $modelId');
+      
+      // Validate model ID
+      if (modelId.isEmpty) {
+        debugPrint('Model ID is empty');
+        throw Exception('No model selected. Please select a model in Settings.');
       }
+
+      // Get the model configuration
+      final modelConfigs = await modelService.getSavedModels();
+      debugPrint('Found ${modelConfigs.length} model configs');
       
-      final modelConfigs = await ModelService.getModelConfigs();
-      final modelConfig = modelConfigs.firstWhere(
-        (config) => config.id == selectedModelId,
-        orElse: () => throw Exception('Selected model not found'),
-      );
+      ModelConfig? modelConfig;
+      try {
+        modelConfig = modelConfigs.firstWhere(
+          (config) => config.id == modelId,
+          orElse: () => throw Exception('Model not found with ID: $modelId'),
+        );
+        debugPrint('Selected model: ${modelConfig.name} (${modelConfig.provider})');
+      } catch (e) {
+        debugPrint('Error finding model: $e');
+        throw Exception('Model not found: $e');
+      }
+
+      // Get response based on provider
+      String response;
+      debugPrint('Getting response from provider: ${modelConfig.provider}');
       
-      // Call the appropriate provider based on the model configuration
       switch (modelConfig.provider) {
         case ModelProvider.pocketLLM:
-          return await PocketLLMService.getPocketLLMResponse(modelConfig, userMessage);
-        
+          debugPrint('Using PocketLLM service');
+          response = await PocketLLMService.getPocketLLMResponse(modelConfig, userMessage);
+          break;
+          
         case ModelProvider.ollama:
-          return await _getOllamaResponse(modelConfig, userMessage, stream, onToken);
-        
+          debugPrint('Using Ollama service');
+          response = await _getOllamaResponse(modelConfig, userMessage, false, null);
+          break;
+          
         case ModelProvider.openAI:
-          return await _getOpenAIResponse(modelConfig, userMessage, stream, onToken);
-        
+          debugPrint('Using OpenAI service');
+          response = await _getOpenAIResponse(modelConfig, userMessage, false, null);
+          break;
+          
         case ModelProvider.anthropic:
-          return await _getAnthropicResponse(modelConfig, userMessage, stream, onToken);
-        
+          debugPrint('Using Anthropic service');
+          response = await _getAnthropicResponse(modelConfig, userMessage, false, null);
+          break;
+          
         case ModelProvider.mistral:
-          return await _getMistralResponse(modelConfig, userMessage, stream, onToken);
-        
+          debugPrint('Using Mistral service');
+          response = await _getMistralResponse(modelConfig, userMessage, false, null);
+          break;
+          
         case ModelProvider.deepseek:
-          return await _getDeepseekResponse(modelConfig, userMessage, stream, onToken);
-        
+          debugPrint('Using DeepSeek service');
+          response = await _getDeepseekResponse(modelConfig, userMessage, false, null);
+          break;
+          
         case ModelProvider.lmStudio:
-          return await _getLMStudioResponse(modelConfig, userMessage, stream, onToken);
+          debugPrint('Using LM Studio service');
+          response = await _getLMStudioResponse(modelConfig, userMessage, false, null);
+          break;
+          
+        default:
+          debugPrint('Unknown provider: ${modelConfig.provider}');
+          throw Exception('Unsupported model provider: ${modelConfig.provider}');
       }
+      
+      debugPrint('Got response (${response.length} chars)');
+      return response;
     } catch (e) {
-      debugPrint('Error getting model response: $e');
-      return 'Error: $e';
+      debugPrint('Error in getModelResponse: $e');
+      throw Exception('Failed to get model response: $e');
     }
   }
   

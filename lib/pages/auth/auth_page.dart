@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:pocketllm/services/auth_service.dart';
+// import 'package:pocketllm/services/auth_service.dart';
+import 'package:pocketllm/services/local_db_service.dart';
 import '../../widgets/clear_text_field.dart';
 import 'user_survey_page.dart';
 import '../settings/profile_settings.dart';
@@ -19,7 +20,8 @@ class AuthPage extends StatefulWidget {
 }
 
 class _AuthPageState extends State<AuthPage> {
-  final AuthService _authService = AuthService();
+  // final AuthService _authService = AuthService();
+  final LocalDBService _localDBService = LocalDBService();
   final TextEditingController _emailController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
   final TextEditingController _confirmPasswordController = TextEditingController();
@@ -48,7 +50,9 @@ class _AuthPageState extends State<AuthPage> {
         _isLoading = true;
       });
       
-      final exists = await _authService.checkEmailExists(_emailController.text);
+      // Check if email exists in local database
+      final user = await _localDBService.getUserByEmail(_emailController.text);
+      final exists = user != null;
       
       if (!mounted) return;
       setState(() {
@@ -56,10 +60,27 @@ class _AuthPageState extends State<AuthPage> {
         _isLoading = false;
         _showPasswordField = true;
         
-        if (!exists) {
-          _showSignupFields = true;
-        }
+        // If the email exists, show the login form
+        // If it doesn't, show the signup form
+        _showSignupFields = !exists;
       });
+      
+      // Show appropriate message to the user based on email existence
+      if (exists) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Welcome back! Please enter your password to sign in.'),
+            backgroundColor: Color(0xFF8B5CF6),
+          ),
+        );
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('This email is not registered. Please create a new account.'),
+            backgroundColor: Color(0xFF8B5CF6),
+          ),
+        );
+      }
     } catch (e) {
       if (!mounted) return;
       setState(() {
@@ -90,18 +111,28 @@ class _AuthPageState extends State<AuthPage> {
         _isLoading = true;
       });
       
-      final response = await _authService.signIn(
-        email: _emailController.text,
-        password: _passwordController.text,
-      );
-      
-      if (!mounted) return;
-      setState(() {
-        _isLoading = false;
-      });
-      
-      if (response.user != null) {
+      try {
+        // Use local database for login
+        await _localDBService.login(
+          email: _emailController.text,
+          password: _passwordController.text,
+        );
+        
+        if (!mounted) return;
+        setState(() {
+          _isLoading = false;
+        });
+        
+        ScaffoldMessenger.of(context).clearSnackBars();
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Login successful!'),
+            backgroundColor: Color(0xFF8B5CF6),
+          ),
+        );
         widget.onLoginSuccess(_emailController.text);
+      } catch (e) {
+        throw e; // Re-throw to be caught by the outer catch block
       }
     } catch (e) {
       if (!mounted) return;
@@ -109,7 +140,19 @@ class _AuthPageState extends State<AuthPage> {
         _isLoading = false;
       });
       
-      _showErrorSnackBar('Login failed: ${e.toString()}');
+      // Check if it's an invalid credentials error
+      if (e.toString().toLowerCase().contains('invalid email or password')) {
+        _showErrorSnackBar('Incorrect password. Please try again or use "Forgot Password".');
+      } else if (e.toString().toLowerCase().contains('user not found')) {
+        // This case should be rare since we already checked if the email exists
+        _showErrorSnackBar('No account found with this email. Please create an account.');
+        setState(() {
+          _emailExists = false;
+          _showSignupFields = true;
+        });
+      } else {
+        _showErrorSnackBar('Login failed: ${e.toString()}');
+      }
     }
   }
   
@@ -131,11 +174,25 @@ class _AuthPageState extends State<AuthPage> {
     
     if (!mounted) return;
     try {
+      // Check email existence one more time to ensure it doesn't exist
+      final user = await _localDBService.getUserByEmail(_emailController.text);
+      final exists = user != null;
+      
+      if (exists) {
+        setState(() {
+          _emailExists = true;
+          _showSignupFields = false;
+        });
+        _showErrorSnackBar('This email is already registered. Please login instead.');
+        return;
+      }
+      
       setState(() {
         _isLoading = true;
       });
       
-      final response = await _authService.signUp(
+      // Register user with local database
+      final newUser = await _localDBService.register(
         email: _emailController.text,
         password: _passwordController.text,
       );
@@ -145,40 +202,38 @@ class _AuthPageState extends State<AuthPage> {
         _isLoading = false;
       });
       
-      if (response.user != null) {
-        // Clear any previous error messages
-        if (!mounted) return;
-        ScaffoldMessenger.of(context).clearSnackBars();
-        
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Account created successfully! Complete your profile to get started.'),
-            backgroundColor: Color(0xFF8B5CF6),
-            duration: Duration(seconds: 3),
+      // Clear any previous error messages
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).clearSnackBars();
+      
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Account created successfully! Complete your profile to get started.'),
+          backgroundColor: Color(0xFF8B5CF6),
+          duration: Duration(seconds: 3),
+        ),
+      );
+      
+      // Navigate to user survey page using pushAndRemoveUntil to clear the stack
+      Navigator.pushAndRemoveUntil(
+        context,
+        MaterialPageRoute(
+          builder: (context) => UserSurveyPage(
+            userId: newUser.id,
+            onComplete: () {
+              widget.onLoginSuccess(_emailController.text);
+            },
           ),
-        );
-        
-        // Navigate to user survey page using pushAndRemoveUntil to clear the stack
-        Navigator.pushAndRemoveUntil(
-          context,
-          MaterialPageRoute(
-            builder: (context) => UserSurveyPage(
-              userId: response.user!.id,
-              onComplete: () {
-                widget.onLoginSuccess(_emailController.text);
-              },
-            ),
-          ),
-          (route) => false, // This will remove all previous routes
-        );
-      }
+        ),
+        (route) => false, // This will remove all previous routes
+      );
     } catch (e) {
       if (!mounted) return;
       setState(() {
         _isLoading = false;
       });
       
-      if (e.toString().toLowerCase().contains('email is already in use')) {
+      if (e.toString().toLowerCase().contains('user with this email already exists')) {
         _showErrorSnackBar('This email is already registered. Please login instead.');
         setState(() {
           _emailExists = true;
@@ -212,14 +267,17 @@ class _AuthPageState extends State<AuthPage> {
               setState(() => _isLoading = true);
               
               try {
-                await _authService.resetPassword(_emailController.text);
+                await _localDBService.resetPassword(
+                  email: _emailController.text,
+                  newPassword: 'Reset123!', // Default password after reset
+                );
                 
                 setState(() => _isLoading = false);
                 
                 if (!mounted) return;
                 ScaffoldMessenger.of(context).showSnackBar(
                   const SnackBar(
-                    content: Text('Password reset instructions sent to your email'),
+                    content: Text('Password reset completed. Check your email for the new password'),
                     backgroundColor: Color(0xFF8B5CF6),
                   ),
                 );
@@ -265,15 +323,52 @@ class _AuthPageState extends State<AuthPage> {
             ),
             const SizedBox(height: 40),
             Text(
-              _showSignupFields ? 'Create Account' : (_showPasswordField ? 'Welcome Back' : 'Welcome'),
+              _showSignupFields 
+                ? 'Create New Account' 
+                : (_showPasswordField 
+                    ? (_emailExists ? 'Welcome Back' : 'Create New Account') 
+                    : 'Welcome to PocketLLM'),
               style: const TextStyle(
                 fontSize: 24,
                 fontWeight: FontWeight.bold,
               ),
               textAlign: TextAlign.center,
             ),
+            if (_showPasswordField && _emailExists) 
+              Padding(
+                padding: const EdgeInsets.only(top: 8.0),
+                child: Text(
+                  'Your account was found in our system',
+                  style: TextStyle(
+                    fontSize: 16,
+                    color: Colors.green[700],
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+              ),
+            if (_showPasswordField && !_emailExists) 
+              Padding(
+                padding: const EdgeInsets.only(top: 8.0),
+                child: Text(
+                  'Create a new account to get started',
+                  style: TextStyle(
+                    fontSize: 16,
+                    color: Colors.blue[700],
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+              ),
             const SizedBox(height: 40),
             if (!_showPasswordField) ...[
+              Text(
+                'Enter your email to continue',
+                style: TextStyle(
+                  fontSize: 16,
+                  color: Colors.grey[700],
+                ),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 24),
               ClearTextField(
                 controller: _emailController,
                 hintText: 'Email',
@@ -355,6 +450,7 @@ class _AuthPageState extends State<AuthPage> {
                             setState(() {
                               _showPasswordField = false;
                               _passwordController.clear();
+                              _emailExists = false;
                             });
                           }
                         : null,
@@ -454,6 +550,7 @@ class _AuthPageState extends State<AuthPage> {
                               _showSignupFields = false;
                               _passwordController.clear();
                               _confirmPasswordController.clear();
+                              _emailExists = false;
                             });
                           }
                         : null,

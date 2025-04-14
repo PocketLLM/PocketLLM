@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../services/model_service.dart';
+import '../component/models.dart';
 
 class ApiKeysPage extends StatefulWidget {
   const ApiKeysPage({Key? key}) : super(key: key);
@@ -12,6 +13,7 @@ class ApiKeysPage extends StatefulWidget {
 class _ApiKeysPageState extends State<ApiKeysPage> {
   List<ModelConfig> _modelConfigs = [];
   bool _isLoading = true;
+  final ModelService _modelService = ModelService();
 
   @override
   void initState() {
@@ -25,7 +27,7 @@ class _ApiKeysPageState extends State<ApiKeysPage> {
     });
 
     try {
-      final configs = await ModelService.getModelConfigs();
+      final configs = await _modelService.getSavedModels();
       
       // Filter configs to only include those with API keys
       final configsWithKeys = configs.where((config) => config.apiKey != null && config.apiKey!.isNotEmpty).toList();
@@ -238,15 +240,15 @@ class _ApiKeysPageState extends State<ApiKeysPage> {
   Widget _getProviderIcon(ModelProvider provider) {
     IconData iconData;
     Color iconColor;
-
+    
     switch (provider) {
       case ModelProvider.ollama:
         iconData = Icons.terminal;
-        iconColor = Colors.orange;
+        iconColor = Colors.green;
         break;
       case ModelProvider.openAI:
         iconData = Icons.auto_awesome;
-        iconColor = Colors.green;
+        iconColor = Colors.blue;
         break;
       case ModelProvider.anthropic:
         iconData = Icons.psychology;
@@ -254,24 +256,27 @@ class _ApiKeysPageState extends State<ApiKeysPage> {
         break;
       case ModelProvider.lmStudio:
         iconData = Icons.science;
-        iconColor = Colors.blue;
+        iconColor = Colors.orange;
         break;
       case ModelProvider.pocketLLM:
-        // TODO: Handle this case.
-        throw UnimplementedError();
+        iconData = Icons.smart_toy;
+        iconColor = Color(0xFF8B5CF6);
+        break;
       case ModelProvider.mistral:
-        // TODO: Handle this case.
-        throw UnimplementedError();
+        iconData = Icons.air;
+        iconColor = Colors.teal;
+        break;
       case ModelProvider.deepseek:
-        // TODO: Handle this case.
-        throw UnimplementedError();
+        iconData = Icons.search;
+        iconColor = Colors.amber;
+        break;
     }
-
+    
     return Container(
       padding: EdgeInsets.all(8),
       decoration: BoxDecoration(
         color: iconColor.withOpacity(0.1),
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(8),
       ),
       child: Icon(iconData, color: iconColor),
     );

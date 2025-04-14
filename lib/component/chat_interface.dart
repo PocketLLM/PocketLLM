@@ -5,7 +5,7 @@ import 'models.dart';
 import 'tavily_service.dart';
 import 'chat_history_manager.dart';
 import '../services/chat_service.dart';
-import '../services/model_service.dart' as service;
+import '../services/model_service.dart';
 import 'package:animated_text_kit/animated_text_kit.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:file_picker/file_picker.dart';
@@ -19,40 +19,43 @@ import 'dart:math';
 import 'dart:async';
 import '../services/model_state.dart';
 import '../services/theme_service.dart'; // Add this import
+import '../services/chat_history_service.dart';
+import 'appbar/chat_history.dart'; // Add this import
+import '../services/error_service.dart';
 
 class ChatInterface extends StatefulWidget {
   const ChatInterface({Key? key}) : super(key: key);
 
   @override
-  _ChatInterfaceState createState() => _ChatInterfaceState();
+  ChatInterfaceState createState() => ChatInterfaceState();
 }
 
-class _ChatInterfaceState extends State<ChatInterface> {
+class ChatInterfaceState extends State<ChatInterface> {
   bool _showAttachmentOptions = false;
   final double _inputHeight = 56.0;
   final double _maxInputHeight = 120.0;
   final TextEditingController _messageController = TextEditingController();
-  final List<Message> _messages = [];
-  
-  // Getter for messages
-  List<Message> get messages => List.unmodifiable(_messages);
+  List<Message> get _messages => _chatHistoryService.activeConversationNotifier.value?.messages ?? [];
   
   bool _isLoading = false;
   final ScrollController _scrollController = ScrollController();
   String? _selectedModelId;
-  service.ModelConfig? _selectedModelConfig;
-  List<service.ModelConfig> _modelConfigs = [];
+  ModelConfig? _selectedModelConfig;
+  List<ModelConfig> _modelConfigs = [];
   bool _isStreaming = false;
   String _currentStreamingResponse = '';
   String _currentThought = '';
   bool _isTyping = false;
+  
+  // Add chat history service
+  final ChatHistoryService _chatHistoryService = ChatHistoryService();
+  final ModelService _modelService = ModelService();
   
   // Restore missing variables
   final String apiKey = 'ddc-m4qlvrgpt1W1E4ZXc4bvm5T5Z6CRFLeXRCx9AbRuQOcGpFFrX2';
   final String apiUrl = 'https://api.sree.shop/v1/chat/completions';
   final TavilyService _tavilyService = TavilyService();
   bool _isOnline = false;
-  final ChatHistoryManager _chatHistoryManager = ChatHistoryManager();
 
   // Suggested messages (dynamic)
   final List<String> _suggestedMessages = [
@@ -65,90 +68,111 @@ class _ChatInterfaceState extends State<ChatInterface> {
   void initState() {
     super.initState();
     _loadSelectedModel();
-    _loadChatHistory();
+    _initializeChat();
     // Add listener to update send button state
     _messageController.addListener(() {
       setState(() {}); // Trigger rebuild when text changes
     });
+    
+    // Listen for changes to the active conversation
+    _chatHistoryService.activeConversationNotifier.addListener(_onActiveConversationChanged);
+    
+    // Listen for model changes
+    ModelState().selectedModelId.addListener(_onModelChanged);
+  }
+  
+  @override
+  void dispose() {
+    _chatHistoryService.activeConversationNotifier.removeListener(_onActiveConversationChanged);
+    ModelState().selectedModelId.removeListener(_onModelChanged);
+    _messageController.dispose();
+    super.dispose();
+  }
+  
+  void _onModelChanged() {
+    _loadSelectedModel();
+  }
+  
+  void _onActiveConversationChanged() {
+    // When the active conversation changes, update the UI
+    setState(() {});
+    _scrollToBottom();
   }
 
   Future<void> _loadSelectedModel() async {
     try {
-      final selectedId = await service.ModelService.getSelectedModel();
+      final modelService = ModelService();
+      final selectedId = await modelService.getDefaultModelId();
       if (selectedId != null) {
-        final configs = await service.ModelService.getModelConfigs();
-        final config = configs.firstWhere(
-          (config) => config.id == selectedId,
-          orElse: () => throw Exception('Selected model not found'),
-        );
-        
-        setState(() {
-          _selectedModelId = selectedId;
-          _selectedModelConfig = config;
-        });
+        final configs = await modelService.getSavedModels();
+        try {
+          final config = configs.firstWhere(
+            (config) => config.id == selectedId,
+            orElse: () => throw Exception('Selected model not found'),
+          );
+          
+          setState(() {
+            _selectedModelId = selectedId;
+            _selectedModelConfig = config;
+          });
+        } catch (e) {
+          debugPrint('Error finding selected model: $e');
+          // If the selected model is not found, try to set the first available model
+          if (configs.isNotEmpty) {
+            await modelService.setDefaultModel(configs.first.id);
+            setState(() {
+              _selectedModelId = configs.first.id;
+              _selectedModelConfig = configs.first;
+            });
+          }
+        }
       }
     } catch (e) {
-      print('Error loading selected model: $e');
+      debugPrint('Error loading selected model: $e');
     }
   }
 
-  Future<void> _loadChatHistory() async {
-    final savedMessages = await _chatHistoryManager.loadChatHistory();
-    setState(() {
-      _messages.addAll(savedMessages);
-    });
-    _scrollToBottom();
-  }
-
-  Future<void> _loadModelConfigs() async {
+  Future<void> _initializeChat() async {
     try {
-      final configs = await service.ModelService.getModelConfigs();
-      setState(() {
-        _modelConfigs = configs;
-        _selectedModelId = ModelState().selectedModelId.value;
-        _updateSelectedConfig();
-      });
-      ModelState().selectedModelId.addListener(_onModelChanged);
+      // Load conversations from the chat history service
+      await _chatHistoryService.loadConversations();
+      
+      // Check if there's an active conversation
+      if (_chatHistoryService.activeConversationNotifier.value == null) {
+        // If no active conversation, create a new one
+        await _chatHistoryService.createConversation();
+      }
+      
+      setState(() {});
+      _scrollToBottom();
     } catch (e) {
-      print('Error loading model configs: $e');
+      print('Error initializing chat: $e');
     }
   }
-
-  void _onModelChanged() {
-    setState(() {
-      _selectedModelId = ModelState().selectedModelId.value;
-      _updateSelectedConfig();
-    });
-  }
-
-  void _updateSelectedConfig() {
-    if (_selectedModelId != null && _modelConfigs.isNotEmpty) {
-      _selectedModelConfig = _modelConfigs.firstWhere(
-        (config) => config.id == _selectedModelId,
-        orElse: () => _modelConfigs.first,
-      );
-    } else {
-      _selectedModelConfig = null;
-    }
-  }
-
-    @override
-  void dispose() {
-    ModelState().selectedModelId.removeListener(_onModelChanged);
-    super.dispose();
-  }
-
 
   Future<void> _sendMessage() async {
     final message = _messageController.text.trim();
     if (message.isEmpty || _isLoading) return;
+    
+    // Get the active conversation's ID
+    final activeConversation = _chatHistoryService.activeConversationNotifier.value;
+    if (activeConversation == null) {
+      // Create a new conversation if none is active
+      try {
+        final newConversation = await _chatHistoryService.createConversation();
+        await _addMessageToConversation(newConversation.id, message, true);
+      } catch (e) {
+        debugPrint('Error creating conversation: $e');
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error creating conversation: $e'))
+        );
+        return;
+      }
+    } else {
+      await _addMessageToConversation(activeConversation.id, message, true);
+    }
 
     setState(() {
-      _messages.add(Message(
-        content: message,
-        isUser: true,
-        timestamp: DateTime.now(),
-      ));
       _messageController.clear();
       _isLoading = true;
       _currentStreamingResponse = '';
@@ -161,96 +185,151 @@ class _ChatInterfaceState extends State<ChatInterface> {
       timestamp: DateTime.now(),
       isThinking: true
     );
-    setState(() {
-      _messages.add(thinkingMessage);
-    });
+    
+    final conversationId = _chatHistoryService.activeConversationNotifier.value!.id;
+    await _chatHistoryService.addMessageToConversation(conversationId, thinkingMessage);
+    setState(() {});
     _scrollToBottom();
 
     try {
-      if (_selectedModelConfig == null) {
+      // Load the selected model
+      if (_selectedModelId == null) {
+        await _loadSelectedModel();
+      }
+      
+      if (_selectedModelId == null || _selectedModelConfig == null) {
         throw Exception('No model selected. Please configure a model in Settings.');
       }
+      
+      debugPrint('Sending message to model: ${_selectedModelConfig!.name} (${_selectedModelConfig!.provider})');
 
       final response = await ChatService.getModelResponse(
         message,
-        stream: false,
+        conversationId: conversationId,
+        modelId: _selectedModelId ?? '',
       );
 
       if (!mounted) return;
 
+      // Remove thinking message
+      if (_chatHistoryService.activeConversationNotifier.value != null) {
+        final conversation = _chatHistoryService.activeConversationNotifier.value!;
+        // Create a new message list without the thinking message
+        final updatedMessages = conversation.messages.where((msg) => !msg.isThinking).toList();
+        // Update the conversation with the new message list
+        await _chatHistoryService.updateConversation(
+          conversation.copyWith(messages: updatedMessages),
+        );
+      }
+
+      // Add AI response
+      await _addMessageToConversation(
+        conversationId,
+        _cleanUpResponse(response),
+        false,
+      );
+      
       setState(() {
         _isLoading = false;
-        // Remove thinking message
-        _messages.removeWhere((msg) => msg.isThinking);
-        // Add AI response
-        _messages.add(Message(
-          content: _cleanUpResponse(response),
-          isUser: false,
-          timestamp: DateTime.now(),
-        ));
       });
       _scrollToBottom();
-      _saveChatHistory();
-    } catch (e) {
+    } catch (e, stackTrace) {
+      debugPrint('Error sending message: $e');
+      debugPrint('Stack trace: $stackTrace');
+      
       if (!mounted) return;
 
+      // Log the error
+      await ErrorService().logError(e.toString(), stackTrace);
+
+      // Remove thinking message
+      if (_chatHistoryService.activeConversationNotifier.value != null) {
+        final conversation = _chatHistoryService.activeConversationNotifier.value!;
+        // Create a new message list without the thinking message
+        final updatedMessages = conversation.messages.where((msg) => !msg.isThinking).toList();
+        // Update the conversation with the new message list
+        await _chatHistoryService.updateConversation(
+          conversation.copyWith(messages: updatedMessages),
+        );
+      }
+
+      // Add user-friendly error message
+      final errorMessage = _getErrorMessageFromException(e);
+      await _addMessageToConversation(
+        conversationId,
+        errorMessage,
+        false,
+        isError: true,
+      );
+      
       setState(() {
         _isLoading = false;
-        _messages.removeWhere((msg) => msg.isThinking);
-        _messages.add(Message(
-          content: 'Error: ${e.toString()}',
-          isUser: false,
-          timestamp: DateTime.now(),
-          isError: true,
-        ));
       });
       _scrollToBottom();
+    }
+  }
+  
+  // Add a method to get user-friendly error messages
+  String _getErrorMessageFromException(dynamic exception) {
+    final message = exception.toString();
+    if (message.contains('No model selected')) {
+      return 'Please select a model in Settings before sending messages.';
+    } else if (message.contains('network') || message.contains('connect')) {
+      return 'Network error. Please check your internet connection and try again.';
+    } else if (message.contains('timeout')) {
+      return 'The request timed out. Please try again.';
+    } else if (message.contains('authenticate') || message.contains('auth')) {
+      return 'Authentication error. Please check your API key in Settings.';
+    } else {
+      return 'An error occurred. Please try again later.\n\nTechnical details: ${message.replaceAll('Exception: ', '')}';
+    }
+  }
+  
+  // Add a new method to add messages to the current conversation
+  Future<void> _addMessageToConversation(String conversationId, String content, bool isUser, {bool isError = false}) async {
+    final message = Message(
+      content: content,
+      isUser: isUser,
+      timestamp: DateTime.now(),
+      isError: isError,
+    );
+    
+    await _chatHistoryService.addMessageToConversation(conversationId, message);
+    setState(() {});
+  }
+  
+  // Change this method from private to public
+  Future<void> createNewChat() async {
+    try {
+      debugPrint('Creating new chat conversation');
+      final newConversation = await _chatHistoryService.createConversation();
+      debugPrint('New conversation created with ID: ${newConversation.id}');
+      
+      setState(() {
+        _messageController.clear();
+        _currentStreamingResponse = '';
+        _isLoading = false;
+      });
+      
+      // Ensure the UI updates to show the empty conversation
+      await Future.delayed(Duration.zero);
+      if (mounted) {
+        setState(() {});
+      }
+      
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('New chat created'))
+      );
+    } catch (e) {
+      debugPrint('Error creating new chat: $e');
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error creating new chat: $e'))
+      );
     }
   }
 
   String _cleanUpResponse(String response) {
     return response.replaceAll(RegExp(r"In\s*\$\~{3}\$.*?\$\~{3}\$"), '').trim();
-  }
-
-  Future<void> _saveChatHistory() async {
-    await _chatHistoryManager.saveChatHistory(_messages);
-  }
-
-  Future<String> _getAIResponse(String userMessage) async {
-    try {
-      // Use the ChatService to get a response from the selected model
-      return await ChatService.getModelResponse(userMessage);
-    } catch (e) {
-      print('Error getting AI response: $e');
-      throw Exception('Failed to get AI response: $e');
-    }
-  }
-
-  // Perform web search using the TavilyService
-  Future<Map<String, dynamic>> _performWebSearch(String query) async {
-    try {
-      // Get the active search configuration from shared preferences
-      final prefs = await SharedPreferences.getInstance();
-      final searchConfigJson = prefs.getString('activeSearchConfig');
-      
-      if (searchConfigJson == null) {
-        throw Exception('No active search configuration found. Please configure search settings first.');
-      }
-      
-      final searchConfig = json.decode(searchConfigJson);
-      final searchProvider = searchConfig['provider'] ?? 'tavily';
-      
-      if (searchProvider == 'tavily') {
-        // Use TavilyService for search
-        final results = await _tavilyService.search(query);
-        return results;
-      } else {
-        throw Exception('Unsupported search provider: $searchProvider');
-      }
-    } catch (e) {
-      print('Search error: $e');
-      throw e;
-    }
   }
 
   void _scrollToBottom() {
@@ -266,24 +345,61 @@ class _ChatInterfaceState extends State<ChatInterface> {
     });
   }
 
+  // Add method to clear current chat
+  Future<void> _clearCurrentChat() async {
+    final activeConversation = _chatHistoryService.activeConversationNotifier.value;
+    if (activeConversation == null) return;
+    
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Clear Chat'),
+        content: const Text('Are you sure you want to clear this conversation? This action cannot be undone.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: TextButton.styleFrom(foregroundColor: Colors.red),
+            child: const Text('Clear'),
+          ),
+        ],
+      ),
+    );
+    
+    if (confirmed == true) {
+      // Update conversation with empty messages list
+      await _chatHistoryService.updateConversation(
+        activeConversation.copyWith(messages: []),
+      );
+      setState(() {});
+    }
+  }
+
+  // Add method to switch between chats or start a new chat
+  void _switchChat(String? conversationId) {
+    if (conversationId != null) {
+      _chatHistoryService.setActiveConversation(conversationId);
+    } else {
+      createNewChat();
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final isDark = ThemeService().isDarkMode;
+    final messages = _messages; // Get a local reference
+    
     return Scaffold(
       backgroundColor: isDark ? const Color(0xFF121212) : Colors.white,
       body: Column(
         children: [
           Expanded(
-            child: _messages.isEmpty
-                ? _buildEmptyState()
-                : ListView.builder(
-                    controller: _scrollController,
-                    itemCount: _messages.length,
-                    padding: const EdgeInsets.only(bottom: 20),
-                    itemBuilder: (context, index) {
-                      return _buildMessageBubble(_messages[index]);
-                    },
-                  ),
+            child: messages.isEmpty
+              ? _buildWelcomeScreen()
+              : _buildChatMessages(),
           ),
           _buildInputArea(),
         ],
@@ -291,7 +407,7 @@ class _ChatInterfaceState extends State<ChatInterface> {
     );
   }
 
-  Widget _buildEmptyState() {
+  Widget _buildWelcomeScreen() {
     return Column(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
@@ -325,11 +441,27 @@ class _ChatInterfaceState extends State<ChatInterface> {
         ),
         Expanded(
           child: Center(
-            child: Image.asset(
-              'assets/icons/icon.jpg', // Make sure to add this image
-              width: 48,
-              height: 48,
-              color: Colors.grey[300],
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                InkWell(
+                  onTap: () => createNewChat(),
+                  child: Icon(
+                    Icons.chat_bubble_outline,
+                    size: 64,
+                    color: Colors.grey[300],
+                  ),
+                ),
+                const SizedBox(height: 16),
+                Text(
+                  'Start a new conversation',
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.grey[700],
+                  ),
+                ),
+              ],
             ),
           ),
         ),
@@ -354,6 +486,18 @@ class _ChatInterfaceState extends State<ChatInterface> {
       ],
     );
   }
+
+  Widget _buildChatMessages() {
+    return ListView.builder(
+      controller: _scrollController,
+      itemCount: _messages.length,
+      padding: const EdgeInsets.only(bottom: 20),
+      itemBuilder: (context, index) {
+        return _buildMessageBubble(_messages[index]);
+      },
+    );
+  }
+
   Widget _buildSuggestionCard(String title, String subtitle, IconData icon) {
     return InkWell(
       onTap: () {
@@ -392,6 +536,7 @@ class _ChatInterfaceState extends State<ChatInterface> {
       ),
     );
   }
+
   Widget _buildInputArea() {
     return Container(
       decoration: BoxDecoration(
@@ -527,6 +672,7 @@ class _ChatInterfaceState extends State<ChatInterface> {
       print('Error taking photo: $e');
     }
   }
+
   Widget _buildAttachmentOption(IconData icon, String label, VoidCallback? onTap) {
     return InkWell(
       onTap: onTap,
@@ -557,6 +703,7 @@ class _ChatInterfaceState extends State<ChatInterface> {
       ),
     );
   }
+
   Widget _buildQuickAction(IconData icon, String label, VoidCallback onTap) {
     return InkWell(
       onTap: onTap,
@@ -1082,7 +1229,6 @@ class _ChatInterfaceState extends State<ChatInterface> {
                         _isLoading = false;
                       });
                       
-                      _saveChatHistory();
                       _scrollToBottom();
                     }).catchError((e) {
                       setState(() {
@@ -1091,7 +1237,6 @@ class _ChatInterfaceState extends State<ChatInterface> {
                         _isLoading = false;
                       });
                       
-                      _saveChatHistory();
                       _scrollToBottom();
                     });
                   }
@@ -1199,7 +1344,7 @@ class _ChatInterfaceState extends State<ChatInterface> {
   }
 
   Future<void> _showModelSelectionSheet() async {
-    final configs = await service.ModelService.getModelConfigs();
+    final configs = await _modelService.getSavedModels();
     if (!mounted) return;
 
     showModalBottomSheet(
@@ -1265,7 +1410,7 @@ class _ChatInterfaceState extends State<ChatInterface> {
                               shape: BoxShape.circle,
                             ),
                             child: Icon(
-                              _getProviderIcon(),
+                              _getProviderIcon(config.provider),
                               color: const Color(0xFF8B5CF6),
                               size: 20,
                             ),
@@ -1306,20 +1451,96 @@ class _ChatInterfaceState extends State<ChatInterface> {
   }
 
   // Helper method to get provider icon
-  IconData _getProviderIcon() {
-    if (_selectedModelConfig == null) return Icons.psychology;
+  IconData _getProviderIcon([ModelProvider? provider]) {
+    if (provider == null && _selectedModelConfig == null) return Icons.psychology;
     
-    switch (_selectedModelConfig!.provider) {
-      case service.ModelProvider.ollama:
+    final providerToCheck = provider ?? _selectedModelConfig!.provider;
+    switch (providerToCheck) {
+      case ModelProvider.ollama:
         return Icons.terminal;
-      case service.ModelProvider.openAI:
+      case ModelProvider.openAI:
         return Icons.auto_awesome;
-      case service.ModelProvider.anthropic:
+      case ModelProvider.anthropic:
         return Icons.psychology;
-      case service.ModelProvider.lmStudio:
+      case ModelProvider.lmStudio:
         return Icons.science;
       default:
         return Icons.psychology;
     }
+  }
+
+  Future<String> _getAIResponse(String userMessage) async {
+    try {
+      final conversationId = _chatHistoryService.activeConversationNotifier.value?.id ?? '';
+      // Use the ChatService to get a response from the selected model
+      return await ChatService.getModelResponse(
+        userMessage,
+        conversationId: conversationId,
+        modelId: _selectedModelId ?? '',
+      );
+    } catch (e) {
+      print('Error getting AI response: $e');
+      throw Exception('Failed to get AI response: $e');
+    }
+  }
+
+  Widget _buildChatActionsMenu() {
+    return PopupMenuButton<String>(
+      icon: const Icon(Icons.more_vert),
+      onSelected: (value) async {
+        switch (value) {
+          case 'new':
+            await createNewChat();
+            break;
+          case 'clear':
+            await _clearCurrentChat();
+            break;
+          case 'history':
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (context) => ChatHistory(
+                  onConversationSelected: (id) {
+                    _switchChat(id);
+                  },
+                ),
+              ),
+            );
+            break;
+        }
+      },
+      itemBuilder: (context) => [
+        const PopupMenuItem(
+          value: 'new',
+          child: Row(
+            children: [
+              Icon(Icons.add, size: 20),
+              SizedBox(width: 8),
+              Text('New Chat'),
+            ],
+          ),
+        ),
+        const PopupMenuItem(
+          value: 'clear',
+          child: Row(
+            children: [
+              Icon(Icons.delete_outline, size: 20),
+              SizedBox(width: 8),
+              Text('Clear Chat'),
+            ],
+          ),
+        ),
+        const PopupMenuItem(
+          value: 'history',
+          child: Row(
+            children: [
+              Icon(Icons.history, size: 20),
+              SizedBox(width: 8),
+              Text('Chat History'),
+            ],
+          ),
+        ),
+      ],
+    );
   }
 }

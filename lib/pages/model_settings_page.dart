@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../services/model_service.dart';
+import '../component/models.dart';
 import '../component/model_config_dialog.dart';
 import '../component/model_list_item.dart';
 import '../services/auth_service.dart';
@@ -15,9 +16,10 @@ class ModelSettingsPage extends StatefulWidget {
 
 class _ModelSettingsPageState extends State<ModelSettingsPage> {
   List<ModelConfig> _modelConfigs = [];
-  String? _selectedModelId;
   bool _isLoading = true;
+  String? _selectedModelId;
   final _authService = AuthService();
+  final _modelService = ModelService();
 
   @override
   void initState() {
@@ -31,19 +33,16 @@ class _ModelSettingsPageState extends State<ModelSettingsPage> {
     });
 
     try {
-      // Use filtered model configs based on authentication status
-      final configs = await ModelService.getFilteredModelConfigs();
-      final selectedId = await ModelService.getSelectedModel();
+      final configs = await _modelService.getSavedModels();
+      final selectedId = await _modelService.getDefaultModelId();
 
-      // If user is logged in, fetch PocketLLM models
-      if (_authService.isLoggedIn) {
-        final pocketLLMModels = await _fetchPocketLLMModels();
-        // Add PocketLLM models if they don't already exist
-        for (var model in pocketLLMModels) {
-          if (!configs.any((c) => c.id == model.id)) {
-            configs.add(model);
-            await ModelService.saveModelConfig(model);
-          }
+      // Always fetch PocketLLM models regardless of login status
+      final pocketLLMModels = await _fetchPocketLLMModels();
+      // Add PocketLLM models if they don't already exist
+      for (var model in pocketLLMModels) {
+        if (!configs.any((c) => c.id == model.id)) {
+          configs.add(model);
+          await _modelService.saveModel(model);
         }
       }
 
@@ -57,7 +56,7 @@ class _ModelSettingsPageState extends State<ModelSettingsPage> {
         _isLoading = false;
       });
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Failed to load model configurations: $e')),
+        SnackBar(content: Text('Failed to load models: $e')),
       );
     }
   }
@@ -66,18 +65,24 @@ class _ModelSettingsPageState extends State<ModelSettingsPage> {
     try {
       final models = await PocketLLMService.getAvailableModels();
       return models.map((model) {
-        final modelName = model['display_name'] ?? model['name'] ?? 'Unnamed Model';
+        final modelName = model['display_name'] ?? model['name'] ?? model['id'] ?? 'Unnamed Model';
         final modelId = model['id'] ?? model['name'] ?? modelName;
         return ModelConfig(
           id: modelId,
           name: modelName,
           provider: ModelProvider.pocketLLM,
-          baseUrl: '',  // Hide sensitive information
-          apiKey: '',   // Hide sensitive information
-          additionalParams: {
-            'temperature': 0.7,
-            'systemPrompt': 'You are a helpful AI assistant.',
-          },
+          baseUrl: PocketLLMService.baseUrl, // Use the actual base URL
+          apiKey: '', // Hide sensitive information
+          model: modelId,
+          temperature: 0.7,
+          maxTokens: 2000,
+          topP: 1.0,
+          frequencyPenalty: 0.0,
+          presencePenalty: 0.0,
+          stopSequences: [],
+          systemPrompt: 'You are a helpful AI assistant.',
+          createdAt: DateTime.now(),
+          updatedAt: DateTime.now(),
         );
       }).toList();
     } catch (e) {
@@ -87,17 +92,13 @@ class _ModelSettingsPageState extends State<ModelSettingsPage> {
   }
 
   void _addNewModel() {
-    if (!_authService.isLoggedIn && _modelConfigs.every((c) => c.provider != ModelProvider.pocketLLM)) {
-      _showSignInPrompt();
-      return;
-    }
     showDialog(
       context: context,
       builder: (context) => ModelConfigDialog(
         onSave: (config) async {
-          await ModelService.saveModelConfig(config);
+          await _modelService.saveModel(config);
           if (_modelConfigs.isEmpty) {
-            await ModelService.setSelectedModel(config.id);
+            await _modelService.setDefaultModel(config.id);
           }
           _loadModelConfigs();
         },
@@ -106,57 +107,28 @@ class _ModelSettingsPageState extends State<ModelSettingsPage> {
   }
 
   void _editModel(ModelConfig config) async {
-    await ModelService.saveModelConfig(config);
+    await _modelService.saveModel(config);
     _loadModelConfigs();
   }
 
   void _deleteModel(String id) async {
-    await ModelService.deleteModelConfig(id);
+    await _modelService.deleteModel(id);
     if (_selectedModelId == id && _modelConfigs.isNotEmpty) {
       final remainingConfigs = _modelConfigs.where((c) => c.id != id).toList();
       if (remainingConfigs.isNotEmpty) {
-        await ModelService.setSelectedModel(remainingConfigs.first.id);
+        await _modelService.setDefaultModel(remainingConfigs.first.id);
       } else {
-        await ModelService.clearSelectedModel();
+        await _modelService.setDefaultModel('');
       }
     }
     _loadModelConfigs();
   }
 
   void _selectModel(String id) async {
-    final selectedConfig = _modelConfigs.firstWhere((c) => c.id == id);
-    if (selectedConfig.provider == ModelProvider.pocketLLM && !_authService.isLoggedIn) {
-      _showSignInPrompt();
-      return;
-    }
-    await ModelService.setSelectedModel(id);
+    await _modelService.setDefaultModel(id);
     setState(() {
       _selectedModelId = id;
     });
-  }
-
-  void _showSignInPrompt() {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: const Text('Sign in to access PocketLLM models'),
-        action: SnackBarAction(
-          label: 'Sign In',
-          onPressed: () {
-            Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (context) => AuthPage(
-                  onLoginSuccess: (email) {
-                    _loadModelConfigs();
-                    Navigator.pop(context);
-                  },
-                ),
-              ),
-            );
-          },
-        ),
-      ),
-    );
   }
 
   @override
@@ -187,46 +159,6 @@ class _ModelSettingsPageState extends State<ModelSettingsPage> {
       ),
       body: Column(
         children: [
-          if (!_authService.isLoggedIn)
-            Container(
-              width: double.infinity,
-              padding: EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-              color: Color(0xFFFEF3C7),
-              child: Row(
-                children: [
-                  Icon(Icons.info_outline, color: Color(0xFFD97706)),
-                  SizedBox(width: 12),
-                  Expanded(
-                    child: Text(
-                      'Sign in to access PocketLLM models',
-                      style: TextStyle(color: Color(0xFFB45309)),
-                    ),
-                  ),
-                  TextButton(
-                    onPressed: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (context) => AuthPage(
-                            onLoginSuccess: (email) {
-                              _loadModelConfigs();
-                              Navigator.pop(context);
-                            },
-                          ),
-                        ),
-                      );
-                    },
-                    child: Text(
-                      'Sign In',
-                      style: TextStyle(
-                        color: Color(0xFF8B5CF6),
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
           Expanded(
             child: _isLoading
                 ? Center(child: CircularProgressIndicator())

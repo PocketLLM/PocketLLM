@@ -6,15 +6,79 @@ import '../pages/docs_page.dart';
 import '../component/appbar/about.dart';
 import '../component/appbar/chat_history.dart';
 import '../services/theme_service.dart';
+import '../services/chat_history_service.dart';
+import '../component/models.dart';
 
 class Sidebar extends StatefulWidget {
+  final Function(String conversationId)? onConversationSelected;
+  
+  const Sidebar({Key? key, this.onConversationSelected}) : super(key: key);
+  
   @override
   _SidebarState createState() => _SidebarState();
 }
 
 class _SidebarState extends State<Sidebar> {
   bool isHistoryExpanded = false;
-  final List<String> recentChats = ['Chat 1', 'Chat 2', 'Chat 3'];
+  final ChatHistoryService _chatHistoryService = ChatHistoryService();
+  List<Conversation> _recentConversations = [];
+  bool _isLoading = true;
+  String? _selectedConversationId;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadConversations();
+    
+    // Listen for changes to the conversations list
+    _chatHistoryService.conversationsNotifier.addListener(_onConversationsChanged);
+    
+    // Listen for changes to the active conversation
+    _chatHistoryService.activeConversationNotifier.addListener(_onActiveConversationChanged);
+  }
+  
+  @override
+  void dispose() {
+    _chatHistoryService.conversationsNotifier.removeListener(_onConversationsChanged);
+    _chatHistoryService.activeConversationNotifier.removeListener(_onActiveConversationChanged);
+    super.dispose();
+  }
+  
+  void _onConversationsChanged() {
+    setState(() {
+      _recentConversations = _chatHistoryService.conversationsNotifier.value;
+      _isLoading = false;
+    });
+  }
+  
+  void _onActiveConversationChanged() {
+    final activeConversation = _chatHistoryService.activeConversationNotifier.value;
+    setState(() {
+      _selectedConversationId = activeConversation?.id;
+    });
+  }
+
+  Future<void> _loadConversations() async {
+    try {
+      final conversations = await _chatHistoryService.loadConversations();
+      setState(() {
+        _recentConversations = conversations;
+        _isLoading = false;
+      });
+      
+      // Get the currently active conversation
+      final activeConversation = _chatHistoryService.activeConversationNotifier.value;
+      if (activeConversation != null) {
+        setState(() {
+          _selectedConversationId = activeConversation.id;
+        });
+      }
+    } catch (e) {
+      setState(() {
+        _isLoading = false;
+      });
+    }
+  }
 
   Widget _buildChatHistorySection() {
     final isDark = ThemeService().isDarkMode;
@@ -34,9 +98,24 @@ class _SidebarState extends State<Sidebar> {
               fontWeight: FontWeight.w400,
             ),
           ),
-          trailing: Icon(
-            isHistoryExpanded ? Icons.expand_less : Icons.expand_more,
-            color: isDark ? Colors.white70 : Colors.grey[600],
+          trailing: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // Add new chat button
+              IconButton(
+                icon: Icon(
+                  Icons.add,
+                  color: isDark ? Colors.white70 : Colors.grey[600],
+                  size: 22,
+                ),
+                onPressed: _createNewChat,
+                tooltip: 'New Chat',
+              ),
+              Icon(
+                isHistoryExpanded ? Icons.expand_less : Icons.expand_more,
+                color: isDark ? Colors.white70 : Colors.grey[600],
+              ),
+            ],
           ),
           contentPadding: EdgeInsets.symmetric(horizontal: 24),
           dense: true,
@@ -47,23 +126,162 @@ class _SidebarState extends State<Sidebar> {
           },
         ),
         if (isHistoryExpanded)
-          ...recentChats.map((chat) => ListTile(
-                contentPadding: EdgeInsets.only(left: 56, right: 24),
-                title: Text(
-                  chat,
-                  style: TextStyle(
-                    color: isDark ? Colors.white70 : Colors.grey[800],
-                    fontSize: 14,
+          _isLoading
+              ? Padding(
+                  padding: EdgeInsets.all(16.0),
+                  child: Center(
+                    child: SizedBox(
+                      width: 24,
+                      height: 24,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: Colors.deepPurple,
+                      ),
+                    ),
                   ),
-                ),
-                dense: true,
-                onTap: () {
-                  Navigator.push(context,
-                      MaterialPageRoute(builder: (context) => ChatHistory()));
-                },
-              )),
+                )
+              : _recentConversations.isEmpty
+                  ? Padding(
+                      padding: EdgeInsets.all(16.0),
+                      child: Text(
+                        'No recent chats',
+                        style: TextStyle(
+                          color: Colors.grey[500],
+                          fontSize: 14,
+                        ),
+                        textAlign: TextAlign.center,
+                      ),
+                    )
+                  : Column(
+                      children: [
+                        ..._recentConversations.take(5).map((conversation) => ListTile(
+                              contentPadding: EdgeInsets.only(left: 56, right: 24),
+                              title: Text(
+                                conversation.title,
+                                style: TextStyle(
+                                  color: isDark ? Colors.white70 : Colors.grey[800],
+                                  fontSize: 14,
+                                  fontWeight: _selectedConversationId == conversation.id
+                                      ? FontWeight.bold
+                                      : FontWeight.normal,
+                                ),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                              dense: true,
+                              selected: _selectedConversationId == conversation.id,
+                              selectedTileColor: Colors.deepPurple.withOpacity(0.1),
+                              onTap: () {
+                                _selectConversation(conversation.id);
+                              },
+                              trailing: IconButton(
+                                icon: Icon(
+                                  Icons.delete_outline,
+                                  size: 18,
+                                  color: isDark ? Colors.white60 : Colors.grey[600],
+                                ),
+                                onPressed: () => _deleteConversation(conversation.id),
+                              ),
+                            )),
+                        if (_recentConversations.length > 5)
+                          ListTile(
+                            contentPadding: EdgeInsets.only(left: 56, right: 24),
+                            title: Text(
+                              'View All Chats',
+                              style: TextStyle(
+                                color: Colors.deepPurple,
+                                fontSize: 14,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                            dense: true,
+                            onTap: () {
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (context) => ChatHistory(
+                                    onConversationSelected: (id) {
+                                      _selectConversation(id);
+                                    },
+                                  ),
+                                ),
+                              );
+                            },
+                            trailing: Icon(Icons.chevron_right, color: Colors.deepPurple),
+                          ),
+                      ],
+                    ),
       ],
     );
+  }
+  
+  void _createNewChat() async {
+    // Create a new conversation
+    final conversation = await _chatHistoryService.createConversation();
+    
+    // Select the new conversation
+    _selectConversation(conversation.id);
+  }
+  
+  void _selectConversation(String conversationId) {
+    try {
+      // Get the conversation from the service
+      final conversation = _chatHistoryService.getConversation(conversationId);
+      if (conversation == null) {
+        debugPrint('Error: Conversation not found with ID: $conversationId');
+        return;
+      }
+      
+      // Set the active conversation in the service
+      _chatHistoryService.setActiveConversation(conversationId);
+      
+      // Update the local selection state
+      setState(() {
+        _selectedConversationId = conversationId;
+      });
+      
+      // Call the callback if provided
+      if (widget.onConversationSelected != null) {
+        widget.onConversationSelected!(conversationId);
+      }
+      
+      // Close the drawer
+      Navigator.of(context).pop();
+    } catch (e) {
+      debugPrint('Error selecting conversation: $e');
+    }
+  }
+  
+  Future<void> _deleteConversation(String conversationId) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Delete Conversation'),
+        content: const Text('Are you sure you want to delete this conversation?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: TextButton.styleFrom(foregroundColor: Colors.red),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+    
+    if (confirmed == true) {
+      await _chatHistoryService.deleteConversation(conversationId);
+      
+      // If the deleted conversation was selected, clear the selection
+      if (_selectedConversationId == conversationId) {
+        setState(() {
+          _selectedConversationId = null;
+        });
+      }
+    }
   }
 
   @override

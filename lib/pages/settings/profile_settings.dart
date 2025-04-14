@@ -1,12 +1,15 @@
 import 'package:flutter/material.dart';
 import 'dart:io';
 import 'package:image_picker/image_picker.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
+// import 'package:supabase_flutter/supabase_flutter.dart';
 import '../auth/auth_page.dart';
 import '../auth/user_survey_page.dart';
-import '../../services/auth_service.dart';
+// import '../../services/auth_service.dart';
+import '../../services/local_db_service.dart';
 import 'dart:ui';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:path/path.dart' as path;
 
 extension StringExtension on String {
   String capitalize() {
@@ -34,9 +37,10 @@ class _ProfileSettingsPageState extends State<ProfileSettingsPage> {
   String? _heardFrom;
   bool _isLoading = false;
   final ImagePicker _picker = ImagePicker();
-  final _authService = AuthService();
-  final _supabase = Supabase.instance.client;
-  Map<String, dynamic>? _userData;
+  // final _authService = AuthService();
+  // final _supabase = Supabase.instance.client;
+  final _localDBService = LocalDBService();
+  User? _userData;
 
   @override
   void initState() {
@@ -50,34 +54,25 @@ class _ProfileSettingsPageState extends State<ProfileSettingsPage> {
     });
 
     try {
-      final currentUser = _authService.currentUser;
+      final currentUser = _localDBService.currentUser;
       
       if (currentUser != null) {
-        final userData = await _authService.getUserData();
-        
-        if (userData != null) {
-          setState(() {
-            _isLoggedIn = true;
-            _email = currentUser.email;
-            _username = userData['username'];
-            _profileImageUrl = userData['profile_image_url'];
-            _profession = userData['profession'];
-            _signupDate = userData['created_at'] != null 
-                ? DateTime.parse(userData['created_at']) 
-                : null;
-            _fullName = userData['full_name'];
-            _dateOfBirth = userData['date_of_birth'] != null 
-                ? DateTime.parse(userData['date_of_birth']) 
-                : null;
-            _heardFrom = userData['heard_from'];
-            _userData = userData;
-          });
-        } else {
-          setState(() {
-            _isLoggedIn = true;
-            _email = currentUser.email;
-          });
-        }
+        setState(() {
+          _isLoggedIn = true;
+          _email = currentUser.email;
+          _username = currentUser.username;
+          _profileImageUrl = currentUser.avatarUrl;
+          _profession = currentUser.profession;
+          _signupDate = currentUser.createdAt;
+          _fullName = currentUser.fullName;
+          _dateOfBirth = currentUser.dateOfBirth;
+          _userData = currentUser;
+          
+          // If avatar URL is a local file path, create File object
+          if (_profileImageUrl != null && _profileImageUrl!.isNotEmpty) {
+            _profileImageFile = File(_profileImageUrl!);
+          }
+        });
       } else {
         setState(() {
           _isLoggedIn = false;
@@ -103,29 +98,26 @@ class _ProfileSettingsPageState extends State<ProfileSettingsPage> {
       });
       
       try {
-        final userId = _authService.currentUser?.id;
-        if (userId != null) {
-          final bytes = await image.readAsBytes();
-          final fileName = 'profile_$userId.jpg';
+        final currentUser = _localDBService.currentUser;
+        if (currentUser != null) {
+          // Copy the selected image to app documents directory
+          final appDir = await getApplicationDocumentsDirectory();
+          final fileName = 'profile_${currentUser.id}_${DateTime.now().millisecondsSinceEpoch}.jpg';
+          final savedImagePath = path.join(appDir.path, fileName);
           
-          // Upload to Supabase Storage
-          await _supabase.storage
-              .from('profile_images')
-              .uploadBinary(fileName, bytes);
+          // Copy the image
+          final File imageFile = File(image.path);
+          await imageFile.copy(savedImagePath);
 
-          final imageUrl = _supabase.storage
-              .from('profile_images')
-              .getPublicUrl(fileName);
-
-          // Update profile in database
-          await _supabase
-              .from('profiles')
-              .update({'profile_image_url': imageUrl})
-              .eq('id', userId);
+          // Update user profile with new image path
+          await _localDBService.updateUserProfile(
+            userId: currentUser.id,
+            avatarUrl: savedImagePath,
+          );
 
           setState(() {
-            _profileImageFile = File(image.path);
-            _profileImageUrl = imageUrl;
+            _profileImageFile = File(savedImagePath);
+            _profileImageUrl = savedImagePath;
           });
           
           ScaffoldMessenger.of(context).showSnackBar(
@@ -153,7 +145,7 @@ class _ProfileSettingsPageState extends State<ProfileSettingsPage> {
     });
     
     try {
-      await _authService.signOut();
+      await _localDBService.logout();
       setState(() {
         _isLoggedIn = false;
         _email = null;
@@ -207,10 +199,8 @@ class _ProfileSettingsPageState extends State<ProfileSettingsPage> {
                         backgroundColor: Colors.grey[200],
                         backgroundImage: _profileImageFile != null
                             ? FileImage(_profileImageFile!)
-                            : (_profileImageUrl != null && _profileImageUrl!.isNotEmpty)
-                                ? NetworkImage(_profileImageUrl!) as ImageProvider
-                                : null,
-                        child: (_profileImageFile == null && (_profileImageUrl == null || _profileImageUrl!.isEmpty))
+                            : null,
+                        child: (_profileImageFile == null)
                             ? const Icon(Icons.person, size: 60, color: Colors.grey)
                             : null,
                       ),
@@ -235,14 +225,14 @@ class _ProfileSettingsPageState extends State<ProfileSettingsPage> {
                 ),
                 const SizedBox(height: 16),
                 Text(
-                  _userData?['username'] ?? 'Username',
+                  _username ?? 'Username',
                   style: const TextStyle(
                     fontSize: 24,
                     fontWeight: FontWeight.bold,
                   ),
                 ),
                 Text(
-                  _userData?['email'] ?? 'Email',
+                  _email ?? 'Email',
                   style: TextStyle(
                     fontSize: 16,
                     color: Colors.grey[600],
@@ -256,28 +246,28 @@ class _ProfileSettingsPageState extends State<ProfileSettingsPage> {
           const SizedBox(height: 16),
           _buildEditableField(
             label: 'Full Name',
-            value: _userData?['full_name'] ?? '',
-            onEdit: () => _editField('full_name', _userData?['full_name'] ?? ''),
+            value: _userData?.fullName ?? '',
+            onEdit: () => _editField('full_name', _userData?.fullName ?? ''),
           ),
           _buildEditableField(
             label: 'Username',
-            value: _userData?['username'] ?? '',
-            onEdit: () => _editField('username', _userData?['username'] ?? ''),
+            value: _userData?.username ?? '',
+            onEdit: () => _editField('username', _userData?.username ?? ''),
           ),
           _buildEditableField(
             label: 'Bio',
-            value: _userData?['bio'] ?? '',
-            onEdit: () => _editField('bio', _userData?['bio'] ?? ''),
+            value: _userData?.bio ?? '',
+            onEdit: () => _editField('bio', _userData?.bio ?? ''),
           ),
           _buildEditableField(
             label: 'Date of Birth',
-            value: _userData?['date_of_birth'] != null ? _formatDate(_userData?['date_of_birth']) : '',
+            value: _userData?.dateOfBirth != null ? _formatDate(_userData!.dateOfBirth!.toIso8601String()) : '',
             onEdit: () => _selectDate(context),
           ),
           _buildEditableField(
             label: 'Profession',
-            value: _userData?['profession'] ?? '',
-            onEdit: () => _editField('profession', _userData?['profession'] ?? ''),
+            value: _userData?.profession ?? '',
+            onEdit: () => _editField('profession', _userData?.profession ?? ''),
           ),
           const SizedBox(height: 32),
           _buildSectionTitle('Account Settings'),
@@ -285,7 +275,7 @@ class _ProfileSettingsPageState extends State<ProfileSettingsPage> {
           _buildSettingsItem(
             icon: Icons.email_outlined,
             title: 'Change Email',
-            onTap: () => _editField('email', _userData?['email'] ?? ''),
+            onTap: () => _editField('email', _userData?.email ?? ''),
           ),
           _buildSettingsItem(
             icon: Icons.lock_outline,
@@ -531,13 +521,42 @@ class _ProfileSettingsPageState extends State<ProfileSettingsPage> {
                   setState(() => _isLoading = true);
                   
                   try {
-                    await _supabase.from('profiles').update({
-                      field: controller.text,
-                    }).eq('id', _authService.currentUser!.id);
+                    // Update the profile
+                    if (field == 'username') {
+                      await _localDBService.updateUserProfile(
+                        userId: _localDBService.currentUser!.id,
+                        username: controller.text,
+                      );
+                    } else if (field == 'full_name') {
+                      await _localDBService.updateUserProfile(
+                        userId: _localDBService.currentUser!.id,
+                        fullName: controller.text,
+                      );
+                    } else if (field == 'profession') {
+                      await _localDBService.updateUserProfile(
+                        userId: _localDBService.currentUser!.id,
+                        profession: controller.text,
+                      );
+                    } else if (field == 'bio') {
+                      await _localDBService.updateUserProfile(
+                        userId: _localDBService.currentUser!.id,
+                        bio: controller.text,
+                      );
+                    }
                     
                     if (!mounted) return;
                     setState(() {
-                      _userData?[field] = controller.text;
+                      if (field == 'username') {
+                        _username = controller.text;
+                      } else if (field == 'full_name') {
+                        _fullName = controller.text;
+                      } else if (field == 'bio') {
+                        // No UI field to update
+                      } else if (field == 'profession') {
+                        _profession = controller.text;
+                      }
+                      // Reload user data to ensure all fields are updated
+                      _loadUserData();
                       _isLoading = false;
                     });
                     
@@ -595,18 +614,16 @@ class _ProfileSettingsPageState extends State<ProfileSettingsPage> {
       setState(() => _isLoading = true);
       
       try {
-        await _supabase.from('profiles').update({
-          'date_of_birth': picked.toIso8601String(),
-        }).eq('id', _authService.currentUser!.id);
+        await _localDBService.updateUserProfile(
+          userId: _localDBService.currentUser!.id,
+          dateOfBirth: picked,
+        );
         
         if (!mounted) return;
         setState(() {
           _dateOfBirth = picked;
-          _userData?['date_of_birth'] = picked.toIso8601String();
-          _isLoading = false;
         });
-        
-        if (!mounted) return;
+
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text('Date of birth updated successfully'),
@@ -614,14 +631,13 @@ class _ProfileSettingsPageState extends State<ProfileSettingsPage> {
           ),
         );
       } catch (e) {
-        setState(() => _isLoading = false);
-        if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Error updating date of birth: $e'),
-            backgroundColor: Colors.red,
-          ),
+          SnackBar(content: Text('Error updating date of birth: ${e.toString()}')),
         );
+      } finally {
+        setState(() {
+          _isLoading = false;
+        });
       }
     }
   }
@@ -706,27 +722,24 @@ class _ProfileSettingsPageState extends State<ProfileSettingsPage> {
                 setState(() => _isLoading = true);
                 
                 try {
-                  await _supabase.auth.updateUser(
-                    UserAttributes(
-                      password: newPasswordController.text,
-                    ),
+                  // Change password using the local DB service
+                  await _localDBService.changePassword(
+                    userId: _localDBService.currentUser!.id,
+                    currentPassword: currentPasswordController.text,
+                    newPassword: newPasswordController.text,
                   );
                   
-                  setState(() => _isLoading = false);
-                  
-                  if (!mounted) return;
+                  Navigator.of(context).pop();
                   ScaffoldMessenger.of(context).showSnackBar(
                     const SnackBar(
-                      content: Text('Password updated successfully'),
+                      content: Text('Password changed successfully'),
                       backgroundColor: Color(0xFF8B5CF6),
                     ),
                   );
                 } catch (e) {
-                  setState(() => _isLoading = false);
-                  if (!mounted) return;
                   ScaffoldMessenger.of(context).showSnackBar(
                     SnackBar(
-                      content: Text('Error updating password: $e'),
+                      content: Text('Error changing password: ${e.toString()}'),
                       backgroundColor: Colors.red,
                     ),
                   );
@@ -764,20 +777,23 @@ class _ProfileSettingsPageState extends State<ProfileSettingsPage> {
               setState(() => _isLoading = true);
               
               try {
-                await _supabase.from('profiles').delete().eq('id', _authService.currentUser!.id);
-                await _supabase.auth.signOut();
+                // Delete user account from local database
+                await _localDBService.deleteUser(_localDBService.currentUser!.id);
                 
                 setState(() {
                   _isLoggedIn = false;
-                  _isLoading = false;
+                  _email = null;
+                  _username = null;
+                  _profileImageFile = null;
+                  _profileImageUrl = null;
+                  _fullName = null;
+                  _dateOfBirth = null;
+                  _profession = null;
                 });
                 
-                if (!mounted) return;
+                Navigator.of(context).pop();
                 ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text('Account deleted successfully'),
-                    backgroundColor: Color(0xFF8B5CF6),
-                  ),
+                  const SnackBar(content: Text('Account deleted successfully')),
                 );
               } catch (e) {
                 setState(() => _isLoading = false);
@@ -802,8 +818,12 @@ class _ProfileSettingsPageState extends State<ProfileSettingsPage> {
   }
 
   String _formatDate(String date) {
-    final DateTime dateTime = DateTime.parse(date);
-    return '${dateTime.day}/${dateTime.month}/${dateTime.year}';
+    try {
+      final DateTime dateTime = DateTime.parse(date);
+      return '${dateTime.day}/${dateTime.month}/${dateTime.year}';
+    } catch (e) {
+      return 'Invalid date';
+    }
   }
 
   void _logout() {

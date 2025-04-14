@@ -1,135 +1,86 @@
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
+import 'local_db_service.dart';
+import '../component/models.dart';
 
 class AuthService {
-  final _supabase = Supabase.instance.client;
+  final LocalDBService _localDBService = LocalDBService();
   final _secureStorage = const FlutterSecureStorage();
 
-  User? get currentUser => _supabase.auth.currentUser;
+  User? get currentUser => _localDBService.currentUser;
   bool get isLoggedIn => currentUser != null;
 
-  // Improved email existence check using Supabase auth
+  // Check if an email exists in the local database
   Future<bool> checkEmailExists(String email) async {
     try {
-      // Use Supabase RPC to check if email exists in auth.users
-      final response = await _supabase.rpc('email_exists', params: {'email_param': email});
-      
-      // RPC should return a boolean indicating if the email exists
-      return response as bool;
+      final user = await _localDBService.getUserByEmail(email);
+      return user != null;
     } catch (e) {
       print('Error checking email: $e');
-      // Fallback: attempt to sign in with a dummy password to check existence
-      try {
-        await _supabase.auth.signInWithPassword(
-          email: email,
-          password: 'dummy-password-check', // This will fail if user exists
-        );
-        return false; // If this succeeds, it means the user doesn't exist yet
-      } on AuthException catch (authError) {
-        if (authError.message.contains('Invalid login credentials')) {
-          return true; // Email exists but password was wrong
-        }
-        return false; // Email doesn't exist
-      } catch (fallbackError) {
-        print('Fallback check failed: $fallbackError');
-        return false; // Default to false on error
-      }
+      return false;
     }
   }
 
-  // Note: You'll need to create this RPC function in Supabase SQL Editor
-  // Create this function in Supabase SQL Editor:
-  /*
-    create or replace function email_exists(email_param text)
-    returns boolean as $$
-    begin
-      return exists (
-        select 1
-        from auth.users
-        where email = email_param
-      );
-    end;
-    $$ language plpgsql security definer;
-  */
-
-  Future<AuthResponse> signUp({
+  Future<User> signUp({
     required String email,
     required String password,
-    Map<String, dynamic>? userData,
+    String? fullName,
+    String? username,
   }) async {
     try {
       final exists = await checkEmailExists(email);
       if (exists) {
-        throw AuthException('Email is already in use.');
+        throw Exception('Email is already in use.');
       }
       
-      final response = await _supabase.auth.signUp(
+      final user = await _localDBService.register(
         email: email,
         password: password,
-        data: userData,
+        fullName: fullName,
+        username: username,
       );
       
-      if (response.user == null) {
-        throw AuthException('Signup failed: User is null');
-      }
-      
-      try {
-        await _supabase.from('profiles').insert({
-          'id': response.user!.id,
-          'email': email,
-          'updated_at': DateTime.now().toIso8601String(),
-          'survey_completed': false,
-        });
-      } catch (e) {
-        print('Error creating profile: $e');
-      }
-      
-      await _storeSession(response.session);
-      return response;
+      await _storeSession(user.id);
+      return user;
     } catch (e) {
       print('Signup error: $e');
       rethrow;
     }
   }
 
-  Future<AuthResponse> signIn({
+  Future<User> signIn({
     required String email,
     required String password,
   }) async {
     try {
-      final response = await _supabase.auth.signInWithPassword(
+      final user = await _localDBService.login(
         email: email,
         password: password,
       );
-      await _storeSession(response.session);
-      return response;
+      await _storeSession(user.id);
+      return user;
     } catch (e) {
       rethrow;
     }
   }
 
   Future<void> signOut() async {
-    await _supabase.auth.signOut();
+    await _localDBService.logout();
     await _clearSession();
   }
 
-  Future<void> _storeSession(Session? session) async {
-    if (session != null) {
-      await _secureStorage.write(key: 'access_token', value: session.accessToken);
-      await _secureStorage.write(key: 'refresh_token', value: session.refreshToken);
-    }
+  Future<void> _storeSession(String userId) async {
+    await _secureStorage.write(key: 'user_id', value: userId);
   }
 
   Future<void> _clearSession() async {
-    await _secureStorage.delete(key: 'access_token');
-    await _secureStorage.delete(key: 'refresh_token');
+    await _secureStorage.delete(key: 'user_id');
   }
 
   Future<void> restoreSession() async {
-    final refreshToken = await _secureStorage.read(key: 'refresh_token');
-    if (refreshToken != null) {
+    final userId = await _secureStorage.read(key: 'user_id');
+    if (userId != null) {
       try {
-        await _supabase.auth.setSession(refreshToken);
+        await _localDBService.loginWithId(userId);
       } catch (e) {
         await _clearSession();
       }
@@ -137,18 +88,24 @@ class AuthService {
   }
 
   Future<void> resetPassword(String email) async {
-    await _supabase.auth.resetPasswordForEmail(email);
+    try {
+      // Generate a temporary password
+      const tempPassword = 'Reset123!';
+      await _localDBService.resetPassword(
+        email: email,
+        newPassword: tempPassword,
+      );
+      // In a real app, you would send this password via email
+    } catch (e) {
+      print('Error resetting password: $e');
+      rethrow;
+    }
   }
 
-  Future<Map<String, dynamic>?> getUserData() async {
+  Future<User?> getUserData() async {
     try {
       if (currentUser == null) return null;
-      final data = await _supabase
-          .from('profiles')
-          .select()
-          .eq('id', currentUser!.id)
-          .single();
-      return data;
+      return currentUser;
     } catch (e) {
       print('Error getting user data: $e');
       return null;
@@ -167,21 +124,15 @@ class AuthService {
     bool? surveyCompleted,
   }) async {
     try {
-      final Map<String, dynamic> updateData = {};
-      if (fullName != null) updateData['full_name'] = fullName;
-      if (username != null) updateData['username'] = username;
-      if (bio != null) updateData['bio'] = bio;
-      if (dateOfBirth != null) updateData['date_of_birth'] = dateOfBirth.toIso8601String();
-      if (profession != null) updateData['profession'] = profession;
-      if (heardFrom != null) updateData['heard_from'] = heardFrom;
-      if (avatarUrl != null) updateData['avatar_url'] = avatarUrl;
-      if (surveyCompleted != null) updateData['survey_completed'] = surveyCompleted;
-      updateData['updated_at'] = DateTime.now().toIso8601String();
-      
-      await _supabase
-          .from('profiles')
-          .update(updateData)
-          .eq('id', userId);
+      await _localDBService.updateUserProfile(
+        userId: userId,
+        fullName: fullName,
+        username: username,
+        bio: bio,
+        dateOfBirth: dateOfBirth,
+        profession: profession,
+        avatarUrl: avatarUrl,
+      );
     } catch (e) {
       print('Error updating profile: $e');
       rethrow;

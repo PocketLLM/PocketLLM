@@ -1,35 +1,54 @@
 import 'package:flutter/material.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
+// import 'package:supabase_flutter/supabase_flutter.dart'; // Remove Supabase import
 import 'component/splash_screen.dart';
 import 'component/home_screen.dart';
 import 'component/onboarding_screens/onboarding_screen.dart';
-import 'services/auth_service.dart';
+// import 'services/auth_service.dart'; // Remove old auth service
+import 'services/local_db_service.dart'; // Add local DB service
 import 'package:pocketllm/services/pocket_llm_service.dart';
 import 'services/model_state.dart';
+import 'services/error_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'dart:async';
 
 void main() async {
-  WidgetsFlutterBinding.ensureInitialized();
-  
-  // Initialize Supabase
-  await Supabase.initialize(
-    url: 'https://hlaazlztxxtdvtluxniq.supabase.co', // Replace with your Supabase URL
-    anonKey: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhsYWF6bHp0eHh0ZHZ0bHV4bmlxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDAzNzkzNTQsImV4cCI6MjA1NTk1NTM1NH0.gM33TZdqF9KpidYXOS8Z12XkNkFJHzpzUUKsR_rCcNg', // Replace with your Supabase anon key
-  );
-  
-  // Create an instance of AuthService to restore the session
-  final authService = AuthService();
-  await authService.restoreSession();
+  // Catch any errors that occur during app initialization
+  await runZonedGuarded(() async {
+    WidgetsFlutterBinding.ensureInitialized();
+    
+    try {
+      // Initialize LocalDBService
+      final localDBService = LocalDBService();
+      await localDBService.initialize();
 
-  await PocketLLMService.initializeApiKey(); // Initialize API key
-  final apiKey = await PocketLLMService.getApiKey();
-  debugPrint('PocketLLM API Key initialized: $apiKey'); // Add this for debugging
-  await ModelState().init(); // Initialize the model state
-
-  runApp(MyApp()); // test
+      // Initialize API key
+      await PocketLLMService.initializeApiKey();
+      
+      // Initialize model state
+      await ModelState().init();
+      
+      // Run the app
+      runApp(MyApp());
+    } catch (error, stackTrace) {
+      // Log the error
+      final errorService = ErrorService();
+      await errorService.logError('Initialization error: $error', stackTrace);
+      
+      // Still run the app, but with a fallback to show an error message if needed
+      runApp(MyApp(initializationError: error.toString()));
+    }
+  }, (error, stackTrace) async {
+    // This catches errors that were thrown asynchronously
+    final errorService = ErrorService();
+    await errorService.logError('Uncaught async error: $error', stackTrace);
+  });
 }
 
 class MyApp extends StatelessWidget {
+  final String? initializationError;
+  
+  const MyApp({this.initializationError, Key? key}) : super(key: key);
+
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
@@ -43,7 +62,57 @@ class MyApp extends StatelessWidget {
         ),
       ),
       debugShowCheckedModeBanner: false,
-      home: SplashLoader(),
+      home: initializationError != null
+          ? ErrorScreen(error: initializationError!)
+          : SplashLoader(),
+    );
+  }
+}
+
+// Simple error screen to show if app initialization fails
+class ErrorScreen extends StatelessWidget {
+  final String error;
+  
+  const ErrorScreen({required this.error, Key? key}) : super(key: key);
+  
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      body: Center(
+        child: Padding(
+          padding: const EdgeInsets.all(24.0),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Icon(Icons.error_outline, color: Colors.red, size: 64),
+              const SizedBox(height: 16),
+              const Text(
+                'Initialization Error',
+                style: TextStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'The app encountered an error during initialization. Please restart the app.',
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 16),
+              ElevatedButton(
+                onPressed: () {
+                  // Try to restart the app
+                  Navigator.pushReplacement(
+                    context,
+                    MaterialPageRoute(builder: (context) => SplashLoader()),
+                  );
+                },
+                child: const Text('Retry'),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }
@@ -61,18 +130,35 @@ class _SplashLoaderState extends State<SplashLoader> {
   }
 
   Future<void> _checkOnboardingStatus() async {
-    final prefs = await SharedPreferences.getInstance();
-    final bool showHome = prefs.getBool('showHome') ?? false;
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final bool showHome = prefs.getBool('showHome') ?? false;
+      final localDBService = LocalDBService();
 
-    await Future.delayed(const Duration(seconds: 3));
+      await Future.delayed(const Duration(seconds: 3));
 
-    if (!mounted) return;
+      if (!mounted) return;
 
-    Navigator.of(context).pushReplacement(
-      MaterialPageRoute(
-        builder: (context) => showHome ? const HomeScreen() : const OnboardingScreen(),
-      ),
-    );
+      // If the onboarding has been completed, go to home screen
+      // Otherwise, go to onboarding screen
+      Navigator.of(context).pushReplacement(
+        MaterialPageRoute(
+          builder: (context) => showHome ? const HomeScreen() : const OnboardingScreen(),
+        ),
+      );
+    } catch (e, stackTrace) {
+      // Log the error
+      await ErrorService().logError('Error checking onboarding status: $e', stackTrace);
+      
+      if (!mounted) return;
+      
+      // Show a fallback screen with an error message
+      Navigator.of(context).pushReplacement(
+        MaterialPageRoute(
+          builder: (context) => ErrorScreen(error: e.toString()),
+        ),
+      );
+    }
   }
 
   @override

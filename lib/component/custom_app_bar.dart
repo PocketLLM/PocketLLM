@@ -5,15 +5,18 @@ import '../pages/library_page.dart';
 import '../pages/settings_page.dart';
 import '../services/model_service.dart';
 import '../services/auth_service.dart';
+import '../component/models.dart';
 import '../pages/auth/auth_page.dart';
 
 class CustomAppBar extends StatefulWidget implements PreferredSizeWidget {
   final String appName;
   final VoidCallback onSettingsPressed;
+  final VoidCallback? onNewChatPressed;
 
   const CustomAppBar({
     required this.appName,
     required this.onSettingsPressed,
+    this.onNewChatPressed,
     Key? key,
   }) : super(key: key);
 
@@ -29,6 +32,7 @@ class _CustomAppBarState extends State<CustomAppBar> {
   String? _selectedModelId;
   bool _isLoading = false;
   final _authService = AuthService();
+  final _modelService = ModelService();
 
   @override
   void initState() {
@@ -42,8 +46,8 @@ class _CustomAppBarState extends State<CustomAppBar> {
     });
 
     try {
-      final configs = await ModelService.getFilteredModelConfigs();
-      final selectedId = await ModelService.getSelectedModel();
+      final configs = await _modelService.getFilteredModelConfigs();
+      final selectedId = await _modelService.getDefaultModelId();
 
       if (configs.isEmpty) {
         print('No configs returned from ModelService.getFilteredModelConfigs()');
@@ -68,13 +72,9 @@ class _CustomAppBarState extends State<CustomAppBar> {
 
   Future<void> _selectModel(String id) async {
     final selectedConfig = _modelConfigs.firstWhere((c) => c.id == id);
-    if (selectedConfig.provider == ModelProvider.pocketLLM && !_authService.isLoggedIn) {
-      _showSignInPrompt();
-      return;
-    }
-
+    
     try {
-      await ModelService.setSelectedModel(id);
+      await _modelService.setDefaultModel(id);
       setState(() {
         _selectedModelId = id;
       });
@@ -102,30 +102,6 @@ class _CustomAppBarState extends State<CustomAppBar> {
         ),
       );
     }
-  }
-
-  void _showSignInPrompt() {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: const Text('Sign in to use PocketLLM models'),
-        action: SnackBarAction(
-          label: 'Sign In',
-          onPressed: () {
-            Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (context) => AuthPage(
-                  onLoginSuccess: (email) {
-                    _loadModelConfigs();
-                    Navigator.pop(context);
-                  },
-                ),
-              ),
-            );
-          },
-        ),
-      ),
-    );
   }
 
   @override
@@ -196,8 +172,8 @@ class _CustomAppBarState extends State<CustomAppBar> {
               actions: [
                 IconButton(
                   icon: const Icon(Icons.add, color: Colors.black87),
-                  onPressed: () {
-                    print('New Chat pressed');
+                  onPressed: widget.onNewChatPressed ?? () {
+                    print('New Chat pressed but no callback provided');
                   },
                 ),
                 IconButton(
@@ -243,10 +219,10 @@ class _CustomAppBarState extends State<CustomAppBar> {
             filter: ImageFilter.blur(sigmaX: 5, sigmaY: 5), // Reduced blur for better visibility
             child: Container(
               decoration: BoxDecoration(
-                color: Colors.white.withOpacity(0.85), // Increased opacity for better visibility
+                color: Colors.white.withOpacity(0.95), // Increased opacity for better visibility
                 borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
                 border: Border.all(
-                  color: Colors.white.withOpacity(0.3),
+                  color: Colors.grey.withOpacity(0.3),
                   width: 1,
                 ),
               ),
@@ -260,7 +236,7 @@ class _CustomAppBarState extends State<CustomAppBar> {
                       width: 40,
                       height: 4,
                       decoration: BoxDecoration(
-                        color: Colors.white.withOpacity(0.5),
+                        color: Colors.grey.withOpacity(0.5),
                         borderRadius: BorderRadius.circular(2),
                       ),
                     ),
@@ -300,7 +276,7 @@ class _CustomAppBarState extends State<CustomAppBar> {
                             subtitle: Text(
                               model.provider.displayName,
                               style: TextStyle(
-                                color: Colors.white.withOpacity(0.6),
+                                color: Colors.black54, // Changed from white to dark for better visibility
                               ),
                             ),
                             trailing: isSelected
@@ -323,7 +299,7 @@ class _CustomAppBarState extends State<CustomAppBar> {
                       ),
                     ),
                     const Divider(
-                      color: Colors.white24,
+                      color: Colors.black12, // Updated divider color
                       height: 1,
                     ),
                     // Add New Model option
@@ -335,7 +311,7 @@ class _CustomAppBarState extends State<CustomAppBar> {
                       title: Text(
                         'Add New Model',
                         style: TextStyle(
-                          color: Colors.white.withOpacity(0.9),
+                          color: Colors.black87, // Changed from white to dark for better visibility
                         ),
                       ),
                       onTap: () {
@@ -357,40 +333,40 @@ class _CustomAppBarState extends State<CustomAppBar> {
   Widget _getProviderIcon(ModelProvider provider) {
     IconData iconData;
     Color iconColor;
-
+    
     switch (provider) {
       case ModelProvider.ollama:
         iconData = Icons.terminal;
-        iconColor = Colors.orange.shade400;
+        iconColor = Colors.green;
         break;
       case ModelProvider.openAI:
         iconData = Icons.auto_awesome;
-        iconColor = Colors.green.shade400;
+        iconColor = Colors.blue;
         break;
       case ModelProvider.anthropic:
         iconData = Icons.psychology;
-        iconColor = Colors.purple.shade400;
+        iconColor = Colors.purple;
         break;
       case ModelProvider.lmStudio:
         iconData = Icons.science;
-        iconColor = Colors.blue.shade400;
+        iconColor = Colors.orange;
         break;
       case ModelProvider.pocketLLM:
-        iconData = Icons.phone_android;
-        iconColor = Colors.indigo.shade400;
+        iconData = Icons.smart_toy;
+        iconColor = Color(0xFF8B5CF6);
         break;
       case ModelProvider.mistral:
         iconData = Icons.air;
-        iconColor = Colors.teal.shade400;
+        iconColor = Colors.teal;
         break;
       case ModelProvider.deepseek:
         iconData = Icons.search;
-        iconColor = Colors.deepPurple.shade400;
+        iconColor = Colors.amber;
         break;
     }
-
+    
     return Container(
-      padding: const EdgeInsets.all(8),
+      padding: EdgeInsets.all(8),
       decoration: BoxDecoration(
         color: iconColor.withOpacity(0.2), // Slightly more opaque for visibility
         borderRadius: BorderRadius.circular(12),

@@ -1,4 +1,7 @@
 import '../services/model_service.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
+import 'dart:convert';
 
 class AIModel {
   final String id;
@@ -11,6 +14,9 @@ class AIModel {
   final String? downloadUrl;
   final String? providerUrl;
   final List<String> tools;
+
+  // Add a getter for name that returns the id
+  String get name => id;
 
   AIModel({
     required this.id,
@@ -190,49 +196,211 @@ class Message {
   }
 }
 
+// Enum for model providers
+enum ModelProvider {
+  pocketLLM,
+  ollama,
+  openAI,
+  anthropic,
+  mistral,
+  deepseek,
+  lmStudio,
+}
+
+// Extension to get display name for providers
+extension ModelProviderExtension on ModelProvider {
+  String get displayName {
+    switch (this) {
+      case ModelProvider.pocketLLM:
+        return 'PocketLLM';
+      case ModelProvider.ollama:
+        return 'Ollama';
+      case ModelProvider.openAI:
+        return 'OpenAI Compatible';
+      case ModelProvider.anthropic:
+        return 'Anthropic';
+      case ModelProvider.mistral:
+        return 'Mistral AI';
+      case ModelProvider.deepseek:
+        return 'DeepSeek';
+      case ModelProvider.lmStudio:
+        return 'LM Studio';
+    }
+  }
+
+  String get defaultBaseUrl {
+    switch (this) {
+      case ModelProvider.pocketLLM:
+        return 'https://api.pocketllm.com';
+      case ModelProvider.ollama:
+        return 'http://localhost:11434';
+      case ModelProvider.openAI:
+        return 'https://api.openai.com/v1';
+      case ModelProvider.anthropic:
+        return 'https://api.anthropic.com';
+      case ModelProvider.mistral:
+        return 'https://api.mistral.ai/v1';
+      case ModelProvider.deepseek:
+        return 'https://api.deepseek.com/v1';
+      case ModelProvider.lmStudio:
+        return 'http://localhost:1234';
+    }
+  }
+
+  IconData get icon {
+    switch (this) {
+      case ModelProvider.pocketLLM:
+        return Icons.person;
+      case ModelProvider.ollama:
+        return Icons.computer;
+      case ModelProvider.openAI:
+        return Icons.open_in_new;
+      case ModelProvider.anthropic:
+        return Icons.psychology;
+      case ModelProvider.mistral:
+        return Icons.cloud;
+      case ModelProvider.deepseek:
+        return Icons.search;
+      case ModelProvider.lmStudio:
+        return Icons.settings;
+    }
+  }
+
+  Color get color {
+    switch (this) {
+      case ModelProvider.pocketLLM:
+        return Colors.purple;
+      case ModelProvider.ollama:
+        return Colors.blue;
+      case ModelProvider.openAI:
+        return Colors.green;
+      case ModelProvider.anthropic:
+        return Colors.orange;
+      case ModelProvider.mistral:
+        return Colors.indigo;
+      case ModelProvider.deepseek:
+        return Colors.teal;
+      case ModelProvider.lmStudio:
+        return Colors.grey;
+    }
+  }
+}
+
+// Model configuration class
 class ModelConfig {
   final String id;
   final String name;
   final ModelProvider provider;
-  final String baseUrl;
   final String? apiKey;
+  final String baseUrl;
+  final String model;
+  final double temperature;
+  final int maxTokens;
+  final double topP;
+  final double frequencyPenalty;
+  final double presencePenalty;
+  final List<String> stopSequences;
+  final String systemPrompt;
+  final DateTime createdAt;
+  final DateTime updatedAt;
   final Map<String, dynamic>? additionalParams;
-  
+
   ModelConfig({
     required this.id,
     required this.name,
     required this.provider,
-    required this.baseUrl,
     this.apiKey,
+    required this.baseUrl,
+    required this.model,
+    this.temperature = 0.7,
+    this.maxTokens = 2000,
+    this.topP = 1.0,
+    this.frequencyPenalty = 0.0,
+    this.presencePenalty = 0.0,
+    this.stopSequences = const [],
+    this.systemPrompt = 'You are a helpful AI assistant.',
+    required this.createdAt,
+    required this.updatedAt,
     this.additionalParams,
   });
-  
-  // Convert to JSON
+
   Map<String, dynamic> toJson() {
     return {
       'id': id,
       'name': name,
-      'provider': provider.toString().split('.').last,
-      'baseUrl': baseUrl,
+      'provider': provider.index,
       'apiKey': apiKey,
+      'baseUrl': baseUrl,
+      'model': model,
+      'temperature': temperature,
+      'maxTokens': maxTokens,
+      'topP': topP,
+      'frequencyPenalty': frequencyPenalty,
+      'presencePenalty': presencePenalty,
+      'stopSequences': stopSequences,
+      'systemPrompt': systemPrompt,
+      'createdAt': createdAt.toIso8601String(),
+      'updatedAt': updatedAt.toIso8601String(),
       'additionalParams': additionalParams,
     };
   }
-  
-  // Create from JSON
+
   factory ModelConfig.fromJson(Map<String, dynamic> json) {
     return ModelConfig(
       id: json['id'],
       name: json['name'],
-      provider: ModelProvider.values.firstWhere(
-        (e) => e.toString().split('.').last == json['provider'],
-        orElse: () => ModelProvider.ollama,
-      ),
-      baseUrl: json['baseUrl'],
+      provider: ModelProvider.values[json['provider']],
       apiKey: json['apiKey'],
-      additionalParams: json['additionalParams'] != null 
-          ? Map<String, dynamic>.from(json['additionalParams']) 
-          : null,
+      baseUrl: json['baseUrl'],
+      model: json['model'],
+      temperature: json['temperature'] ?? 0.7,
+      maxTokens: json['maxTokens'] ?? 2000,
+      topP: json['topP'] ?? 1.0,
+      frequencyPenalty: json['frequencyPenalty'] ?? 0.0,
+      presencePenalty: json['presencePenalty'] ?? 0.0,
+      stopSequences: List<String>.from(json['stopSequences'] ?? []),
+      systemPrompt: json['systemPrompt'] ?? 'You are a helpful AI assistant.',
+      createdAt: DateTime.parse(json['createdAt']),
+      updatedAt: DateTime.parse(json['updatedAt']),
+      additionalParams: json['additionalParams'],
+    );
+  }
+
+  ModelConfig copyWith({
+    String? id,
+    String? name,
+    ModelProvider? provider,
+    String? apiKey,
+    String? baseUrl,
+    String? model,
+    double? temperature,
+    int? maxTokens,
+    double? topP,
+    double? frequencyPenalty,
+    double? presencePenalty,
+    List<String>? stopSequences,
+    String? systemPrompt,
+    DateTime? createdAt,
+    DateTime? updatedAt,
+    Map<String, dynamic>? additionalParams,
+  }) {
+    return ModelConfig(
+      id: id ?? this.id,
+      name: name ?? this.name,
+      provider: provider ?? this.provider,
+      apiKey: apiKey ?? this.apiKey,
+      baseUrl: baseUrl ?? this.baseUrl,
+      model: model ?? this.model,
+      temperature: temperature ?? this.temperature,
+      maxTokens: maxTokens ?? this.maxTokens,
+      topP: topP ?? this.topP,
+      frequencyPenalty: frequencyPenalty ?? this.frequencyPenalty,
+      presencePenalty: presencePenalty ?? this.presencePenalty,
+      stopSequences: stopSequences ?? this.stopSequences,
+      systemPrompt: systemPrompt ?? this.systemPrompt,
+      createdAt: createdAt ?? this.createdAt,
+      updatedAt: updatedAt ?? this.updatedAt,
+      additionalParams: additionalParams ?? this.additionalParams,
     );
   }
 }
@@ -247,4 +415,110 @@ class Source {
     required this.url,
     required this.snippet,
   });
+}
+
+class Conversation {
+  final String id;
+  final String title;
+  final DateTime createdAt;
+  final DateTime updatedAt;
+  final List<Message> messages;
+  final String? modelId;
+  
+  Conversation({
+    required this.id,
+    required this.title,
+    required this.createdAt,
+    required this.updatedAt,
+    required this.messages,
+    this.modelId,
+  });
+  
+  // Create a copy of this conversation with updated properties
+  Conversation copyWith({
+    String? id,
+    String? title,
+    DateTime? createdAt,
+    DateTime? updatedAt,
+    List<Message>? messages,
+    String? modelId,
+  }) {
+    return Conversation(
+      id: id ?? this.id,
+      title: title ?? this.title,
+      createdAt: createdAt ?? this.createdAt,
+      updatedAt: updatedAt ?? this.updatedAt,
+      messages: messages ?? this.messages,
+      modelId: modelId ?? this.modelId,
+    );
+  }
+  
+  // Generate a title from the first user message content
+  static String generateTitle(List<Message> messages) {
+    final firstUserMessage = messages.firstWhere(
+      (msg) => msg.isUser,
+      orElse: () => Message(
+        content: 'New Chat',
+        isUser: true,
+        timestamp: DateTime.now(),
+      ),
+    );
+    
+    // Get the first 30 characters or the first line, whichever is shorter
+    String content = firstUserMessage.content.trim();
+    
+    if (content.contains('\n')) {
+      content = content.split('\n').first.trim();
+    }
+    
+    if (content.length > 30) {
+      content = content.substring(0, 27) + '...';
+    }
+    
+    return content.isEmpty ? 'New Chat' : content;
+  }
+  
+  // Add fromJson and toJson methods for serialization
+  Map<String, dynamic> toJson() {
+    return {
+      'id': id,
+      'title': title,
+      'createdAt': createdAt.toIso8601String(),
+      'updatedAt': updatedAt.toIso8601String(),
+      'messages': messages.map((m) => m.toJson()).toList(),
+      'modelId': modelId,
+    };
+  }
+  
+  factory Conversation.fromJson(Map<String, dynamic> json) {
+    return Conversation(
+      id: json['id'] ?? '',
+      title: json['title'] ?? 'New Chat',
+      createdAt: json['createdAt'] != null
+          ? DateTime.parse(json['createdAt'])
+          : DateTime.now(),
+      updatedAt: json['updatedAt'] != null
+          ? DateTime.parse(json['updatedAt'])
+          : DateTime.now(),
+      messages: json['messages'] != null
+          ? (json['messages'] as List)
+              .map((m) => Message.fromJson(m as Map<String, dynamic>))
+              .toList()
+          : <Message>[],
+      modelId: json['modelId'],
+    );
+  }
+  
+  // Create a new conversation with a generated ID
+  factory Conversation.create({String? title, String? modelId}) {
+    final now = DateTime.now();
+    return Conversation(
+      id: DateTime.now().millisecondsSinceEpoch.toString(),
+      title: title ?? 'New Chat',
+      createdAt: now,
+      updatedAt: now,
+      messages: [],
+      modelId: modelId,
+    );
+  }
 }

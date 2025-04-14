@@ -6,8 +6,9 @@ import 'model_settings_page.dart';
 import 'api_keys_page.dart';
 import '../services/model_service.dart';
 import '../services/auth_service.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
 import 'search_settings_page.dart';
+import '../services/local_db_service.dart';
+import '../component/models.dart';
 
 class SettingsPage extends StatefulWidget {
   const SettingsPage({Key? key}) : super(key: key);
@@ -18,6 +19,7 @@ class SettingsPage extends StatefulWidget {
 
 class _SettingsPageState extends State<SettingsPage> {
   final _authService = AuthService();
+  final ModelService _modelService = ModelService();
 
   @override
   Widget build(BuildContext context) {
@@ -48,12 +50,6 @@ class _SettingsPageState extends State<SettingsPage> {
             iconColor: Colors.blue,
             title: 'Profile Settings',
             subtitle: 'Manage your account and preferences',
-            onTap: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(builder: (context) => ProfileSettingsPage()),
-              );
-            },
           ),
           _buildSettingsItem(
             icon: Icons.notifications_outlined,
@@ -84,11 +80,11 @@ class _SettingsPageState extends State<SettingsPage> {
                 context: context,
                 builder: (context) => ModelConfigDialog(
                   onSave: (config) async {
-                    await ModelService.saveModelConfig(config);
+                    await _modelService.saveModel(config);
                     // If this is the first model, set it as selected
-                    final configs = await ModelService.getModelConfigs();
+                    final configs = await _modelService.getSavedModels();
                     if (configs.length == 1) {
-                      await ModelService.setSelectedModel(config.id);
+                      await _modelService.setDefaultModel(config.id);
                     }
                     setState(() {});
                     ScaffoldMessenger.of(context).showSnackBar(
