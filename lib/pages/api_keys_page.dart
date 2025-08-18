@@ -270,6 +270,10 @@ class _ApiKeysPageState extends State<ApiKeysPage> {
         iconData = Icons.search;
         iconColor = Colors.amber;
         break;
+      case ModelProvider.googleAI:
+        iconData = Icons.g_mobiledata;
+        iconColor = Color(0xFF4285F4);
+        break;
     }
     
     return Container(

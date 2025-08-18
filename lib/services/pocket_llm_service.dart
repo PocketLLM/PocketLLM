@@ -110,7 +110,7 @@ class PocketLLMService {
       final messages = [];
       
       // Add system prompt if provided
-      if (config.systemPrompt.isNotEmpty) {
+      if (config.systemPrompt?.isNotEmpty ?? false) {
         messages.add({'role': 'system', 'content': config.systemPrompt});
       }
       

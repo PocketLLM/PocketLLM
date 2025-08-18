@@ -6,6 +6,7 @@ import 'model_settings_page.dart';
 import 'api_keys_page.dart';
 import '../services/model_service.dart';
 import '../services/auth_service.dart';
+import '../services/theme_service.dart';
 import 'search_settings_page.dart';
 import '../services/local_db_service.dart';
 import '../component/models.dart';
@@ -23,19 +24,21 @@ class _SettingsPageState extends State<SettingsPage> {
 
   @override
   Widget build(BuildContext context) {
+    final colorScheme = ThemeService().colorScheme;
+    
     return Scaffold(
-      backgroundColor: Colors.grey[50],
+      backgroundColor: colorScheme.background,
       appBar: AppBar(
-        backgroundColor: Colors.grey[50],
+        backgroundColor: colorScheme.background,
         elevation: 0,
         leading: IconButton(
-          icon: Icon(Icons.arrow_back, color: Colors.black, size: 28),
+          icon: Icon(Icons.arrow_back, color: colorScheme.onBackground, size: 28),
           onPressed: () => Navigator.pop(context),
         ),
         title: Text(
           'Settings',
           style: TextStyle(
-            color: Colors.black,
+            color: colorScheme.onBackground,
             fontSize: 32,
             fontWeight: FontWeight.bold,
           ),
@@ -44,6 +47,16 @@ class _SettingsPageState extends State<SettingsPage> {
       body: ListView(
         padding: EdgeInsets.all(16),
         children: [
+          _buildSectionTitle('Appearance'),
+          _buildSettingsItem(
+            icon: Icons.palette_outlined,
+            iconColor: ThemeService().colorScheme.primary,
+            title: 'Theme Settings',
+            subtitle: 'Configure app appearance and dark mode',
+            onTap: () => _showThemeSettings(context),
+          ),
+          
+          SizedBox(height: 32),
           _buildSectionTitle('Account'),
           _buildSettingsItem(
             icon: Icons.person_outline,
@@ -183,6 +196,8 @@ class _SettingsPageState extends State<SettingsPage> {
   }
 
   Widget _buildSectionTitle(String title) {
+    final colorScheme = ThemeService().colorScheme;
+    
     return Padding(
       padding: EdgeInsets.only(bottom: 8),
       child: Text(
@@ -190,7 +205,7 @@ class _SettingsPageState extends State<SettingsPage> {
         style: TextStyle(
           fontSize: 28,
           fontWeight: FontWeight.bold,
-          color: Colors.black,
+          color: colorScheme.onBackground,
         ),
       ),
     );
@@ -205,8 +220,11 @@ class _SettingsPageState extends State<SettingsPage> {
     VoidCallback? onTap,
     VoidCallback? onAddPressed,
   }) {
+    final colorScheme = ThemeService().colorScheme;
+    
     // Check if this is one of the implemented features
     bool isImplemented = [
+      'Theme Settings',
       'Profile Settings',
       'Model Settings',
       'Search Configuration',
@@ -215,9 +233,10 @@ class _SettingsPageState extends State<SettingsPage> {
 
     return Card(
       elevation: 0,
+      color: colorScheme.cardBackground,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(16),
-        side: BorderSide(color: Colors.grey[200]!),
+        side: BorderSide(color: colorScheme.cardBorder),
       ),
       child: InkWell(
         onTap: isImplemented 
@@ -227,8 +246,15 @@ class _SettingsPageState extends State<SettingsPage> {
                 showDialog(
                   context: context,
                   builder: (context) => AlertDialog(
-                    title: Text('Coming Soon'),
-                    content: Text('This feature is currently under development and will be available in a future update.'),
+                    backgroundColor: ThemeService().colorScheme.surface,
+                    title: Text(
+                      'Coming Soon',
+                      style: TextStyle(color: ThemeService().colorScheme.onSurface),
+                    ),
+                    content: Text(
+                      'This feature is currently under development and will be available in a future update.',
+                      style: TextStyle(color: ThemeService().colorScheme.onSurface),
+                    ),
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(16),
                     ),
@@ -237,7 +263,7 @@ class _SettingsPageState extends State<SettingsPage> {
                         onPressed: () => Navigator.pop(context),
                         child: Text(
                           'OK',
-                          style: TextStyle(color: Color(0xFF8B5CF6)),
+                          style: TextStyle(color: ThemeService().colorScheme.primary),
                         ),
                       ),
                     ],
@@ -267,7 +293,7 @@ class _SettingsPageState extends State<SettingsPage> {
                       style: TextStyle(
                         fontSize: 18,
                         fontWeight: FontWeight.w600,
-                        color: Colors.black87,
+                        color: colorScheme.onSurface,
                       ),
                     ),
                     SizedBox(height: 4),
@@ -275,7 +301,7 @@ class _SettingsPageState extends State<SettingsPage> {
                       subtitle,
                       style: TextStyle(
                         fontSize: 14,
-                        color: Colors.grey[600],
+                        color: colorScheme.onSurface.withOpacity(0.7),
                       ),
                     ),
                   ],
@@ -285,14 +311,14 @@ class _SettingsPageState extends State<SettingsPage> {
                 Row(
                   children: [
                     IconButton(
-                      icon: Icon(Icons.add, color: Color(0xFF8B5CF6)),
+                      icon: Icon(Icons.add, color: ThemeService().colorScheme.primary),
                       onPressed: onAddPressed,
                     ),
-                    Icon(Icons.arrow_forward_ios, color: Colors.grey[400], size: 16),
+                    Icon(Icons.arrow_forward_ios, color: colorScheme.onSurface.withOpacity(0.4), size: 16),
                   ],
                 )
               else if (isImplemented)
-                Icon(Icons.arrow_forward_ios, color: Colors.grey[400], size: 16)
+                Icon(Icons.arrow_forward_ios, color: colorScheme.onSurface.withOpacity(0.4), size: 16)
               else
                 Container(
                   padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
@@ -316,6 +342,114 @@ class _SettingsPageState extends State<SettingsPage> {
     );
   }
 
+  void _showThemeSettings(BuildContext context) {
+    final themeService = ThemeService();
+    final colorScheme = themeService.colorScheme;
+    
+    showDialog(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setState) => AlertDialog(
+          backgroundColor: colorScheme.surface,
+          title: Text(
+            'Theme Settings',
+            style: TextStyle(color: ThemeService().colorScheme.onSurface),
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Theme Mode',
+                style: TextStyle(
+                  fontWeight: FontWeight.bold,
+                  color: ThemeService().colorScheme.onSurface,
+                ),
+              ),
+              const SizedBox(height: 8),
+              ...AppThemeMode.values.map((mode) => RadioListTile<AppThemeMode>(
+                title: Text(
+                  _getThemeModeLabel(mode),
+                  style: TextStyle(color: ThemeService().colorScheme.onSurface),
+                ),
+                value: mode,
+                groupValue: themeService.themeMode,
+                onChanged: (value) async {
+                  if (value != null) {
+                    await themeService.setThemeMode(value);
+                    setState(() {});
+                    // Update the parent widget
+                    this.setState(() {});
+                  }
+                },
+                activeColor: ThemeService().colorScheme.primary,
+              )),
+              const SizedBox(height: 16),
+              Text(
+                'Color Scheme',
+                style: TextStyle(
+                  fontWeight: FontWeight.bold,
+                  color: ThemeService().colorScheme.onSurface,
+                ),
+              ),
+              const SizedBox(height: 8),
+              ...ColorSchemeType.values.map((type) => RadioListTile<ColorSchemeType>(
+                title: Text(
+                  _getColorSchemeLabel(type),
+                  style: TextStyle(color: ThemeService().colorScheme.onSurface),
+                ),
+                value: type,
+                groupValue: themeService.colorSchemeType,
+                onChanged: (value) async {
+                  if (value != null) {
+                    await themeService.setColorSchemeType(value);
+                    setState(() {});
+                    // Update the parent widget
+                    this.setState(() {});
+                  }
+                },
+                activeColor: ThemeService().colorScheme.primary,
+              )),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: Text(
+                'Done',
+                style: TextStyle(color: ThemeService().colorScheme.primary),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+  
+  String _getThemeModeLabel(AppThemeMode mode) {
+    switch (mode) {
+      case AppThemeMode.light:
+        return 'Light';
+      case AppThemeMode.dark:
+        return 'Dark';
+      case AppThemeMode.system:
+        return 'System';
+      case AppThemeMode.highContrast:
+        return 'High Contrast';
+    }
+  }
+  
+  String _getColorSchemeLabel(ColorSchemeType type) {
+    switch (type) {
+      case ColorSchemeType.standard:
+        return 'Standard';
+      case ColorSchemeType.highContrast:
+        return 'High Contrast';
+      case ColorSchemeType.custom:
+        return 'Custom';
+    }
+  }
+
   Widget _buildLogoutButton() {
     return Container(
       margin: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
@@ -325,8 +459,15 @@ class _SettingsPageState extends State<SettingsPage> {
           final shouldLogout = await showDialog<bool>(
             context: context,
             builder: (context) => AlertDialog(
-              title: Text('Logout'),
-              content: Text('Are you sure you want to logout?'),
+              backgroundColor: ThemeService().colorScheme.surface,
+              title: Text(
+                'Logout',
+                style: TextStyle(color: ThemeService().colorScheme.onSurface),
+              ),
+              content: Text(
+                'Are you sure you want to logout?',
+                style: TextStyle(color: ThemeService().colorScheme.onSurface),
+              ),
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(16),
               ),
@@ -335,14 +476,14 @@ class _SettingsPageState extends State<SettingsPage> {
                   onPressed: () => Navigator.pop(context, false),
                   child: Text(
                     'Cancel',
-                    style: TextStyle(color: Colors.grey[700]),
+                    style: TextStyle(color: ThemeService().colorScheme.onSurface.withOpacity(0.7)),
                   ),
                 ),
                 TextButton(
                   onPressed: () => Navigator.pop(context, true),
                   child: Text(
                     'Logout',
-                    style: TextStyle(color: const Color(0xFF8B5CF6)),
+                    style: TextStyle(color: ThemeService().colorScheme.primary),
                   ),
                 ),
               ],
@@ -357,8 +498,8 @@ class _SettingsPageState extends State<SettingsPage> {
           }
         },
         style: ElevatedButton.styleFrom(
-          backgroundColor: const Color(0xFF8B5CF6),
-          foregroundColor: Colors.white,
+          backgroundColor: ThemeService().colorScheme.primary,
+          foregroundColor: ThemeService().colorScheme.onPrimary,
           padding: EdgeInsets.symmetric(vertical: 16),
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(12),
@@ -368,14 +509,14 @@ class _SettingsPageState extends State<SettingsPage> {
         child: Row(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(Icons.logout, color: Colors.white),
+            Icon(Icons.logout, color: ThemeService().colorScheme.onPrimary),
             SizedBox(width: 8),
             Text(
               'Logout',
               style: TextStyle(
                 fontSize: 16,
                 fontWeight: FontWeight.bold,
-                color: Colors.white,
+                color: ThemeService().colorScheme.onPrimary,
               ),
             ),
           ],

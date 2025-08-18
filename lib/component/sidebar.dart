@@ -81,19 +81,19 @@ class _SidebarState extends State<Sidebar> {
   }
 
   Widget _buildChatHistorySection() {
-    final isDark = ThemeService().isDarkMode;
+    final colorScheme = ThemeService().colorScheme;
     return Column(
       children: [
         ListTile(
           leading: Icon(
             Icons.chat_bubble_outline,
-            color: isDark ? Colors.white70 : Colors.grey[600],
+            color: colorScheme.onSurface.withOpacity(0.7),
             size: 22,
           ),
           title: Text(
             'Chat History',
             style: TextStyle(
-              color: isDark ? Colors.white70 : Colors.grey[800],
+              color: colorScheme.onSurface,
               fontSize: 15,
               fontWeight: FontWeight.w400,
             ),
@@ -105,7 +105,7 @@ class _SidebarState extends State<Sidebar> {
               IconButton(
                 icon: Icon(
                   Icons.add,
-                  color: isDark ? Colors.white70 : Colors.grey[600],
+                  color: colorScheme.onSurface.withOpacity(0.7),
                   size: 22,
                 ),
                 onPressed: _createNewChat,
@@ -113,7 +113,7 @@ class _SidebarState extends State<Sidebar> {
               ),
               Icon(
                 isHistoryExpanded ? Icons.expand_less : Icons.expand_more,
-                color: isDark ? Colors.white70 : Colors.grey[600],
+                color: colorScheme.onSurface.withOpacity(0.7),
               ),
             ],
           ),
@@ -135,7 +135,7 @@ class _SidebarState extends State<Sidebar> {
                       height: 24,
                       child: CircularProgressIndicator(
                         strokeWidth: 2,
-                        color: Colors.deepPurple,
+                        color: colorScheme.primary,
                       ),
                     ),
                   ),
@@ -146,7 +146,7 @@ class _SidebarState extends State<Sidebar> {
                       child: Text(
                         'No recent chats',
                         style: TextStyle(
-                          color: Colors.grey[500],
+                          color: colorScheme.onSurface.withOpacity(0.5),
                           fontSize: 14,
                         ),
                         textAlign: TextAlign.center,
@@ -159,7 +159,7 @@ class _SidebarState extends State<Sidebar> {
                               title: Text(
                                 conversation.title,
                                 style: TextStyle(
-                                  color: isDark ? Colors.white70 : Colors.grey[800],
+                                  color: colorScheme.onSurface,
                                   fontSize: 14,
                                   fontWeight: _selectedConversationId == conversation.id
                                       ? FontWeight.bold
@@ -170,7 +170,7 @@ class _SidebarState extends State<Sidebar> {
                               ),
                               dense: true,
                               selected: _selectedConversationId == conversation.id,
-                              selectedTileColor: Colors.deepPurple.withOpacity(0.1),
+                              selectedTileColor: colorScheme.primary.withOpacity(0.1),
                               onTap: () {
                                 _selectConversation(conversation.id);
                               },
@@ -178,7 +178,7 @@ class _SidebarState extends State<Sidebar> {
                                 icon: Icon(
                                   Icons.delete_outline,
                                   size: 18,
-                                  color: isDark ? Colors.white60 : Colors.grey[600],
+                                  color: colorScheme.onSurface.withOpacity(0.6),
                                 ),
                                 onPressed: () => _deleteConversation(conversation.id),
                               ),
@@ -189,7 +189,7 @@ class _SidebarState extends State<Sidebar> {
                             title: Text(
                               'View All Chats',
                               style: TextStyle(
-                                color: Colors.deepPurple,
+                                color: colorScheme.primary,
                                 fontSize: 14,
                                 fontWeight: FontWeight.w500,
                               ),
@@ -207,7 +207,7 @@ class _SidebarState extends State<Sidebar> {
                                 ),
                               );
                             },
-                            trailing: Icon(Icons.chevron_right, color: Colors.deepPurple),
+                            trailing: Icon(Icons.chevron_right, color: colorScheme.primary),
                           ),
                       ],
                     ),
@@ -232,10 +232,7 @@ class _SidebarState extends State<Sidebar> {
         return;
       }
       
-      // Set the active conversation in the service
-      _chatHistoryService.setActiveConversation(conversationId);
-      
-      // Update the local selection state
+      // Update the local selection state first
       setState(() {
         _selectedConversationId = conversationId;
       });
@@ -243,10 +240,20 @@ class _SidebarState extends State<Sidebar> {
       // Call the callback if provided
       if (widget.onConversationSelected != null) {
         widget.onConversationSelected!(conversationId);
+      } else {
+        // If no callback, set the active conversation directly
+        _chatHistoryService.setActiveConversation(conversationId);
       }
       
-      // Close the drawer
-      Navigator.of(context).pop();
+      // Only pop the navigator if the context is still mounted and drawer is open
+      if (Navigator.canPop(context)) {
+        // Use a short delay to allow the state to update before closing the drawer
+        Future.delayed(Duration(milliseconds: 50), () {
+          if (context.mounted && Navigator.canPop(context)) {
+            Navigator.of(context).pop();
+          }
+        });
+      }
     } catch (e) {
       debugPrint('Error selecting conversation: $e');
     }
@@ -290,9 +297,9 @@ class _SidebarState extends State<Sidebar> {
     return AnimatedBuilder(
       animation: ThemeService(),  // ThemeService extends ChangeNotifier so it works here
       builder: (context, _) {
-        final isDark = ThemeService().isDarkMode;
+        final colorScheme = ThemeService().colorScheme;
         return Drawer(
-          backgroundColor: isDark ? Colors.grey[900] : Colors.white,
+          backgroundColor: colorScheme.surface,
           child: Column(
             children: [
               Expanded(
@@ -306,7 +313,7 @@ class _SidebarState extends State<Sidebar> {
                         style: TextStyle(
                           fontSize: 24,
                           fontWeight: FontWeight.w500,
-                          color: Color(0xFF6B4EFF),
+                          color: colorScheme.primary,
                         ),
                       ),
                     ),
@@ -314,17 +321,18 @@ class _SidebarState extends State<Sidebar> {
                       padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                       child: Container(
                         decoration: BoxDecoration(
-                          border: Border.all(color: Colors.blue.shade100),
+                          border: Border.all(color: colorScheme.inputBorder),
                           borderRadius: BorderRadius.circular(20),
                         ),
                         child: TextField(
                           decoration: InputDecoration(
                             hintText: 'Search...',
-                            prefixIcon: Icon(Icons.search, color: isDark ? Colors.grey[400] : Colors.grey),
+                            hintStyle: TextStyle(color: colorScheme.hint),
+                            prefixIcon: Icon(Icons.search, color: colorScheme.onSurface.withOpacity(0.6)),
                             border: InputBorder.none,
                             contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                           ),
-                          style: TextStyle(color: isDark ? Colors.white : Colors.black),
+                          style: TextStyle(color: colorScheme.inputText),
                         ),
                       ),
                     ),
@@ -354,18 +362,19 @@ class _SidebarState extends State<Sidebar> {
                   margin: EdgeInsets.symmetric(horizontal: 16),
                   decoration: BoxDecoration(
                     borderRadius: BorderRadius.circular(8),
-                    color: isDark ? Colors.grey[800] : Colors.grey[100],
+                    color: colorScheme.cardBackground,
+                    border: Border.all(color: colorScheme.cardBorder),
                   ),
                   child: ListTile(
                     leading: Icon(
-                      isDark ? Icons.light_mode : Icons.dark_mode_outlined,
-                      color: isDark ? Colors.white : Colors.grey[700],
+                      ThemeService().isDarkMode ? Icons.light_mode : Icons.dark_mode_outlined,
+                      color: colorScheme.onSurface,
                       size: 20,
                     ),
                     title: Text(
                       'Dark Mode',
                       style: TextStyle(
-                        color: isDark ? Colors.white : Colors.grey[700],
+                        color: colorScheme.onSurface,
                         fontSize: 14,
                         fontWeight: FontWeight.w500,
                       ),
@@ -390,17 +399,17 @@ class _SidebarState extends State<Sidebar> {
   }
 
   Widget _buildMenuItem(IconData icon, String title, {VoidCallback? onTap}) {
-    final isDark = ThemeService().isDarkMode;
+    final colorScheme = ThemeService().colorScheme;
     return ListTile(
       leading: Icon(
         icon,
-        color: isDark ? Colors.white70 : Colors.grey[600],
+        color: colorScheme.onSurface.withOpacity(0.7),
         size: 22,
       ),
       title: Text(
         title,
         style: TextStyle(
-          color: isDark ? Colors.white70 : Colors.grey[800],
+          color: colorScheme.onSurface,
           fontSize: 15,
           fontWeight: FontWeight.w400,
         ),

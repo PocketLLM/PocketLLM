@@ -60,6 +60,8 @@ dependencies:
   webview_flutter: ^4.4.2
   fl_chart: ^0.65.0
   cached_network_image: ^3.3.0
+  connectivity_plus: ^6.0.5
+  crypto: ^3.0.3
 
 dev_dependencies:
   flutter_test:

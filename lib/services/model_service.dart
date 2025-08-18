@@ -7,9 +7,14 @@ import 'pocket_llm_service.dart';
 import 'auth_service.dart';
 import '../component/models.dart';
 import 'package:flutter/foundation.dart';
+import 'package:uuid/uuid.dart';
 
 // Service to manage model configurations
 class ModelService {
+  static final ModelService _instance = ModelService._internal();
+  factory ModelService() => _instance;
+  ModelService._internal();
+
   static const String _modelsKey = 'saved_models';
   static const String _defaultModelKey = 'default_model';
   
@@ -21,40 +26,69 @@ class ModelService {
   // Get all saved model configurations
   Future<List<ModelConfig>> getSavedModels() async {
     final prefs = await SharedPreferences.getInstance();
-    final modelsJson = prefs.getStringList(_modelsKey) ?? [];
-    return modelsJson.map((json) => ModelConfig.fromJson(jsonDecode(json))).toList();
+    final savedModelsJson = prefs.getStringList(_modelsKey) ?? [];
+    
+    List<ModelConfig> models = [];
+    for (String modelJson in savedModelsJson) {
+      try {
+        final Map<String, dynamic> modelMap = json.decode(modelJson);
+        models.add(ModelConfig.fromJson(modelMap));
+      } catch (e) {
+        debugPrint('Error parsing model: $e');
+      }
+    }
+    
+    return models;
   }
   
   // Save a new model configuration
   Future<void> saveModel(ModelConfig model) async {
     final prefs = await SharedPreferences.getInstance();
-    final models = await getSavedModels();
+    List<ModelConfig> models = await getSavedModels();
     
-    // Update existing model or add new one
-    final index = models.indexWhere((m) => m.id == model.id);
-    if (index != -1) {
-      models[index] = model;
-    } else {
+    // Check if model already exists and update it
+    bool modelExists = false;
+    for (int i = 0; i < models.length; i++) {
+      if (models[i].id == model.id) {
+        model = model.copyWith(updatedAt: DateTime.now());
+        models[i] = model;
+        modelExists = true;
+        break;
+      }
+    }
+    
+    // If model doesn't exist, add it as new
+    if (!modelExists) {
+      model = model.copyWith(
+        id: const Uuid().v4(),
+        createdAt: DateTime.now(),
+        updatedAt: DateTime.now(),
+      );
       models.add(model);
     }
-
-    final modelsJson = models.map((m) => jsonEncode(m.toJson())).toList();
-    await prefs.setStringList(_modelsKey, modelsJson);
+    
+    // Save models to preferences
+    final modelJsonList = models.map((m) => json.encode(m.toJson())).toList();
+    await prefs.setStringList(_modelsKey, modelJsonList);
+    
+    // If this is the first model, set it as default
+    await _setDefaultIfFirstModel(model.id);
   }
   
   // Delete a model configuration
   Future<void> deleteModel(String modelId) async {
     final prefs = await SharedPreferences.getInstance();
-    final models = await getSavedModels();
+    List<ModelConfig> models = await getSavedModels();
+    
     models.removeWhere((m) => m.id == modelId);
     
-    final modelsJson = models.map((m) => jsonEncode(m.toJson())).toList();
-    await prefs.setStringList(_modelsKey, modelsJson);
+    final modelJsonList = models.map((m) => json.encode(m.toJson())).toList();
+    await prefs.setStringList(_modelsKey, modelJsonList);
     
-    // If deleted model was default, clear default model
-    final defaultModelId = await getDefaultModelId();
-    if (defaultModelId == modelId) {
-      await prefs.remove(_defaultModelKey);
+    // If default model is deleted, set new default
+    final defaultId = await getDefaultModel();
+    if (defaultId == modelId && models.isNotEmpty) {
+      await setDefaultModel(models.first.id);
     }
   }
   
@@ -65,22 +99,31 @@ class ModelService {
   }
   
   // Get the selected model
-  Future<String?> getDefaultModelId() async {
+  Future<String?> getDefaultModel() async {
     final prefs = await SharedPreferences.getInstance();
     return prefs.getString(_defaultModelKey);
   }
   
+  // Add alias method for getDefaultModel
+  Future<String?> getDefaultModelId() async {
+    return getDefaultModel();
+  }
+  
   // Get the selected model
-  Future<ModelConfig?> getDefaultModel() async {
-    final defaultId = await getDefaultModelId();
+  Future<ModelConfig?> getDefaultModelConfig() async {
+    final defaultId = await getDefaultModel();
     if (defaultId == null) return null;
     
     final models = await getSavedModels();
+    if (models.isEmpty) return null;
+    
     try {
-      return models.firstWhere((m) => m.id == defaultId);
+      return models.firstWhere(
+        (model) => model.id == defaultId,
+        orElse: () => models.first,
+      );
     } catch (e) {
-      // If no model is found, return null
-      return null;
+      return models.first;
     }
   }
   
@@ -204,6 +247,16 @@ class ModelService {
             },
           );
           return response.statusCode == 200;
+          
+        case ModelProvider.googleAI:
+          final response = await http.get(
+            Uri.parse('${config.baseUrl}/v1beta/models'),
+            headers: {
+              'Authorization': 'Bearer ${config.apiKey}',
+              'Content-Type': 'application/json',
+            },
+          );
+          return response.statusCode == 200;
       }
     } catch (e) {
       debugPrint('Connection test failed: $e');
@@ -225,7 +278,7 @@ class ModelService {
       await saveModel(pocketLLMConfig);
       
       // Set as default if no default exists
-      final defaultId = await getDefaultModelId();
+      final defaultId = await getDefaultModel();
       if (defaultId == null) {
         await setDefaultModel(pocketLLMConfig.id);
       }
@@ -240,6 +293,10 @@ class ModelService {
 
   // Get default base URL for provider
   String getDefaultBaseUrl(ModelProvider provider) {
+    // For PocketLLM, use a placeholder value instead of actual URL
+    if (provider == ModelProvider.pocketLLM) {
+      return "[SECURED API ENDPOINT]"; // Use a placeholder instead of actual URL
+    }
     return provider.defaultBaseUrl;
   }
 
@@ -260,12 +317,21 @@ class ModelService {
   }
 
   Future<ModelConfig> createDefaultModel(ModelProvider provider) async {
+    String baseUrl = provider.defaultBaseUrl;
+    
+    // For PocketLLM, use a placeholder value instead of actual URL
+    if (provider == ModelProvider.pocketLLM) {
+      baseUrl = "[SECURED API ENDPOINT]"; // Use a placeholder instead of actual URL
+    }
+    
+    String defaultModelName = provider == ModelProvider.googleAI ? "gemini-1.5-pro" : "default";
+    
     final model = ModelConfig(
       id: DateTime.now().millisecondsSinceEpoch.toString(),
       name: '${provider.displayName} Default',
       provider: provider,
-      baseUrl: provider.defaultBaseUrl,
-      model: 'default',
+      baseUrl: baseUrl,
+      model: defaultModelName,
       createdAt: DateTime.now(),
       updatedAt: DateTime.now(),
     );
@@ -273,5 +339,24 @@ class ModelService {
     await saveModel(model);
     await setDefaultModel(model.id);
     return model;
+  }
+
+  // Private helper method to set default model if it's the first one
+  Future<void> _setDefaultIfFirstModel(String modelId) async {
+    final models = await getSavedModels();
+    final defaultId = await getDefaultModel();
+    
+    if (models.length == 1 || defaultId == null) {
+      await setDefaultModel(modelId);
+    }
+  }
+
+  Future<ModelConfig?> getModelById(String modelId) async {
+    final models = await getSavedModels();
+    try {
+      return models.firstWhere((model) => model.id == modelId);
+    } catch (e) {
+      return null;
+    }
   }
 }

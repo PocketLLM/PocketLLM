@@ -205,6 +205,7 @@ enum ModelProvider {
   mistral,
   deepseek,
   lmStudio,
+  googleAI,
 }
 
 // Extension to get display name for providers
@@ -216,7 +217,7 @@ extension ModelProviderExtension on ModelProvider {
       case ModelProvider.ollama:
         return 'Ollama';
       case ModelProvider.openAI:
-        return 'OpenAI Compatible';
+        return 'OpenAI';
       case ModelProvider.anthropic:
         return 'Anthropic';
       case ModelProvider.mistral:
@@ -225,6 +226,8 @@ extension ModelProviderExtension on ModelProvider {
         return 'DeepSeek';
       case ModelProvider.lmStudio:
         return 'LM Studio';
+      case ModelProvider.googleAI:
+        return 'Google AI';
     }
   }
 
@@ -244,6 +247,8 @@ extension ModelProviderExtension on ModelProvider {
         return 'https://api.deepseek.com/v1';
       case ModelProvider.lmStudio:
         return 'http://localhost:1234';
+      case ModelProvider.googleAI:
+        return 'https://generativelanguage.googleapis.com';
     }
   }
 
@@ -254,7 +259,7 @@ extension ModelProviderExtension on ModelProvider {
       case ModelProvider.ollama:
         return Icons.computer;
       case ModelProvider.openAI:
-        return Icons.open_in_new;
+        return Icons.auto_awesome;
       case ModelProvider.anthropic:
         return Icons.psychology;
       case ModelProvider.mistral:
@@ -263,6 +268,8 @@ extension ModelProviderExtension on ModelProvider {
         return Icons.search;
       case ModelProvider.lmStudio:
         return Icons.settings;
+      case ModelProvider.googleAI:
+        return Icons.g_mobiledata;
     }
   }
 
@@ -273,55 +280,55 @@ extension ModelProviderExtension on ModelProvider {
       case ModelProvider.ollama:
         return Colors.blue;
       case ModelProvider.openAI:
-        return Colors.green;
+        return Color(0xFF10A37F);
       case ModelProvider.anthropic:
-        return Colors.orange;
+        return Color(0xFFB4306A);
       case ModelProvider.mistral:
         return Colors.indigo;
       case ModelProvider.deepseek:
         return Colors.teal;
       case ModelProvider.lmStudio:
         return Colors.grey;
+      case ModelProvider.googleAI:
+        return Color(0xFF4285F4);
     }
   }
 }
 
 // Model configuration class
 class ModelConfig {
-  final String id;
-  final String name;
-  final ModelProvider provider;
-  final String? apiKey;
-  final String baseUrl;
-  final String model;
-  final double temperature;
-  final int maxTokens;
-  final double topP;
-  final double frequencyPenalty;
-  final double presencePenalty;
-  final List<String> stopSequences;
-  final String systemPrompt;
-  final DateTime createdAt;
-  final DateTime updatedAt;
-  final Map<String, dynamic>? additionalParams;
+  String id;
+  String name;
+  ModelProvider provider;
+  String baseUrl;
+  String? apiKey;
+  String model;
+  String? systemPrompt;
+  double temperature;
+  int? maxTokens;
+  double? topP;
+  double? frequencyPenalty;
+  double? presencePenalty;
+  Map<String, dynamic>? additionalParams;
+  DateTime createdAt;
+  DateTime updatedAt;
 
   ModelConfig({
     required this.id,
     required this.name,
     required this.provider,
-    this.apiKey,
     required this.baseUrl,
+    this.apiKey,
     required this.model,
+    this.systemPrompt,
     this.temperature = 0.7,
-    this.maxTokens = 2000,
+    this.maxTokens = 2048,
     this.topP = 1.0,
     this.frequencyPenalty = 0.0,
     this.presencePenalty = 0.0,
-    this.stopSequences = const [],
-    this.systemPrompt = 'You are a helpful AI assistant.',
+    this.additionalParams,
     required this.createdAt,
     required this.updatedAt,
-    this.additionalParams,
   });
 
   Map<String, dynamic> toJson() {
@@ -329,19 +336,18 @@ class ModelConfig {
       'id': id,
       'name': name,
       'provider': provider.index,
-      'apiKey': apiKey,
       'baseUrl': baseUrl,
+      'apiKey': apiKey,
       'model': model,
+      'systemPrompt': systemPrompt,
       'temperature': temperature,
       'maxTokens': maxTokens,
       'topP': topP,
       'frequencyPenalty': frequencyPenalty,
       'presencePenalty': presencePenalty,
-      'stopSequences': stopSequences,
-      'systemPrompt': systemPrompt,
-      'createdAt': createdAt.toIso8601String(),
-      'updatedAt': updatedAt.toIso8601String(),
       'additionalParams': additionalParams,
+      'createdAt': createdAt.millisecondsSinceEpoch,
+      'updatedAt': updatedAt.millisecondsSinceEpoch,
     };
   }
 
@@ -350,19 +356,18 @@ class ModelConfig {
       id: json['id'],
       name: json['name'],
       provider: ModelProvider.values[json['provider']],
-      apiKey: json['apiKey'],
       baseUrl: json['baseUrl'],
+      apiKey: json['apiKey'],
       model: json['model'],
+      systemPrompt: json['systemPrompt'],
       temperature: json['temperature'] ?? 0.7,
-      maxTokens: json['maxTokens'] ?? 2000,
+      maxTokens: json['maxTokens'] ?? 2048,
       topP: json['topP'] ?? 1.0,
       frequencyPenalty: json['frequencyPenalty'] ?? 0.0,
       presencePenalty: json['presencePenalty'] ?? 0.0,
-      stopSequences: List<String>.from(json['stopSequences'] ?? []),
-      systemPrompt: json['systemPrompt'] ?? 'You are a helpful AI assistant.',
-      createdAt: DateTime.parse(json['createdAt']),
-      updatedAt: DateTime.parse(json['updatedAt']),
       additionalParams: json['additionalParams'],
+      createdAt: DateTime.fromMillisecondsSinceEpoch(json['createdAt']),
+      updatedAt: DateTime.fromMillisecondsSinceEpoch(json['updatedAt']),
     );
   }
 
@@ -370,37 +375,35 @@ class ModelConfig {
     String? id,
     String? name,
     ModelProvider? provider,
-    String? apiKey,
     String? baseUrl,
+    String? apiKey,
     String? model,
+    String? systemPrompt,
     double? temperature,
     int? maxTokens,
     double? topP,
     double? frequencyPenalty,
     double? presencePenalty,
-    List<String>? stopSequences,
-    String? systemPrompt,
+    Map<String, dynamic>? additionalParams,
     DateTime? createdAt,
     DateTime? updatedAt,
-    Map<String, dynamic>? additionalParams,
   }) {
     return ModelConfig(
       id: id ?? this.id,
       name: name ?? this.name,
       provider: provider ?? this.provider,
-      apiKey: apiKey ?? this.apiKey,
       baseUrl: baseUrl ?? this.baseUrl,
+      apiKey: apiKey ?? this.apiKey,
       model: model ?? this.model,
+      systemPrompt: systemPrompt ?? this.systemPrompt,
       temperature: temperature ?? this.temperature,
       maxTokens: maxTokens ?? this.maxTokens,
       topP: topP ?? this.topP,
       frequencyPenalty: frequencyPenalty ?? this.frequencyPenalty,
       presencePenalty: presencePenalty ?? this.presencePenalty,
-      stopSequences: stopSequences ?? this.stopSequences,
-      systemPrompt: systemPrompt ?? this.systemPrompt,
+      additionalParams: additionalParams ?? this.additionalParams,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
-      additionalParams: additionalParams ?? this.additionalParams,
     );
   }
 }

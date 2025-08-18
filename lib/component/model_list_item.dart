@@ -147,6 +147,10 @@ class ModelListItem extends StatelessWidget {
         iconData = Icons.search;
         iconColor = Colors.teal;
         break;
+      case ModelProvider.googleAI:
+        iconData = Icons.g_mobiledata;
+        iconColor = Color(0xFF4285F4);
+        break;
     }
 
     return Container(

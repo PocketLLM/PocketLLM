@@ -79,7 +79,6 @@ class _ModelSettingsPageState extends State<ModelSettingsPage> {
           topP: 1.0,
           frequencyPenalty: 0.0,
           presencePenalty: 0.0,
-          stopSequences: [],
           systemPrompt: 'You are a helpful AI assistant.',
           createdAt: DateTime.now(),
           updatedAt: DateTime.now(),

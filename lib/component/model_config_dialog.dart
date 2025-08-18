@@ -29,6 +29,10 @@ class _ModelConfigDialogState extends State<ModelConfigDialog> {
   late TextEditingController _systemPromptController;
   late TextEditingController _temperatureController;
   late TextEditingController _apiUrlController;
+  late TextEditingController _maxTokensController;
+  late TextEditingController _topPController;
+  late TextEditingController _frequencyPenaltyController;
+  late TextEditingController _presencePenaltyController;
   
   ModelProvider _selectedProvider = ModelProvider.ollama;
   bool _isLoading = false;
@@ -38,6 +42,8 @@ class _ModelConfigDialogState extends State<ModelConfigDialog> {
   bool _isLoadingModels = false;
   bool _isFetchingApiModels = false;
   List<String> _apiModels = [];
+  bool _isSaving = false;
+  bool _isTesting = false;
 
   @override
   void initState() {
@@ -46,13 +52,17 @@ class _ModelConfigDialogState extends State<ModelConfigDialog> {
     // Initialize with existing config if provided
     if (widget.existingConfig != null) {
       _nameController = TextEditingController(text: widget.existingConfig!.name);
-      _modelIdController = TextEditingController(text: widget.existingConfig!.id);
+      _modelIdController = TextEditingController(text: widget.existingConfig!.model);
       _baseUrlController = TextEditingController(text: widget.existingConfig!.baseUrl);
       _apiKeyController = TextEditingController(text: widget.existingConfig!.apiKey ?? '');
       
       // Initialize additional parameters
-      _systemPromptController = TextEditingController(text: widget.existingConfig!.systemPrompt);
+      _systemPromptController = TextEditingController(text: widget.existingConfig!.systemPrompt ?? '');
       _temperatureController = TextEditingController(text: widget.existingConfig!.temperature.toString());
+      _maxTokensController = TextEditingController(text: (widget.existingConfig!.maxTokens ?? 2048).toString());
+      _topPController = TextEditingController(text: (widget.existingConfig!.topP ?? 1.0).toString());
+      _frequencyPenaltyController = TextEditingController(text: (widget.existingConfig!.frequencyPenalty ?? 0.0).toString());
+      _presencePenaltyController = TextEditingController(text: (widget.existingConfig!.presencePenalty ?? 0.0).toString());
       _apiUrlController = TextEditingController();
       
       _selectedProvider = widget.existingConfig!.provider;
@@ -61,8 +71,12 @@ class _ModelConfigDialogState extends State<ModelConfigDialog> {
       _modelIdController = TextEditingController();
       _baseUrlController = TextEditingController(text: ModelProvider.ollama.defaultBaseUrl);
       _apiKeyController = TextEditingController();
-      _systemPromptController = TextEditingController();
+      _systemPromptController = TextEditingController(text: 'You are a helpful assistant.');
       _temperatureController = TextEditingController(text: '0.7');
+      _maxTokensController = TextEditingController(text: '2048');
+      _topPController = TextEditingController(text: '1.0');
+      _frequencyPenaltyController = TextEditingController(text: '0.0');
+      _presencePenaltyController = TextEditingController(text: '0.0');
       _apiUrlController = TextEditingController();
     }
     
@@ -81,6 +95,10 @@ class _ModelConfigDialogState extends State<ModelConfigDialog> {
     _systemPromptController.dispose();
     _temperatureController.dispose();
     _apiUrlController.dispose();
+    _maxTokensController.dispose();
+    _topPController.dispose();
+    _frequencyPenaltyController.dispose();
+    _presencePenaltyController.dispose();
     super.dispose();
   }
 
@@ -187,53 +205,59 @@ class _ModelConfigDialogState extends State<ModelConfigDialog> {
 
   // Test connection to the model provider
   Future<void> _testConnection() async {
-    setState(() {
-      _isTestingConnection = true;
-      _connectionSuccess = false;
-    });
-    
-    try {
-      final config = ModelConfig(
-        id: _modelIdController.text,
-        name: _nameController.text,
-        provider: _selectedProvider,
-        baseUrl: _baseUrlController.text,
-        apiKey: _apiKeyController.text.isNotEmpty ? _apiKeyController.text : null,
-        model: _modelIdController.text,
-        systemPrompt: _systemPromptController.text,
-        temperature: double.tryParse(_temperatureController.text) ?? 0.7,
-        createdAt: DateTime.now(),
-        updatedAt: DateTime.now(),
-      );
-      
-      final success = await _modelService.testConnection(config);
-      
+    if (_formKey.currentState!.validate()) {
       setState(() {
-        _isTestingConnection = false;
-        _connectionSuccess = success;
-      });
-      
-      if (success && _selectedProvider == ModelProvider.ollama) {
-        _loadOllamaModels();
-      }
-      
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(success ? 'Connection successful!' : 'Connection failed'),
-          backgroundColor: success ? Colors.green : Colors.red,
-        ),
-      );
-    } catch (e) {
-      setState(() {
-        _isTestingConnection = false;
+        _isTestingConnection = true;
         _connectionSuccess = false;
       });
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Error testing connection: $e'),
-          backgroundColor: Colors.red,
-        ),
-      );
+      
+      try {
+        final config = ModelConfig(
+          id: DateTime.now().millisecondsSinceEpoch.toString(),
+          name: _nameController.text,
+          provider: _selectedProvider,
+          baseUrl: _baseUrlController.text,
+          apiKey: _apiKeyController.text.isNotEmpty ? _apiKeyController.text : null,
+          model: _modelIdController.text,
+          systemPrompt: _systemPromptController.text,
+          temperature: double.tryParse(_temperatureController.text) ?? 0.7,
+          maxTokens: int.tryParse(_maxTokensController.text) ?? 2048,
+          topP: double.tryParse(_topPController.text) ?? 1.0,
+          frequencyPenalty: double.tryParse(_frequencyPenaltyController.text) ?? 0.0,
+          presencePenalty: double.tryParse(_presencePenaltyController.text) ?? 0.0,
+          createdAt: DateTime.now(),
+          updatedAt: DateTime.now(),
+        );
+        
+        final success = await _modelService.testConnection(config);
+        
+        setState(() {
+          _isTestingConnection = false;
+          _connectionSuccess = success;
+        });
+        
+        if (success && _selectedProvider == ModelProvider.ollama) {
+          _loadOllamaModels();
+        }
+        
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(success ? 'Connection successful!' : 'Connection failed'),
+            backgroundColor: success ? Colors.green : Colors.red,
+          ),
+        );
+      } catch (e) {
+        setState(() {
+          _isTestingConnection = false;
+          _connectionSuccess = false;
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error testing connection: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
     }
   }
 
@@ -243,7 +267,7 @@ class _ModelConfigDialogState extends State<ModelConfigDialog> {
     }
     
     final config = ModelConfig(
-      id: _modelIdController.text,
+      id: widget.existingConfig?.id ?? DateTime.now().millisecondsSinceEpoch.toString(),
       name: _nameController.text,
       provider: _selectedProvider,
       baseUrl: _baseUrlController.text,
@@ -251,7 +275,11 @@ class _ModelConfigDialogState extends State<ModelConfigDialog> {
       model: _modelIdController.text,
       systemPrompt: _systemPromptController.text,
       temperature: double.tryParse(_temperatureController.text) ?? 0.7,
-      createdAt: DateTime.now(),
+      maxTokens: int.tryParse(_maxTokensController.text) ?? 2048,
+      topP: double.tryParse(_topPController.text) ?? 1.0,
+      frequencyPenalty: double.tryParse(_frequencyPenaltyController.text) ?? 0.0,
+      presencePenalty: double.tryParse(_presencePenaltyController.text) ?? 0.0,
+      createdAt: widget.existingConfig?.createdAt ?? DateTime.now(),
       updatedAt: DateTime.now(),
     );
     

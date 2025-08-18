@@ -18,10 +18,12 @@ import 'dart:convert';
 import 'dart:math';
 import 'dart:async';
 import '../services/model_state.dart';
-import '../services/theme_service.dart'; // Add this import
+import '../services/theme_service.dart';
 import '../services/chat_history_service.dart';
-import 'appbar/chat_history.dart'; // Add this import
+import 'appbar/chat_history.dart';
 import '../services/error_service.dart';
+import '../services/search_service.dart';
+import '../pages/search_settings_page.dart';
 
 class ChatInterface extends StatefulWidget {
   const ChatInterface({Key? key}) : super(key: key);
@@ -39,17 +41,20 @@ class ChatInterfaceState extends State<ChatInterface> {
   
   bool _isLoading = false;
   final ScrollController _scrollController = ScrollController();
-  String? _selectedModelId;
-  ModelConfig? _selectedModelConfig;
-  List<ModelConfig> _modelConfigs = [];
   bool _isStreaming = false;
   String _currentStreamingResponse = '';
   String _currentThought = '';
   bool _isTyping = false;
   
-  // Add chat history service
+  // Enhanced model management
+  final ModelState _modelState = ModelState();
   final ChatHistoryService _chatHistoryService = ChatHistoryService();
-  final ModelService _modelService = ModelService();
+  final ErrorService _errorService = ErrorService();
+  
+  // Model change tracking
+  String? _lastUsedModelId;
+  String? _conversationModelId;
+  bool _showingModelChangeNotification = false;
   
   // Restore missing variables
   final String apiKey = 'ddc-m4qlvrgpt1W1E4ZXc4bvm5T5Z6CRFLeXRCx9AbRuQOcGpFFrX2';
@@ -67,8 +72,9 @@ class ChatInterfaceState extends State<ChatInterface> {
   @override
   void initState() {
     super.initState();
-    _loadSelectedModel();
     _initializeChat();
+    _initializeModelTracking();
+    
     // Add listener to update send button state
     _messageController.addListener(() {
       setState(() {}); // Trigger rebuild when text changes
@@ -77,60 +83,547 @@ class ChatInterfaceState extends State<ChatInterface> {
     // Listen for changes to the active conversation
     _chatHistoryService.activeConversationNotifier.addListener(_onActiveConversationChanged);
     
-    // Listen for model changes
-    ModelState().selectedModelId.addListener(_onModelChanged);
+    // Listen for model changes with enhanced handling
+    _modelState.selectedModelId.addListener(_onModelChanged);
+    _modelState.addListener(_onModelStateChanged);
   }
   
   @override
   void dispose() {
     _chatHistoryService.activeConversationNotifier.removeListener(_onActiveConversationChanged);
-    ModelState().selectedModelId.removeListener(_onModelChanged);
+    _modelState.selectedModelId.removeListener(_onModelChanged);
+    _modelState.removeListener(_onModelStateChanged);
     _messageController.dispose();
     super.dispose();
   }
   
+  Future<void> _initializeModelTracking() async {
+    // Initialize model tracking for the current conversation
+    final activeConversation = _chatHistoryService.activeConversationNotifier.value;
+    if (activeConversation != null) {
+      _conversationModelId = activeConversation.modelId;
+    }
+    _lastUsedModelId = _modelState.selectedModelId.value;
+  }
+  
   void _onModelChanged() {
-    _loadSelectedModel();
+    final newModelId = _modelState.selectedModelId.value;
+    final oldModelId = _lastUsedModelId;
+    
+    if (newModelId != oldModelId && mounted) {
+      _handleModelChange(oldModelId, newModelId);
+    }
+    
+    _lastUsedModelId = newModelId;
+  }
+  
+  void _onModelStateChanged() {
+    if (mounted) {
+      setState(() {});
+    }
   }
   
   void _onActiveConversationChanged() {
-    // When the active conversation changes, update the UI
+    // When the active conversation changes, update model tracking
+    final activeConversation = _chatHistoryService.activeConversationNotifier.value;
+    if (activeConversation != null) {
+      _conversationModelId = activeConversation.modelId;
+      
+      // Check if conversation model differs from selected model
+      final selectedModelId = _modelState.selectedModelId.value;
+      if (_conversationModelId != null && 
+          _conversationModelId != selectedModelId && 
+          _messages.isNotEmpty) {
+        _showModelMismatchNotification();
+      }
+    }
+    
     setState(() {});
     _scrollToBottom();
   }
-
-  Future<void> _loadSelectedModel() async {
+  
+  Future<void> _handleModelChange(String? oldModelId, String? newModelId) async {
+    if (newModelId == null) return;
+    
     try {
-      final modelService = ModelService();
-      final selectedId = await modelService.getDefaultModelId();
-      if (selectedId != null) {
-        final configs = await modelService.getSavedModels();
-        try {
-          final config = configs.firstWhere(
-            (config) => config.id == selectedId,
-            orElse: () => throw Exception('Selected model not found'),
-          );
-          
-          setState(() {
-            _selectedModelId = selectedId;
-            _selectedModelConfig = config;
-          });
-        } catch (e) {
-          debugPrint('Error finding selected model: $e');
-          // If the selected model is not found, try to set the first available model
-          if (configs.isNotEmpty) {
-            await modelService.setDefaultModel(configs.first.id);
-            setState(() {
-              _selectedModelId = configs.first.id;
-              _selectedModelConfig = configs.first;
-            });
+      // Get model information
+      final models = _modelState.availableModels.value;
+      final newModel = models.firstWhere(
+        (model) => model.id == newModelId,
+        orElse: () => throw Exception('Model not found: $newModelId'),
+      );
+      
+      // Check if there's an active conversation with messages
+      final activeConversation = _chatHistoryService.activeConversationNotifier.value;
+      final hasMessages = _messages.isNotEmpty;
+      
+      if (hasMessages && activeConversation != null) {
+        // Show confirmation dialog for active conversations
+        final shouldContinue = await _showModelChangeConfirmation(oldModelId, newModel);
+        if (!shouldContinue) {
+          // Revert model selection
+          if (oldModelId != null) {
+            await _modelState.setSelectedModel(oldModelId);
           }
+          return;
         }
+        
+        // Update conversation model tracking
+        await _updateConversationModel(activeConversation.id, newModelId);
       }
-    } catch (e) {
-      debugPrint('Error loading selected model: $e');
+      
+      // Show model change notification
+      _displayModelChangeNotification(newModel);
+      
+      // Log model change
+      await _errorService.logError(
+        'Model changed from ${oldModelId ?? 'none'} to $newModelId',
+        null,
+        type: ErrorType.unknown,
+        severity: ErrorSeverity.low,
+        context: 'ChatInterface._handleModelChange',
+      );
+      
+    } catch (e, stackTrace) {
+      await _errorService.logError(
+        'Failed to handle model change: $e',
+        stackTrace,
+        type: ErrorType.unknown,
+        context: 'ChatInterface._handleModelChange',
+      );
+      
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to change model: $e'),
+            backgroundColor: Colors.red,
+            duration: const Duration(seconds: 3),
+          ),
+        );
+      }
     }
   }
+  
+  Future<bool> _showModelChangeConfirmation(String? oldModelId, ModelConfig newModel) async {
+    final models = _modelState.availableModels.value;
+    final oldModel = oldModelId != null 
+        ? models.firstWhere(
+            (model) => model.id == oldModelId,
+            orElse: () => ModelConfig(
+              id: oldModelId,
+              name: 'Unknown Model',
+              provider: ModelProvider.openAI,
+              model: 'unknown',
+              baseUrl: '',
+              createdAt: DateTime.now(),
+              updatedAt: DateTime.now(),
+            ),
+          )
+        : null;
+    
+    return await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => AlertDialog(
+        backgroundColor: ThemeService().colorScheme.surface,
+        title: Row(
+          children: [
+            Icon(
+              Icons.swap_horiz,
+              color: ThemeService().colorScheme.primary,
+            ),
+            const SizedBox(width: 8),
+            Text(
+              'Change Model?',
+              style: TextStyle(color: ThemeService().colorScheme.onSurface),
+            ),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'You have an active conversation with messages. Changing the model will affect future responses.',
+              style: TextStyle(color: ThemeService().colorScheme.onSurface),
+            ),
+            const SizedBox(height: 16),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: ThemeService().colorScheme.cardBackground,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: ThemeService().colorScheme.cardBorder),
+              ),
+              child: Column(
+                children: [
+                  Row(
+                    children: [
+                      Text(
+                        'From: ',
+                        style: TextStyle(
+                          color: ThemeService().colorScheme.onSurface.withOpacity(0.7),
+                          fontSize: 12,
+                        ),
+                      ),
+                      Expanded(
+                        child: Text(
+                          oldModel?.name ?? 'No model',
+                          style: TextStyle(
+                            color: ThemeService().colorScheme.onSurface,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 4),
+                  Row(
+                    children: [
+                      Text(
+                        'To: ',
+                        style: TextStyle(
+                          color: ThemeService().colorScheme.onSurface.withOpacity(0.7),
+                          fontSize: 12,
+                        ),
+                      ),
+                      Expanded(
+                        child: Text(
+                          newModel.name,
+                          style: TextStyle(
+                            color: ThemeService().colorScheme.primary,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 12),
+            Text(
+              'Note: Previous messages will remain unchanged, but new responses will use the selected model.',
+              style: TextStyle(
+                color: ThemeService().colorScheme.onSurface.withOpacity(0.6),
+                fontSize: 12,
+                fontStyle: FontStyle.italic,
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: Text(
+              'Cancel',
+              style: TextStyle(color: ThemeService().colorScheme.onSurface.withOpacity(0.7)),
+            ),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: ThemeService().colorScheme.primary,
+              foregroundColor: ThemeService().colorScheme.onPrimary,
+            ),
+            child: const Text('Change Model'),
+          ),
+        ],
+      ),
+    ) ?? false;
+  }
+  
+  void _displayModelChangeNotification(ModelConfig model) {
+    if (!mounted) return;
+    
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Row(
+          children: [
+            Icon(
+              Icons.check_circle,
+              color: ThemeService().colorScheme.onPrimary,
+              size: 20,
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                'Now using ${model.name}',
+                style: TextStyle(color: ThemeService().colorScheme.onPrimary),
+              ),
+            ),
+          ],
+        ),
+        backgroundColor: ThemeService().colorScheme.primary,
+        duration: const Duration(seconds: 3),
+        behavior: SnackBarBehavior.floating,
+        action: SnackBarAction(
+          label: 'View Health',
+          textColor: ThemeService().colorScheme.onPrimary,
+          onPressed: () => _showModelHealthDialog(model),
+        ),
+      ),
+    );
+  }
+  
+  void _showModelMismatchNotification() {
+    if (!mounted || _showingModelChangeNotification) return;
+    
+    _showingModelChangeNotification = true;
+    
+    final models = _modelState.availableModels.value;
+    final conversationModel = models.firstWhere(
+      (model) => model.id == _conversationModelId,
+      orElse: () => ModelConfig(
+        id: _conversationModelId ?? '',
+        name: 'Unknown Model',
+        provider: ModelProvider.openAI,
+        model: 'unknown',
+        baseUrl: '',
+        createdAt: DateTime.now(),
+        updatedAt: DateTime.now(),
+      ),
+    );
+    
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(
+                  Icons.info_outline,
+                  color: Colors.orange,
+                  size: 20,
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    'Model Mismatch',
+                    style: TextStyle(
+                      color: ThemeService().colorScheme.onSurface,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 4),
+            Text(
+              'This conversation was started with ${conversationModel.name}',
+              style: TextStyle(
+                color: ThemeService().colorScheme.onSurface.withOpacity(0.8),
+                fontSize: 12,
+              ),
+            ),
+          ],
+        ),
+        backgroundColor: ThemeService().colorScheme.cardBackground,
+        duration: const Duration(seconds: 5),
+        behavior: SnackBarBehavior.floating,
+        action: SnackBarAction(
+          label: 'Switch Back',
+          textColor: ThemeService().colorScheme.primary,
+          onPressed: () async {
+            if (_conversationModelId != null) {
+              await _modelState.setSelectedModel(_conversationModelId!);
+            }
+          },
+        ),
+      ),
+    ).closed.then((_) {
+      _showingModelChangeNotification = false;
+    });
+  }
+  
+  void _showModelHealthDialog(ModelConfig model) {
+    final health = _modelState.getModelHealth(model.id);
+    
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: ThemeService().colorScheme.surface,
+        title: Row(
+          children: [
+            Icon(
+              Icons.health_and_safety,
+              color: ThemeService().colorScheme.primary,
+            ),
+            const SizedBox(width: 8),
+            Text(
+              'Model Health',
+              style: TextStyle(color: ThemeService().colorScheme.onSurface),
+            ),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              model.name,
+              style: TextStyle(
+                color: ThemeService().colorScheme.onSurface,
+                fontWeight: FontWeight.bold,
+                fontSize: 16,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              model.provider.displayName,
+              style: TextStyle(
+                color: ThemeService().colorScheme.onSurface.withOpacity(0.7),
+              ),
+            ),
+            const SizedBox(height: 16),
+            if (health != null) ...[
+              _buildHealthStatusRow('Status', _getHealthStatusText(health.status), _getHealthStatusColor(health.status)),
+              if (health.responseTime != null)
+                _buildHealthStatusRow('Response Time', '${health.responseTime!.inMilliseconds}ms', ThemeService().colorScheme.onSurface),
+              _buildHealthStatusRow('Last Checked', _formatDateTime(health.lastChecked), ThemeService().colorScheme.onSurface),
+              if (health.error != null)
+                _buildHealthStatusRow('Error', health.error!, Colors.red),
+            ] else
+              Text(
+                'Health information not available',
+                style: TextStyle(
+                  color: ThemeService().colorScheme.onSurface.withOpacity(0.7),
+                  fontStyle: FontStyle.italic,
+                ),
+              ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () async {
+              Navigator.of(context).pop();
+              try {
+                await _modelState.forceHealthCheck(modelId: model.id);
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text('Health check completed for ${model.name}'),
+                    backgroundColor: ThemeService().colorScheme.primary,
+                  ),
+                );
+              } catch (e) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text('Health check failed: $e'),
+                    backgroundColor: Colors.red,
+                  ),
+                );
+              }
+            },
+            child: Text(
+              'Check Health',
+              style: TextStyle(color: ThemeService().colorScheme.primary),
+            ),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: Text(
+              'Close',
+              style: TextStyle(color: ThemeService().colorScheme.onSurface.withOpacity(0.7)),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+  
+  Widget _buildHealthStatusRow(String label, String value, Color valueColor) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: 100,
+            child: Text(
+              '$label:',
+              style: TextStyle(
+                color: ThemeService().colorScheme.onSurface.withOpacity(0.7),
+                fontSize: 12,
+              ),
+            ),
+          ),
+          Expanded(
+            child: Text(
+              value,
+              style: TextStyle(
+                color: valueColor,
+                fontSize: 12,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+  
+  String _getHealthStatusText(ModelHealthStatus status) {
+    switch (status) {
+      case ModelHealthStatus.healthy:
+        return 'Healthy';
+      case ModelHealthStatus.unhealthy:
+        return 'Unhealthy';
+      case ModelHealthStatus.testing:
+        return 'Testing...';
+      case ModelHealthStatus.unknown:
+        return 'Unknown';
+    }
+  }
+  
+  Color _getHealthStatusColor(ModelHealthStatus status) {
+    switch (status) {
+      case ModelHealthStatus.healthy:
+        return Colors.green;
+      case ModelHealthStatus.unhealthy:
+        return Colors.red;
+      case ModelHealthStatus.testing:
+        return Colors.orange;
+      case ModelHealthStatus.unknown:
+        return ThemeService().colorScheme.onSurface.withOpacity(0.5);
+    }
+  }
+  
+  String _formatDateTime(DateTime dateTime) {
+    final now = DateTime.now();
+    final difference = now.difference(dateTime);
+    
+    if (difference.inMinutes < 1) {
+      return 'Just now';
+    } else if (difference.inHours < 1) {
+      return '${difference.inMinutes}m ago';
+    } else if (difference.inDays < 1) {
+      return '${difference.inHours}h ago';
+    } else {
+      return '${difference.inDays}d ago';
+    }
+  }
+  
+  Future<void> _updateConversationModel(String conversationId, String modelId) async {
+    try {
+      final conversation = _chatHistoryService.activeConversationNotifier.value;
+      if (conversation != null) {
+        final updatedConversation = conversation.copyWith(modelId: modelId);
+        await _chatHistoryService.updateConversation(updatedConversation);
+        _conversationModelId = modelId;
+      }
+    } catch (e, stackTrace) {
+      await _errorService.logError(
+        'Failed to update conversation model: $e',
+        stackTrace,
+        type: ErrorType.unknown,
+        context: 'ChatInterface._updateConversationModel',
+      );
+    }
+  }
+
+
 
   Future<void> _initializeChat() async {
     try {
@@ -192,21 +685,25 @@ class ChatInterfaceState extends State<ChatInterface> {
     _scrollToBottom();
 
     try {
-      // Load the selected model
-      if (_selectedModelId == null) {
-        await _loadSelectedModel();
-      }
+      // Get the selected model from ModelState
+      final selectedModelId = _modelState.selectedModelId.value;
+      final selectedModel = _modelState.selectedModel;
       
-      if (_selectedModelId == null || _selectedModelConfig == null) {
+      if (selectedModelId == null || selectedModel == null) {
         throw Exception('No model selected. Please configure a model in Settings.');
       }
       
-      debugPrint('Sending message to model: ${_selectedModelConfig!.name} (${_selectedModelConfig!.provider})');
+      // Update conversation model if needed
+      if (_conversationModelId != selectedModelId) {
+        await _updateConversationModel(conversationId, selectedModelId);
+      }
+      
+      debugPrint('Sending message to model: ${selectedModel.name} (${selectedModel.provider})');
 
       final response = await ChatService.getModelResponse(
         message,
         conversationId: conversationId,
-        modelId: _selectedModelId ?? '',
+        modelId: selectedModelId,
       );
 
       if (!mounted) return;
@@ -299,32 +796,19 @@ class ChatInterfaceState extends State<ChatInterface> {
   }
   
   // Change this method from private to public
-  Future<void> createNewChat() async {
-    try {
-      debugPrint('Creating new chat conversation');
-      final newConversation = await _chatHistoryService.createConversation();
-      debugPrint('New conversation created with ID: ${newConversation.id}');
+  void switchChat(String? conversationId) {
+    if (conversationId != null) {
+      _chatHistoryService.setActiveConversation(conversationId);
       
-      setState(() {
-        _messageController.clear();
-        _currentStreamingResponse = '';
-        _isLoading = false;
+      // Ensure we rebuild the UI
+      setState(() {});
+      
+      // Scroll to bottom after a short delay to ensure the messages are rendered
+      Future.delayed(Duration(milliseconds: 100), () {
+        _scrollToBottom();
       });
-      
-      // Ensure the UI updates to show the empty conversation
-      await Future.delayed(Duration.zero);
-      if (mounted) {
-        setState(() {});
-      }
-      
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('New chat created'))
-      );
-    } catch (e) {
-      debugPrint('Error creating new chat: $e');
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error creating new chat: $e'))
-      );
+    } else {
+      createNewChat();
     }
   }
 
@@ -378,24 +862,47 @@ class ChatInterfaceState extends State<ChatInterface> {
     }
   }
 
-  // Add method to switch between chats or start a new chat
-  void _switchChat(String? conversationId) {
-    if (conversationId != null) {
-      _chatHistoryService.setActiveConversation(conversationId);
-    } else {
-      createNewChat();
+  // Change this method from private to public
+  void createNewChat() async {
+    try {
+      debugPrint('Creating new chat conversation');
+      final newConversation = await _chatHistoryService.createConversation();
+      debugPrint('New conversation created with ID: ${newConversation.id}');
+      
+      setState(() {
+        _messageController.clear();
+        _currentStreamingResponse = '';
+        _isLoading = false;
+      });
+      
+      // Ensure the UI updates to show the empty conversation
+      await Future.delayed(Duration.zero);
+      if (mounted) {
+        setState(() {});
+      }
+      
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('New chat created'))
+      );
+    } catch (e) {
+      debugPrint('Error creating new chat: $e');
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error creating new chat: $e'))
+      );
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    final isDark = ThemeService().isDarkMode;
+    final themeService = ThemeService();
+    final colorScheme = themeService.colorScheme;
     final messages = _messages; // Get a local reference
     
     return Scaffold(
-      backgroundColor: isDark ? const Color(0xFF121212) : Colors.white,
+      backgroundColor: colorScheme.background,
       body: Column(
         children: [
+          _buildModelIndicator(),
           Expanded(
             child: messages.isEmpty
               ? _buildWelcomeScreen()
@@ -406,39 +913,141 @@ class ChatInterfaceState extends State<ChatInterface> {
       ),
     );
   }
+  
+  Widget _buildModelIndicator() {
+    return ValueListenableBuilder<String?>(
+      valueListenable: _modelState.selectedModelId,
+      builder: (context, selectedId, child) {
+        if (selectedId == null || _messages.isEmpty) {
+          return const SizedBox.shrink();
+        }
+        
+        return ValueListenableBuilder<List<ModelConfig>>(
+          valueListenable: _modelState.availableModels,
+          builder: (context, models, child) {
+            final selectedModel = models.firstWhere(
+              (model) => model.id == selectedId,
+              orElse: () => ModelConfig(
+                id: selectedId,
+                name: 'Unknown Model',
+                provider: ModelProvider.openAI,
+                model: 'unknown',
+                baseUrl: '',
+                createdAt: DateTime.now(),
+                updatedAt: DateTime.now(),
+              ),
+            );
+            
+            final colorScheme = ThemeService().colorScheme;
+            final isModelMismatch = _conversationModelId != null && 
+                                  _conversationModelId != selectedId;
+            
+            return Container(
+              margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              decoration: BoxDecoration(
+                color: isModelMismatch 
+                    ? Colors.orange.withOpacity(0.1)
+                    : colorScheme.cardBackground,
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(
+                  color: isModelMismatch 
+                      ? Colors.orange.withOpacity(0.3)
+                      : colorScheme.cardBorder,
+                ),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  // Model health indicator
+                  ValueListenableBuilder<Map<String, ModelHealthInfo>>(
+                    valueListenable: _modelState.modelHealthStatus,
+                    builder: (context, healthStatus, child) {
+                      final health = healthStatus[selectedId];
+                      Color indicatorColor = colorScheme.onSurface.withOpacity(0.5);
+                      
+                      if (health != null) {
+                        switch (health.status) {
+                          case ModelHealthStatus.healthy:
+                            indicatorColor = Colors.green;
+                            break;
+                          case ModelHealthStatus.unhealthy:
+                            indicatorColor = Colors.red;
+                            break;
+                          case ModelHealthStatus.testing:
+                            indicatorColor = Colors.orange;
+                            break;
+                          case ModelHealthStatus.unknown:
+                            indicatorColor = colorScheme.onSurface.withOpacity(0.5);
+                            break;
+                        }
+                      }
+                      
+                      return Container(
+                        width: 8,
+                        height: 8,
+                        decoration: BoxDecoration(
+                          color: indicatorColor,
+                          shape: BoxShape.circle,
+                        ),
+                      );
+                    },
+                  ),
+                  const SizedBox(width: 8),
+                  // Model name
+                  Text(
+                    isModelMismatch 
+                        ? 'Using ${selectedModel.name} (conversation started with different model)'
+                        : 'Using ${selectedModel.name}',
+                    style: TextStyle(
+                      color: isModelMismatch 
+                          ? Colors.orange
+                          : colorScheme.onSurface.withOpacity(0.7),
+                      fontSize: 12,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                  if (isModelMismatch) ...[
+                    const SizedBox(width: 8),
+                    InkWell(
+                      onTap: () async {
+                        if (_conversationModelId != null) {
+                          await _modelState.setSelectedModel(_conversationModelId!);
+                        }
+                      },
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: Colors.orange.withOpacity(0.2),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Text(
+                          'Switch Back',
+                          style: TextStyle(
+                            color: Colors.orange,
+                            fontSize: 10,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
 
   Widget _buildWelcomeScreen() {
+    final colorScheme = ThemeService().colorScheme;
+    
     return Column(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                decoration: BoxDecoration(
-                  color: const Color(0xFFEEF2FF),
-                  borderRadius: BorderRadius.circular(20),
-                ),
-                child: const Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(
-                      'Get Plus',
-                      style: TextStyle(
-                        color: Color(0xFF6366F1),
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                    Icon(Icons.add, color: Color(0xFF6366F1)),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        ),
+        const SizedBox(height: 16),
         Expanded(
           child: Center(
             child: Column(
@@ -449,7 +1058,7 @@ class ChatInterfaceState extends State<ChatInterface> {
                   child: Icon(
                     Icons.chat_bubble_outline,
                     size: 64,
-                    color: Colors.grey[300],
+                    color: colorScheme.disabled,
                   ),
                 ),
                 const SizedBox(height: 16),
@@ -458,7 +1067,7 @@ class ChatInterfaceState extends State<ChatInterface> {
                   style: TextStyle(
                     fontSize: 18,
                     fontWeight: FontWeight.bold,
-                    color: Colors.grey[700],
+                    color: colorScheme.onBackground.withOpacity(0.7),
                   ),
                 ),
               ],
@@ -499,6 +1108,8 @@ class ChatInterfaceState extends State<ChatInterface> {
   }
 
   Widget _buildSuggestionCard(String title, String subtitle, IconData icon) {
+    final colorScheme = ThemeService().colorScheme;
+    
     return InkWell(
       onTap: () {
         _messageController.text = "$title: $subtitle";
@@ -508,19 +1119,26 @@ class ChatInterfaceState extends State<ChatInterface> {
         width: MediaQuery.of(context).size.width * 0.9,
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
-          color: ThemeService().isDarkMode ? const Color(0xFF2D2D2D) : Colors.grey[50],
+          color: colorScheme.cardBackground,
           borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: ThemeService().isDarkMode ? Colors.grey[800]! : Colors.grey[200]!),
+          border: Border.all(color: colorScheme.cardBorder),
+          boxShadow: [
+            BoxShadow(
+              color: colorScheme.shadow,
+              blurRadius: 2,
+              offset: const Offset(0, 1),
+            ),
+          ],
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
               title,
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 18,
                 fontWeight: FontWeight.bold,
-                color: Colors.black87,
+                color: colorScheme.onSurface,
               ),
             ),
             const SizedBox(height: 4),
@@ -528,7 +1146,7 @@ class ChatInterfaceState extends State<ChatInterface> {
               subtitle,
               style: TextStyle(
                 fontSize: 16,
-                color: Colors.grey[600],
+                color: colorScheme.onSurface.withOpacity(0.7),
               ),
             ),
           ],
@@ -538,97 +1156,122 @@ class ChatInterfaceState extends State<ChatInterface> {
   }
 
   Widget _buildInputArea() {
+    final colorScheme = ThemeService().colorScheme;
+    
     return Container(
       decoration: BoxDecoration(
-        color: ThemeService().isDarkMode ? const Color(0xFF1E1E1E) : Colors.white,
+        color: colorScheme.surface,
         boxShadow: [BoxShadow(
-          color: Colors.black.withOpacity(0.05),
+          color: colorScheme.shadow,
           blurRadius: 5,
           offset: const Offset(0, -2),
         )],
       ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          if (_showAttachmentOptions)
-            Container(
-              padding: const EdgeInsets.symmetric(vertical: 8),
-              margin: const EdgeInsets.only(bottom: 4),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(8),
-                boxShadow: [BoxShadow(
-                  color: Colors.black.withOpacity(0.05),
-                  blurRadius: 5,
-                  offset: const Offset(0, 2),
-                )],
-              ),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                children: [
-                  _buildAttachmentOption(Icons.image, 'Image', _pickImage),
-                  _buildAttachmentOption(Icons.attach_file, 'File', _pickFile),
-                  _buildAttachmentOption(Icons.camera_alt, 'Camera', _takePhoto),
-                ],
-              ),
-            ),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-            child: Row(
-              children: [
-                IconButton(
-                  icon: Icon(
-                    _showAttachmentOptions ? Icons.close : Icons.add,
-                    color: Colors.grey[600],
-                  ),
-                  onPressed: () {
-                    setState(() {
-                      _showAttachmentOptions = !_showAttachmentOptions;
-                    });
-                  },
+      child: SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (_showAttachmentOptions)
+              Container(
+                padding: const EdgeInsets.symmetric(vertical: 8),
+                margin: const EdgeInsets.only(bottom: 4),
+                decoration: BoxDecoration(
+                  color: colorScheme.surface,
+                  borderRadius: BorderRadius.circular(8),
+                  boxShadow: [BoxShadow(
+                    color: colorScheme.shadow,
+                    blurRadius: 5,
+                    offset: const Offset(0, 2),
+                  )],
                 ),
-                Expanded(
-                  child: Container(
-                    constraints: BoxConstraints(
-                      maxHeight: _maxInputHeight,
+                child: SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  padding: const EdgeInsets.symmetric(horizontal: 8),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                    children: [
+                      _buildAttachmentOption(Icons.image, 'Image', _pickImage),
+                      const SizedBox(width: 8),
+                      _buildAttachmentOption(Icons.attach_file, 'File', _pickFile),
+                      const SizedBox(width: 8),
+                      _buildAttachmentOption(Icons.camera_alt, 'Camera', _takePhoto),
+                      const SizedBox(width: 8),
+                      _buildAttachmentOption(Icons.search, 'Search', _toggleWebSearch),
+                    ],
+                  ),
+                ),
+              ),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  IconButton(
+                    icon: Icon(
+                      _showAttachmentOptions ? Icons.close : Icons.add,
+                      color: colorScheme.onSurface.withOpacity(0.6),
                     ),
-                    child: SingleChildScrollView(
+                    onPressed: () {
+                      setState(() {
+                        _showAttachmentOptions = !_showAttachmentOptions;
+                      });
+                    },
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints(),
+                    visualDensity: VisualDensity.compact,
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Container(
+                      constraints: BoxConstraints(
+                        maxHeight: _maxInputHeight,
+                      ),
                       child: TextField(
                         controller: _messageController,
                         maxLines: null,
+                        minLines: 1,
+                        keyboardType: TextInputType.multiline,
+                        textInputAction: TextInputAction.newline,
+                        style: TextStyle(color: colorScheme.inputText),
                         decoration: InputDecoration(
                           hintText: 'Type a message...',
+                          hintStyle: TextStyle(color: colorScheme.hint),
                           border: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(25),
                             borderSide: BorderSide.none,
                           ),
                           filled: true,
-                          fillColor: Colors.grey[100],
+                          fillColor: colorScheme.inputBackground,
                           contentPadding: const EdgeInsets.symmetric(
-                            horizontal: 20,
-                            vertical: 10,
+                            horizontal: 16,
+                            vertical: 8,
                           ),
+                          isDense: true,
                         ),
                         onSubmitted: (_) => _sendMessage(),
                       ),
                     ),
                   ),
-                ),
-                IconButton(
-                  icon: Icon(
-                    Icons.send,
-                    color: _messageController.text.trim().isEmpty
-                        ? Colors.grey[400]
-                        : const Color(0xFF8B5CF6),
+                  const SizedBox(width: 8),
+                  IconButton(
+                    icon: Icon(
+                      Icons.send,
+                      color: _messageController.text.trim().isEmpty
+                          ? colorScheme.disabled
+                          : colorScheme.primary,
+                    ),
+                    onPressed: _messageController.text.trim().isEmpty
+                        ? null
+                        : _sendMessage,
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints(),
+                    visualDensity: VisualDensity.compact,
                   ),
-                  onPressed: _messageController.text.trim().isEmpty
-                      ? null
-                      : _sendMessage,
-                ),
-              ],
+                ],
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -674,6 +1317,8 @@ class ChatInterfaceState extends State<ChatInterface> {
   }
 
   Widget _buildAttachmentOption(IconData icon, String label, VoidCallback? onTap) {
+    final colorScheme = ThemeService().colorScheme;
+    
     return InkWell(
       onTap: onTap,
       borderRadius: BorderRadius.circular(8),
@@ -682,19 +1327,20 @@ class ChatInterfaceState extends State<ChatInterface> {
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
         margin: const EdgeInsets.symmetric(horizontal: 8),
         decoration: BoxDecoration(
-          color: const Color(0xFFF3F4F6),
+          color: colorScheme.cardBackground,
           borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: colorScheme.cardBorder),
         ),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(icon, size: 24, color: const Color(0xFF8B5CF6)),
+            Icon(icon, size: 24, color: colorScheme.primary),
             const SizedBox(height: 8),
             Text(
               label,
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 14,
-                color: Colors.black87,
+                color: colorScheme.onSurface,
                 fontWeight: FontWeight.w500,
               ),
             ),
@@ -734,11 +1380,10 @@ class ChatInterfaceState extends State<ChatInterface> {
 
   Widget _buildMessageBubble(Message message) {
     final formattedTime = '${message.timestamp.hour}:${message.timestamp.minute.toString().padLeft(2, '0')}';
-    final theme = Theme.of(context);
-    final isDark = ThemeService().isDarkMode;
+    final colorScheme = ThemeService().colorScheme;
     
     return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
+      crossAxisAlignment: message.isUser ? CrossAxisAlignment.end : CrossAxisAlignment.start,
       children: [
         Padding(
           padding: const EdgeInsets.only(top: 16.0, left: 16.0, right: 16.0),
@@ -750,10 +1395,10 @@ class ChatInterfaceState extends State<ChatInterface> {
                 Padding(
                   padding: const EdgeInsets.only(right: 8.0, top: 4.0),
                   child: CircleAvatar(
-                    backgroundColor: message.isError ? Colors.red : const Color.fromARGB(255, 255, 255, 255),
+                    backgroundColor: message.isError ? colorScheme.error : colorScheme.surface,
                     radius: 16,
                     child: message.isError
-                        ? const Icon(Icons.error_outline, color: Colors.white, size: 18)
+                        ? Icon(Icons.error_outline, color: colorScheme.onError, size: 18)
                         : ClipOval(
                             child: Image.asset(
                               'assets/icons/logo.png',
@@ -770,19 +1415,19 @@ class ChatInterfaceState extends State<ChatInterface> {
                   padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                   decoration: BoxDecoration(
                     color: message.isUser 
-                        ? const Color(0xFF8B5CF6) 
+                        ? colorScheme.userMessageBackground
                         : message.isThinking 
-                            ? (isDark ? Colors.grey[800] : const Color(0xFFF3F4F6))
+                            ? colorScheme.assistantMessageBackground.withOpacity(0.7)
                             : message.isError
-                                ? (isDark ? Colors.red[900] : Colors.red[50])
-                                : (isDark ? Colors.grey[900] : Colors.white),
+                                ? colorScheme.error.withOpacity(0.1)
+                                : colorScheme.assistantMessageBackground,
                     borderRadius: BorderRadius.circular(16),
                     border: !message.isUser && !message.isThinking
-                        ? Border.all(color: isDark ? Colors.grey[700]! : const Color(0xFFE5E7EB))
+                        ? Border.all(color: colorScheme.messageBorder)
                         : null,
                     boxShadow: [
                       BoxShadow(
-                        color: (ThemeService().isDarkMode ? Colors.black : Colors.black.withOpacity(0.05)),
+                        color: colorScheme.shadow,
                         blurRadius: 3,
                         offset: const Offset(0, 1),
                       ),
@@ -801,13 +1446,13 @@ class ChatInterfaceState extends State<ChatInterface> {
                                 data: message.content,
                                 styleSheet: MarkdownStyleSheet(
                                   p: TextStyle(
-                                    color: message.isUser ? Colors.white : const Color(0xFF1F2937),
+                                    color: message.isUser ? colorScheme.onPrimary : colorScheme.messageText,
                                     fontSize: 16,
                                     height: 1.5,
                                   ),
                                   code: TextStyle(
-                                    backgroundColor: Colors.grey[100],
-                                    color: const Color(0xFF1F2937),
+                                    backgroundColor: colorScheme.surface,
+                                    color: colorScheme.messageText,
                                     fontFamily: 'monospace',
                                     fontSize: 14,
                                   ),
@@ -815,13 +1460,13 @@ class ChatInterfaceState extends State<ChatInterface> {
                               ),
                             ),
                             const SizedBox(width: 8),
-                            const SizedBox(
+                            SizedBox(
                               height: 16,
                               width: 16,
                               child: CircularProgressIndicator(
                                 strokeWidth: 2,
                                 valueColor: AlwaysStoppedAnimation<Color>(
-                                  Color(0xFF8B5CF6),
+                                  ThemeService().colorScheme.primary,
                                 ),
                               ),
                             ),
@@ -835,20 +1480,20 @@ class ChatInterfaceState extends State<ChatInterface> {
                           data: message.content,
                           styleSheet: MarkdownStyleSheet(
                             p: TextStyle(
-                              color: isDark ? Colors.grey[200] : const Color(0xFF1F2937),
+                              color: colorScheme.messageText,
                               fontSize: 16,
                               height: 1.5,
                             ),
                             code: TextStyle(
-                              backgroundColor: ThemeService().isDarkMode ? Colors.grey[800] : Colors.grey[100],
-                              color: isDark ? Colors.grey[200] : const Color(0xFF1F2937),
+                              backgroundColor: colorScheme.surface,
+                              color: colorScheme.messageText,
                               fontFamily: 'monospace',
                               fontSize: 14,
                             ),
                             codeblockDecoration: BoxDecoration(
-                              color: ThemeService().isDarkMode ? Colors.grey[900] : const Color(0xFFF9FAFB),
+                              color: colorScheme.surface,
                               borderRadius: BorderRadius.circular(8),
-                              border: Border.all(color: ThemeService().isDarkMode ? Colors.grey[700]! : const Color(0xFFE5E7EB)),
+                              border: Border.all(color: colorScheme.messageBorder),
                             ),
                           ),
                           selectable: true,
@@ -856,8 +1501,8 @@ class ChatInterfaceState extends State<ChatInterface> {
                       else
                         SelectableText(
                           message.content,
-                          style: const TextStyle(
-                            color: Colors.white,
+                          style: TextStyle(
+                            color: colorScheme.onPrimary,
                             fontSize: 16,
                             height: 1.5,
                           ),
@@ -867,31 +1512,33 @@ class ChatInterfaceState extends State<ChatInterface> {
                 ),
               ),
               if (message.isUser)
-                const Padding(
-                  padding: EdgeInsets.only(left: 8.0, top: 4.0),
+                Padding(
+                  padding: const EdgeInsets.only(left: 8.0, top: 4.0),
                   child: CircleAvatar(
-                    backgroundColor: Colors.green,
+                    backgroundColor: colorScheme.primary,
                     radius: 16,
-                    child: Icon(Icons.person, color: Colors.white, size: 18),
+                    child: Icon(Icons.person, color: colorScheme.onPrimary, size: 18),
                   ),
                 ),
             ],
           ),
         ),
-        Padding(
-          padding: EdgeInsets.only(
+        Container(
+          margin: EdgeInsets.only(
             left: message.isUser ? 0 : 48,
             right: message.isUser ? 48 : 0,
             bottom: 8,
             top: 4,
           ),
+          padding: const EdgeInsets.symmetric(horizontal: 16),
           child: Row(
             mainAxisAlignment: message.isUser ? MainAxisAlignment.end : MainAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
             children: [
               Text(
                 formattedTime,
                 style: TextStyle(
-                  color: Colors.grey[600],
+                  color: colorScheme.onSurface.withOpacity(0.6),
                   fontSize: 12,
                 ),
               ),
@@ -903,8 +1550,8 @@ class ChatInterfaceState extends State<ChatInterface> {
                   padding: const EdgeInsets.all(4),
                   child: Icon(
                     Icons.more_horiz,
-                    size: 20,
-                    color: Colors.grey[600],
+                    size: 16,
+                    color: colorScheme.onSurface.withOpacity(0.6),
                   ),
                 ),
               ),
@@ -1076,43 +1723,49 @@ class ChatInterfaceState extends State<ChatInterface> {
   }
 
   Widget _buildThinkingIndicator() {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 8.0),
+    return Container(
+      padding: const EdgeInsets.symmetric(vertical: 12.0, horizontal: 16.0),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF3F4F6),
+        borderRadius: BorderRadius.circular(12),
+      ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Container(
-            padding: const EdgeInsets.all(8),
-            decoration: BoxDecoration(
-              color: Colors.grey[200],
-              borderRadius: BorderRadius.circular(12),
+          Text(
+            "Thinking",
+            style: TextStyle(
+              color: Colors.grey[800],
+              fontWeight: FontWeight.w500,
+              fontSize: 14,
             ),
-            child: Row(
-              children: [
-                Text(
-                  "Thinking",
-                  style: TextStyle(
-                    color: Colors.grey[800],
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
-                const SizedBox(width: 8),
-                AnimatedTextKit(
-                  animatedTexts: [
-                    TypewriterAnimatedText(
-                      '...',
-                      speed: const Duration(milliseconds: 300),
-                      textStyle: TextStyle(
-                        color: Colors.grey[800],
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
-                  ],
-                  totalRepeatCount: 100,
-                  displayFullTextOnTap: false,
-                  stopPauseOnTap: false,
-                ),
-              ],
+          ),
+          const SizedBox(width: 8),
+          // Three static dots with different opacities
+          Container(
+            width: 6,
+            height: 6,
+            margin: const EdgeInsets.only(right: 3),
+            decoration: BoxDecoration(
+              color: const Color(0xFF8B5CF6),
+              shape: BoxShape.circle,
+            ),
+          ),
+          Container(
+            width: 6,
+            height: 6,
+            margin: const EdgeInsets.only(right: 3),
+            decoration: BoxDecoration(
+              color: const Color(0xFF8B5CF6).withOpacity(0.7),
+              shape: BoxShape.circle,
+            ),
+          ),
+          Container(
+            width: 6,
+            height: 6,
+            decoration: BoxDecoration(
+              color: const Color(0xFF8B5CF6).withOpacity(0.4),
+              shape: BoxShape.circle,
             ),
           ),
         ],
@@ -1272,7 +1925,7 @@ class ChatInterfaceState extends State<ChatInterface> {
               icon: Icons.auto_awesome,
               label: 'Change model',
               trailing: Text(
-                _selectedModelConfig?.name ?? 'Select Model',
+                _modelState.selectedModel?.name ?? 'Select Model',
                 style: TextStyle(color: Colors.grey[600]),
               ),
               onTap: () {
@@ -1344,7 +1997,7 @@ class ChatInterfaceState extends State<ChatInterface> {
   }
 
   Future<void> _showModelSelectionSheet() async {
-    final configs = await _modelService.getSavedModels();
+    final configs = _modelState.availableModels.value;
     if (!mounted) return;
 
     showModalBottomSheet(
@@ -1383,7 +2036,7 @@ class ChatInterfaceState extends State<ChatInterface> {
                 itemCount: configs.length,
                 itemBuilder: (context, index) {
                   final config = configs[index];
-                  final isSelected = config.id == _selectedModelId;
+                  final isSelected = config.id == _modelState.selectedModelId.value;
                   
                   return InkWell(
                     onTap: () async {
@@ -1452,9 +2105,9 @@ class ChatInterfaceState extends State<ChatInterface> {
 
   // Helper method to get provider icon
   IconData _getProviderIcon([ModelProvider? provider]) {
-    if (provider == null && _selectedModelConfig == null) return Icons.psychology;
+    if (provider == null && _modelState.selectedModel == null) return Icons.psychology;
     
-    final providerToCheck = provider ?? _selectedModelConfig!.provider;
+    final providerToCheck = provider ?? _modelState.selectedModel!.provider;
     switch (providerToCheck) {
       case ModelProvider.ollama:
         return Icons.terminal;
@@ -1476,7 +2129,7 @@ class ChatInterfaceState extends State<ChatInterface> {
       return await ChatService.getModelResponse(
         userMessage,
         conversationId: conversationId,
-        modelId: _selectedModelId ?? '',
+        modelId: _modelState.selectedModelId.value ?? '',
       );
     } catch (e) {
       print('Error getting AI response: $e');
@@ -1490,7 +2143,7 @@ class ChatInterfaceState extends State<ChatInterface> {
       onSelected: (value) async {
         switch (value) {
           case 'new':
-            await createNewChat();
+            createNewChat();
             break;
           case 'clear':
             await _clearCurrentChat();
@@ -1501,7 +2154,7 @@ class ChatInterfaceState extends State<ChatInterface> {
               MaterialPageRoute(
                 builder: (context) => ChatHistory(
                   onConversationSelected: (id) {
-                    _switchChat(id);
+                    switchChat(id);
                   },
                 ),
               ),
@@ -1542,5 +2195,48 @@ class ChatInterfaceState extends State<ChatInterface> {
         ),
       ],
     );
+  }
+
+  Future<bool> _isWebSearchConfigured() async {
+    try {
+      final selectedConfig = await SearchService.getSelectedSearchConfig();
+      return selectedConfig != null;
+    } catch (e) {
+      debugPrint('Error checking web search configuration: $e');
+      return false;
+    }
+  }
+
+  Future<void> _toggleWebSearch() async {
+    bool isConfigured = await _isWebSearchConfigured();
+    
+    if (!isConfigured) {
+      if (!mounted) return;
+      
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text("Web search is not configured. Configure it in Settings > Search Configuration."),
+          action: SnackBarAction(
+            label: "Settings",
+            onPressed: () {
+              Navigator.push(
+                context, 
+                MaterialPageRoute(builder: (context) => SearchConfigPage()),
+              );
+            },
+          ),
+        ),
+      );
+      return;
+    }
+    
+    // If web search is configured, toggle the mode
+    setState(() {
+      // Add your logic to toggle web search mode
+      // For now, just show a message
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Web search is enabled')),
+      );
+    });
   }
 }

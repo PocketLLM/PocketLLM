@@ -26,9 +26,18 @@ class _HomeScreenState extends State<HomeScreen> {
   
   void _onConversationSelected(String conversationId) {
     // This function will be called when a conversation is selected from the sidebar
-    _chatHistoryService.setActiveConversation(conversationId);
-    // Close the drawer if it's open
-    Navigator.of(context).pop();
+    if (_chatInterfaceKey.currentState != null) {
+      // Use the ChatInterface's method to switch to the selected conversation
+      _chatInterfaceKey.currentState!.switchChat(conversationId);
+    } else {
+      // Fallback if state is not available
+      _chatHistoryService.setActiveConversation(conversationId);
+    }
+    
+    // Close the drawer if it's open and Navigator can pop
+    if (Navigator.canPop(context)) {
+      Navigator.of(context).pop();
+    }
   }
 
   // Method to create a new chat
