@@ -1,0 +1,25 @@
+{
+  "name": "pocketllm-backend",
+  "version": "1.0.0",
+  "description": "Backend for PocketLLM using Supabase Edge Functions",
+  "main": "src/api/index.ts",
+  "scripts": {
+    "start": "deno run --allow-net --allow-env --allow-read src/api/index.ts",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "@supabase/supabase-js": "^2.43.4",
+    "crypto-js": "^4.2.0",
+    "fastify": "^4.27.0",
+    "node-fetch": "^3.3.2",
+    "zod": "^3.23.8",
+    "fastify-zod": "^1.4.0"
+  },
+  "devDependencies": {
+    "@types/crypto-js": "^4.2.2",
+    "@types/node": "^20.12.12",
+    "typescript": "^5.4.5"
+  }
+}
