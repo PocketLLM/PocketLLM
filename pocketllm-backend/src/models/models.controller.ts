@@ -59,5 +59,17 @@ export class ModelsController {
   ) {
     return this.modelsService.deleteModel(request.user.id, params.modelId);
   }
+
+  @Post(':modelId/default')
+  @ApiOperation({
+    summary: 'Set default model',
+    description: 'Marks the selected model as the default for the authenticated user',
+  })
+  async setDefaultModel(
+    @Param(new ZodValidationPipe(modelIdParamsSchema.params)) params: ModelIdParams,
+    @Req() request: any,
+  ) {
+    return this.modelsService.setDefaultModel(request.user.id, params.modelId);
+  }
 }
 

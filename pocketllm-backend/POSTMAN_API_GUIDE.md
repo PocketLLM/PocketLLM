@@ -62,11 +62,25 @@ I've created a comprehensive **Postman API Testing Guide** (`POSTMAN_API_GUIDE.m
    - `GET /v1/jobs/image-generation/models` - Get available image models
    - `POST /v1/jobs/image-generation/estimate-cost` - Estimate image generation cost
 
+5. **🧩 Models (5 endpoints)**
+   - `GET /v1/models` - List saved models
+   - `POST /v1/models/import` - Import models from a provider
+   - `GET /v1/models/{modelId}` - Get model details
+   - `DELETE /v1/models/{modelId}` - Delete a model
+   - `POST /v1/models/{modelId}/default` - Set workspace default model
+
+6. **🔌 Providers (5 endpoints)**
+   - `GET /v1/providers` - List configured providers
+   - `POST /v1/providers/activate` - Create or update provider credentials
+   - `PATCH /v1/providers/{provider}` - Update provider metadata or keys
+   - `DELETE /v1/providers/{provider}` - Deactivate provider and remove keys
+   - `GET /v1/providers/{provider}/models` - Fetch available provider models
+
 
 
 ### 📋 **Each Endpoint Includes:**
 
-- **Group classification** (auth, users, chats, jobs)
+- **Group classification** (auth, users, chats, jobs, models, providers)
 - **Complete URL** with base URL
 - **HTTP method** (GET, POST, PUT, DELETE)
 - **Required headers** (Authorization, Content-Type)
@@ -768,6 +782,278 @@ Authorization: Bearer <access_token>
 
 ---
 
+## 🧩 Models
+
+### GET /v1/models
+**Group:** models
+**URL:** `http://localhost:8000/v1/models`
+
+**Headers:**
+```
+Authorization: Bearer <access_token>
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "data": [
+    {
+      "id": "uuid",
+      "name": "GPT-4 Preview",
+      "provider": "openrouter",
+      "model": "openrouter/gpt-4o-mini",
+      "baseUrl": "https://openrouter.ai/api",
+      "isDefault": true,
+      "metadata": {
+        "description": "Balanced reasoning + speed"
+      },
+      "createdAt": "2024-02-15T10:00:00.000Z",
+      "updatedAt": "2024-02-18T12:00:00.000Z"
+    }
+  ]
+}
+```
+
+### POST /v1/models/import
+**Group:** models
+**URL:** `http://localhost:8000/v1/models/import`
+
+**Headers:**
+```
+Authorization: Bearer <access_token>
+Content-Type: application/json
+```
+
+**Body (JSON):**
+```json
+{
+  "provider": "openrouter",
+  "providerId": "uuid",
+  "sharedSettings": {
+    "temperature": 0.7
+  },
+  "selections": [
+    {
+      "id": "openrouter/gpt-4o-mini",
+      "name": "GPT-4o Mini"
+    }
+  ]
+}
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "data": [
+    {
+      "id": "uuid",
+      "name": "GPT-4o Mini",
+      "provider": "openrouter",
+      "model": "openrouter/gpt-4o-mini",
+      "isDefault": false
+    }
+  ]
+}
+```
+
+### GET /v1/models/{modelId}
+**Group:** models
+**URL:** `http://localhost:8000/v1/models/{modelId}`
+
+**Headers:**
+```
+Authorization: Bearer <access_token>
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "data": {
+    "id": "uuid",
+    "name": "GPT-4o Mini",
+    "provider": "openrouter",
+    "model": "openrouter/gpt-4o-mini",
+    "temperature": 0.7,
+    "systemPrompt": "You are a helpful assistant."
+  }
+}
+```
+
+### DELETE /v1/models/{modelId}
+**Group:** models
+**URL:** `http://localhost:8000/v1/models/{modelId}`
+
+**Headers:**
+```
+Authorization: Bearer <access_token>
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "data": {
+    "message": "Model deleted successfully"
+  }
+}
+```
+
+### POST /v1/models/{modelId}/default
+**Group:** models
+**URL:** `http://localhost:8000/v1/models/{modelId}/default`
+
+**Headers:**
+```
+Authorization: Bearer <access_token>
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "data": {
+    "defaultModelId": "uuid"
+  }
+}
+```
+
+---
+
+## 🔌 Providers
+
+### GET /v1/providers
+**Group:** providers
+**URL:** `http://localhost:8000/v1/providers`
+
+**Headers:**
+```
+Authorization: Bearer <access_token>
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "data": [
+    {
+      "id": "uuid",
+      "provider": "openrouter",
+      "displayName": "OpenRouter",
+      "isActive": true,
+      "hasApiKey": true,
+      "apiKeyPreview": "xxxx",
+      "baseUrl": "https://openrouter.ai/api"
+    }
+  ]
+}
+```
+
+### POST /v1/providers/activate
+**Group:** providers
+**URL:** `http://localhost:8000/v1/providers/activate`
+
+**Headers:**
+```
+Authorization: Bearer <access_token>
+Content-Type: application/json
+```
+
+**Body (JSON):**
+```json
+{
+  "provider": "openrouter",
+  "apiKey": "sk-or-123",
+  "baseUrl": "https://openrouter.ai/api"
+}
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "data": {
+    "id": "uuid",
+    "provider": "openrouter",
+    "displayName": "OpenRouter",
+    "isActive": true,
+    "hasApiKey": true,
+    "apiKeyPreview": "0123"
+  }
+}
+```
+
+### PATCH /v1/providers/{provider}
+**Group:** providers
+**URL:** `http://localhost:8000/v1/providers/{provider}`
+
+**Headers:**
+```
+Authorization: Bearer <access_token>
+Content-Type: application/json
+```
+
+**Body (JSON):**
+```json
+{
+  "displayName": "OpenRouter (Primary)",
+  "isActive": true
+}
+```
+
+### DELETE /v1/providers/{provider}
+**Group:** providers
+**URL:** `http://localhost:8000/v1/providers/{provider}`
+
+**Headers:**
+```
+Authorization: Bearer <access_token>
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "data": {
+    "message": "Provider deactivated"
+  }
+}
+```
+
+### GET /v1/providers/{provider}/models
+**Group:** providers
+**URL:** `http://localhost:8000/v1/providers/{provider}/models`
+
+**Headers:**
+```
+Authorization: Bearer <access_token>
+```
+
+**Query Parameters:**
+```
+search (optional): Filter models by ID, name, or description
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "data": [
+    {
+      "id": "openrouter/gpt-4o-mini",
+      "name": "GPT-4o Mini",
+      "description": "Fast reasoning tuned for chat"
+    }
+  ]
+}
+```
+
+> **Provider Codes:** `openai`, `anthropic`, `ollama`, `openrouter`
+
+---
+
 ## 📝 Testing Notes
 
 ### Authentication Flow
@@ -807,3 +1093,15 @@ All errors follow the same format:
 - **403**: Forbidden
 - **404**: Not Found
 - **500**: Internal Server Error
+
+### Mobile Device Connectivity
+When running the Flutter client on a physical device while the backend is hosted on your development machine:
+
+1. Confirm both devices share the same Wi‑Fi/LAN and the backend is reachable at `http://<computer-ip>:8000/api/docs`.
+2. Launch Flutter with a LAN override so API calls target your desktop instead of `localhost`:
+   ```bash
+   flutter run --dart-define=POCKETLLM_BACKEND_URL=http://<computer-ip>:8000/v1
+   ```
+3. Trigger Sign Up or Sign In in the app and watch the NestJS console for `/v1/auth/signup` or `/v1/auth/signin` log entries to verify traffic is flowing.
+
+Replace `<computer-ip>` with the IPv4 address reported by `ipconfig` (Windows) or `ifconfig`/`ip addr` (macOS/Linux).
