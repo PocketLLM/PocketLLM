@@ -14,7 +14,7 @@ import 'services/auth_state.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:async';
 import 'package:provider/provider.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:supabase_flutter/supabase_flutter.dart' as supa;
 
 // Initialize core services that need to be available before lifecycle service
 Future<void> _initializeCoreServices() async {
@@ -48,10 +48,9 @@ Future<void> _initializeSupabase() async {
   }
 
   try {
-    await Supabase.initialize(
+    await supa.Supabase.initialize(
       url: supabaseUrl,
       anonKey: supabaseAnonKey,
-      authFlowType: AuthFlowType.pkce,
     );
   } catch (e, stackTrace) {
     debugPrint('Supabase initialization failed: $e');

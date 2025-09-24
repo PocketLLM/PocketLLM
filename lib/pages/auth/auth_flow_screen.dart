@@ -50,23 +50,22 @@ class _AuthFlowScreenState extends State<AuthFlowScreen> {
     _handledExistingSession = true;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
+      final route = ModalRoute.of(context);
+      if (route == null || !route.isCurrent) {
+        return;
+      }
+
       final profile = authState.profile!;
       if (profile.surveyCompleted) {
         _completeAndNavigate();
       } else {
-        Navigator.of(context)
-            .push(
-              MaterialPageRoute(
-                builder: (_) => UserSurveyPage(
-                  onComplete: () {},
-                ),
-              ),
-            )
-            .then((_) {
-          if (mounted) {
-            _completeAndNavigate();
-          }
-        });
+        Navigator.of(context).push(
+          MaterialPageRoute(
+            builder: (_) => UserSurveyPage(
+              onComplete: () => _completeAndNavigate(),
+            ),
+          ),
+        );
       }
     });
   }

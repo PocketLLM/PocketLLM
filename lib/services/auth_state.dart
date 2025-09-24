@@ -2,7 +2,7 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:supabase_flutter/supabase_flutter.dart' as supa;
 
 import '../models/user_profile.dart';
 
@@ -17,8 +17,8 @@ class SignUpResult {
   const SignUpResult({required this.userId, this.emailConfirmationRequired = false});
 }
 
-class AuthState extends ChangeNotifier {
-  AuthState() {
+class AuthStateNotifier extends ChangeNotifier {
+  AuthStateNotifier() {
     _initialize();
   }
 
@@ -27,19 +27,19 @@ class AuthState extends ChangeNotifier {
 
   final Completer<void> _readyCompleter = Completer<void>();
 
-  SupabaseClient? _client;
-  User? _supabaseUser;
+  supa.SupabaseClient? _client;
+  supa.User? _supabaseUser;
   UserProfile? _profile;
   bool _supabaseAvailable = true;
-  StreamSubscription<AuthStateChangeEvent>? _authSubscription;
-  RealtimeChannel? _profileChannel;
+  StreamSubscription<supa.AuthState>? _authSubscription;
+  StreamSubscription<List<Map<String, dynamic>>>? _profileSubscription;
 
   bool _isPerformingRequest = false;
 
   Future<void> get ready => _readyCompleter.future;
 
-  SupabaseClient? get client => _client;
-  User? get supabaseUser => _supabaseUser;
+  supa.SupabaseClient? get client => _client;
+  supa.User? get supabaseUser => _supabaseUser;
   UserProfile? get profile => _profile;
   bool get isAuthenticated => _supabaseUser != null;
   bool get supabaseAvailable => _supabaseAvailable;
@@ -47,7 +47,7 @@ class AuthState extends ChangeNotifier {
 
   Future<void> _initialize() async {
     try {
-      _client = Supabase.instance.client;
+      _client = supa.Supabase.instance.client;
     } catch (_) {
       _supabaseAvailable = false;
       if (!_readyCompleter.isCompleted) {
@@ -207,7 +207,7 @@ class AuthState extends ChangeNotifier {
 
   Future<void> updatePassword(String newPassword) async {
     _ensureAuthenticated();
-    await _client!.auth.updateUser(UserAttributes(password: newPassword));
+    await _client!.auth.updateUser(supa.UserAttributes(password: newPassword));
   }
 
   Future<String?> uploadProfileImage(File imageFile) async {
@@ -218,7 +218,7 @@ class AuthState extends ChangeNotifier {
       await _client!.storage.from(_storageBucket).uploadBinary(
             path,
             fileBytes,
-            fileOptions: const FileOptions(contentType: 'image/jpeg', upsert: true),
+            fileOptions: const supa.FileOptions(contentType: 'image/jpeg', upsert: true),
           );
       return _client!.storage.from(_storageBucket).getPublicUrl(path);
     } catch (e) {
@@ -269,7 +269,7 @@ class AuthState extends ChangeNotifier {
     final now = DateTime.now();
     if (scheduled.isBefore(now) || scheduled.isAtSameMomentAs(now)) {
       await signOut();
-      throw AuthException('Account pending deletion');
+      throw supa.AuthException('Account pending deletion');
     }
 
     await cancelAccountDeletion();
@@ -281,7 +281,7 @@ class AuthState extends ChangeNotifier {
     try {
       final existing = await _client!
           .from(_profilesTable)
-          .select<Map<String, dynamic>?>()
+          .select()
           .eq('id', _supabaseUser!.id)
           .maybeSingle();
       if (existing == null) {
@@ -305,7 +305,7 @@ class AuthState extends ChangeNotifier {
     try {
       final data = await _client!
           .from(_profilesTable)
-          .select<Map<String, dynamic>?>()
+          .select()
           .eq('id', _supabaseUser!.id)
           .maybeSingle();
       if (data != null) {
@@ -320,27 +320,20 @@ class AuthState extends ChangeNotifier {
     _unsubscribeFromProfileChanges();
     if (_client == null || _supabaseUser == null) return;
 
-    _profileChannel = _client!
-        .channel('public:profiles')
-      ..on(
-        RealtimeListenTypes.postgresChanges,
-        const ChannelFilter(event: '*', schema: 'public', table: _profilesTable),
-        (payload, [ref]) async {
-          final recordId = payload.newRecord?['id'] ?? payload.oldRecord?['id'];
-          if (recordId == _supabaseUser!.id) {
-            await _loadProfile();
-            notifyListeners();
-          }
-        },
-      )
-      ..subscribe();
+    _profileSubscription = _client!
+        .from(_profilesTable)
+        .stream(primaryKey: ['id'])
+        .eq('id', _supabaseUser!.id)
+        .listen((rows) {
+      if (rows.isEmpty) return;
+      _profile = UserProfile.fromMap(rows.first);
+      notifyListeners();
+    });
   }
 
   void _unsubscribeFromProfileChanges() {
-    if (_profileChannel != null) {
-      _profileChannel!.unsubscribe();
-      _profileChannel = null;
-    }
+    _profileSubscription?.cancel();
+    _profileSubscription = null;
   }
 
   Future<void> _runWithLoading(Future<void> Function() action) async {
@@ -374,3 +367,5 @@ class AuthState extends ChangeNotifier {
     super.dispose();
   }
 }
+
+typedef AuthState = AuthStateNotifier;

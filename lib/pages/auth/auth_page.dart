@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:supabase_flutter/supabase_flutter.dart' as supa;
 
 import '../../models/user_profile.dart';
 import '../../services/auth_state.dart';
@@ -742,7 +743,7 @@ class _AuthPageState extends State<AuthPage> {
           await _navigateToSurvey(authState, emailOverride: email);
         }
       }
-    } on AuthException catch (e) {
+    } on supa.AuthException catch (e) {
       _showSnackBar(context, e.message, success: false);
     } on StateError catch (e) {
       _showSnackBar(context, e.message, success: false);
