@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:smooth_page_indicator/smooth_page_indicator.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../home_screen.dart';
+import '../../services/auth_service.dart';
+import '../../pages/auth/auth_page.dart';
 import 'first_screen.dart';
 import 'second_screen.dart';
 import 'third_screen.dart';
@@ -27,12 +29,37 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool('showHome', true);
     if (!mounted) return;
-    Navigator.pushReplacement(
-      context,
-      MaterialPageRoute(
-        builder: (context) => HomeScreen(),
-      ),
-    );
+    final authService = AuthService();
+    await authService.ready();
+
+    if (authService.isAuthenticated || !authService.canAttemptAuthentication) {
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(
+          builder: (context) => const HomeScreen(),
+        ),
+      );
+    } else {
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(
+          builder: (context) => AuthPage(
+            showAppBar: false,
+            allowSkip: true,
+            onAuthenticated: (ctx) {
+              Navigator.of(ctx).pushReplacement(
+                MaterialPageRoute(builder: (_) => const HomeScreen()),
+              );
+            },
+            onSkip: (ctx) {
+              Navigator.of(ctx).pushReplacement(
+                MaterialPageRoute(builder: (_) => const HomeScreen()),
+              );
+            },
+          ),
+        ),
+      );
+    }
   }
 
   @override

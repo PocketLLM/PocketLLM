@@ -1,11 +1,12 @@
-import 'package:flutter/material.dart';
-// import 'package:supabase_flutter/supabase_flutter.dart';
-import 'package:image_picker/image_picker.dart';
-// import '../../services/auth_service.dart';
-import '../../services/local_db_service.dart';
-import '../../pages/settings/profile_settings.dart';
-import 'dart:math' as math;
+import 'dart:convert';
 import 'dart:io';
+import 'dart:math' as math;
+
+import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
+import 'package:provider/provider.dart';
+
+import '../../services/auth_service.dart';
 
 class UserSurveyPage extends StatefulWidget {
   final String userId;
@@ -33,7 +34,6 @@ class _UserSurveyPageState extends State<UserSurveyPage> with SingleTickerProvid
   String? _errorMessage;
   // final _supabase = Supabase.instance.client;
   // final _authService = AuthService();
-  final _localDBService = LocalDBService();
   File? _profileImage;
   String? _selectedAvatar;
   double _progressValue = 0.0;
@@ -169,25 +169,28 @@ class _UserSurveyPageState extends State<UserSurveyPage> with SingleTickerProvid
           _errorMessage = null;
         });
 
-        String? avatarUrl = _selectedAvatar;
-        // If using profile image, store it locally instead of Supabase
+        final authService = context.read<AuthService>();
+
+        String? avatarPayload;
         if (_profileImage != null) {
-          // In a real app, you'd copy the file to app documents directory
-          // For now, just use the path
-          avatarUrl = _profileImage!.path;
+          final bytes = await _profileImage!.readAsBytes();
+          final encoded = base64Encode(bytes);
+          avatarPayload = 'data:image/jpeg;base64,$encoded';
+        } else if (_selectedAvatar != null) {
+          avatarPayload = 'asset:${_selectedAvatar!}';
         }
 
-        // Use LocalDBService to update user profile
-        await _localDBService.updateUserProfile(
-          userId: widget.userId,
+        await authService.updateProfile(
           fullName: _nameController.text,
           username: _usernameController.text,
           bio: _bioController.text,
           dateOfBirth: _selectedDate,
           profession: _selectedProfession,
-          avatarUrl: avatarUrl,
+          avatarUrl: avatarPayload,
           surveyCompleted: true,
         );
+
+        await authService.refreshProfile();
 
         if (!mounted) return;
         setState(() {
@@ -203,21 +206,9 @@ class _UserSurveyPageState extends State<UserSurveyPage> with SingleTickerProvid
           ),
         );
 
-        // Navigate to ProfileSettingsPage after successful submission
         if (mounted) {
-          // Ensure we're still mounted before starting the delay
-          Future.delayed(const Duration(seconds: 1)).then((_) {
-            // Check again if we're still mounted after the delay
-            if (mounted) {
-              // First navigate to ProfileSettingsPage
-              Navigator.pushReplacement(
-                context,
-                MaterialPageRoute(builder: (context) => const ProfileSettingsPage()),
-              );
-              // Then call the onComplete callback
-              widget.onComplete();
-            }
-          });
+          widget.onComplete();
+          Navigator.of(context).pop();
         }
       } catch (e) {
         if (!mounted) return;

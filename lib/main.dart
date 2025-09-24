@@ -8,6 +8,11 @@ import 'package:pocketllm/services/pocket_llm_service.dart';
 import 'services/model_state.dart';
 import 'services/error_service.dart';
 import 'services/app_lifecycle_service.dart';
+import 'services/auth_service.dart';
+import 'services/supabase_service.dart';
+import 'pages/auth/auth_page.dart';
+
+import 'package:provider/provider.dart';
 
 import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:async';
@@ -24,6 +29,11 @@ Future<void> _initializeCoreServices() async {
     
     // Initialize model state
     await ModelState().init();
+
+    // Initialize Supabase and authentication services
+    final supabaseService = SupabaseService();
+    await supabaseService.initialize();
+    await AuthService().initialize();
   } catch (e, stackTrace) {
     final errorService = ErrorService();
     await errorService.logError(
@@ -113,23 +123,26 @@ class MyApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'PocketLLM',
-      theme: ThemeData(
-        primarySwatch: Colors.purple,
-        primaryColor: Colors.purple,
-        colorScheme: ColorScheme.fromSeed(
-          seedColor: Colors.purple,
-          brightness: Brightness.light,
+    return ChangeNotifierProvider<AuthService>.value(
+      value: AuthService(),
+      child: MaterialApp(
+        title: 'PocketLLM',
+        theme: ThemeData(
+          primarySwatch: Colors.purple,
+          primaryColor: Colors.purple,
+          colorScheme: ColorScheme.fromSeed(
+            seedColor: Colors.purple,
+            brightness: Brightness.light,
+          ),
         ),
+        debugShowCheckedModeBanner: false,
+        home: initializationError != null
+            ? ErrorScreen(
+                error: initializationError!,
+                appLifecycleService: appLifecycleService,
+              )
+            : SplashLoader(appLifecycleService: appLifecycleService),
       ),
-      debugShowCheckedModeBanner: false,
-      home: initializationError != null
-          ? ErrorScreen(
-              error: initializationError!,
-              appLifecycleService: appLifecycleService,
-            )
-          : SplashLoader(appLifecycleService: appLifecycleService),
     );
   }
 }
@@ -400,15 +413,38 @@ class _SplashLoaderState extends State<SplashLoader> {
         return;
       }
 
-      // Check onboarding status
       final prefs = await SharedPreferences.getInstance();
       final bool showHome = prefs.getBool('showHome') ?? false;
 
-      // Navigate to appropriate screen
+      final authService = AuthService();
+      await authService.ready();
+
+      Widget destination;
+      if (!showHome) {
+        destination = const OnboardingScreen();
+      } else if (authService.isAuthenticated) {
+        destination = const HomeScreen();
+      } else if (authService.canAttemptAuthentication && !authService.hasSkippedAuth) {
+        destination = AuthPage(
+          showAppBar: false,
+          allowSkip: true,
+          onAuthenticated: (ctx) {
+            Navigator.of(ctx).pushReplacement(
+              MaterialPageRoute(builder: (_) => const HomeScreen()),
+            );
+          },
+          onSkip: (ctx) {
+            Navigator.of(ctx).pushReplacement(
+              MaterialPageRoute(builder: (_) => const HomeScreen()),
+            );
+          },
+        );
+      } else {
+        destination = const HomeScreen();
+      }
+
       Navigator.of(context).pushReplacement(
-        MaterialPageRoute(
-          builder: (context) => showHome ? const HomeScreen() : const OnboardingScreen(),
-        ),
+        MaterialPageRoute(builder: (context) => destination),
       );
     } catch (e, stackTrace) {
       // Log the error

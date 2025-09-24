@@ -63,6 +63,12 @@ class _SettingsPageState extends State<SettingsPage> {
             iconColor: Colors.blue,
             title: 'Profile Settings',
             subtitle: 'Manage your account and preferences',
+            onTap: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (context) => const ProfileSettingsPage()),
+              );
+            },
           ),
           _buildSettingsItem(
             icon: Icons.notifications_outlined,
