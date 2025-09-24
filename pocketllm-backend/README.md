@@ -1,6 +1,6 @@
 # PocketLLM NestJS Backend
 
-This is the **migrated NestJS backend** for PocketLLM, a chat application that integrates with multiple LLM providers (OpenAI, Anthropic, Ollama) and includes features like image generation and text embeddings.
+This is the **migrated NestJS backend** for PocketLLM, a chat application that integrates with multiple LLM providers (OpenAI, Anthropic, Ollama) and includes features like chat orchestration and image generation.
 
 ## 🚀 Migration Complete
 
@@ -27,9 +27,7 @@ src/
 │           ├── auth.schemas.ts
 │           ├── users.schemas.ts
 │           ├── chats.schemas.ts
-│           ├── models.schemas.ts
-│           ├── jobs.schemas.ts
-│           └── embeddings.schemas.ts
+│           └── jobs.schemas.ts
 ├── auth/                      # Authentication module
 │   ├── auth.controller.ts
 │   ├── auth.service.ts
@@ -37,9 +35,7 @@ src/
 │   └── dto/                   # Legacy DTOs (kept for reference)
 ├── users/                     # User/Profile management
 ├── chats/                     # Chat functionality
-├── models/                    # AI model configuration
 ├── jobs/                      # Background jobs (image generation)
-├── embeddings/                # Text embeddings
 ├── providers/                 # External service integrations
 │   ├── openai.service.ts
 │   ├── anthropic.service.ts
@@ -132,16 +128,16 @@ The API is fully documented with Swagger/OpenAPI. Once the server is running, vi
 
 ### User Profile Endpoints
 
-The profile routes are backed by the `UsersController` and `UsersService`, which read the authenticated Supabase user from
-`request.user`. Ensure your Supabase JWT authentication middleware/guard populates this property before invoking the
-endpoints:
+Profile operations are protected by the shared `SupabaseAuthGuard`, which verifies the Supabase JWT provided in the
+`Authorization: Bearer <token>` header and populates `request.user` before controller logic executes. The same guard is reused
+by the Chats and Jobs controllers so every user-scoped route enforces authenticated access.
 
 - `GET /v1/users/profile` – Fetches the current user's profile row from the `profiles` table.
 - `PUT /v1/users/profile` – Updates the authenticated user's profile data while handling duplicate usernames.
 - `DELETE /v1/users/profile` – Permanently removes the Supabase user and cascades the related profile record.
 
-If `request.user` is absent, the service will not know which profile to operate on. Configure Supabase's auth webhook or a
-NestJS guard to validate incoming tokens and attach the `id` field to the request before routing reaches the controller.
+The `UsersService` performs an additional user ID check and returns a `401 Unauthorized` response when the guard is bypassed or
+an invalid token is supplied.
 
 ## 🔧 Key Features
 
@@ -173,7 +169,7 @@ All API responses follow a consistent format:
 ```
 
 ### 3. **Multi-Provider AI Integration**
-- **OpenAI**: GPT models and embeddings
+- **OpenAI**: GPT chat models
 - **Anthropic**: Claude models
 - **Ollama**: Local/self-hosted models
 - **ImageRouter**: Image generation

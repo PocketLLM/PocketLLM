@@ -8,13 +8,16 @@ import {
   Query, 
   Req, 
   HttpCode, 
-  HttpStatus 
+  HttpStatus,
+  UseGuards,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse, ApiBody, ApiBearerAuth } from '@nestjs/swagger';
 import { JobsService } from './jobs.service';
+import { SupabaseAuthGuard } from '../auth/guards/supabase-auth.guard';
 
 @ApiTags('Jobs')
 @Controller('jobs')
+@UseGuards(SupabaseAuthGuard)
 @ApiBearerAuth()
 export class JobsController {
   constructor(private readonly jobsService: JobsService) {}

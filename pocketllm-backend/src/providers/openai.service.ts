@@ -13,15 +13,6 @@ interface OpenAIResponse {
   };
 }
 
-interface OpenAIEmbeddingResponse {
-  data: {
-    embedding: number[];
-  }[];
-  error?: {
-    message: string;
-  };
-}
-
 @Injectable()
 export class OpenAIService {
   private readonly logger = new Logger(OpenAIService.name);
@@ -82,50 +73,4 @@ export class OpenAIService {
     }
   }
 
-  /**
-   * Calls the OpenAI Embeddings API to generate embeddings for text.
-   * @param text The text to generate embeddings for.
-   * @param apiKey The user's OpenAI API key.
-   * @param model The embedding model to use (e.g., 'text-embedding-3-large').
-   * @returns An object containing the embedding vector.
-   */
-  async getEmbedding(
-    text: string,
-    apiKey: string,
-    model: string,
-  ): Promise<{ embedding: number[] }> {
-    try {
-      const response = await firstValueFrom(
-        this.httpService.post<OpenAIEmbeddingResponse>(
-          'https://api.openai.com/v1/embeddings',
-          {
-            model: model,
-            input: text,
-          },
-          {
-            headers: {
-              'Content-Type': 'application/json',
-              Authorization: `Bearer ${apiKey}`,
-            },
-          },
-        ),
-      );
-
-      const embedding = response.data.data[0]?.embedding;
-
-      if (!embedding) {
-        throw new Error('Invalid response structure from OpenAI Embeddings API. No embedding found.');
-      }
-
-      return { embedding };
-    } catch (error) {
-      this.logger.error('OpenAI Embeddings API error:', error);
-
-      if (error.response?.data?.error?.message) {
-        throw new Error(`OpenAI Embeddings API error (${error.response.status}): ${error.response.data.error.message}`);
-      }
-
-      throw new Error(`OpenAI Embeddings API error: ${error.message}`);
-    }
-  }
 }

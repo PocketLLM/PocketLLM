@@ -25,7 +25,7 @@ Follow these steps to prepare the NestJS backend before exercising the API colle
    ```
    The REST API will be available at `http://localhost:8000/v1` and Swagger documentation at `http://localhost:8000/api/docs`.
 4. **Authenticate requests**
-   Use `POST /v1/auth/signin` to obtain an access token and send it in the `Authorization: Bearer <token>` header when calling protected routes such as the user profile endpoints.
+   Use `POST /v1/auth/signin` to obtain an access token and send it in the `Authorization: Bearer <token>` header when calling protected routes. The Users, Chats, and Jobs controllers are guarded by the Supabase JWT so every request must include a valid token.
 
 I've created a comprehensive API documentation guide for Postman testing. Let me create a summary of what was accomplished:
 
@@ -178,8 +178,7 @@ All API responses follow this standardized format:
 
 ## 👤 Users
 
-> **Note:** These profile operations read the authenticated Supabase user from `request.user.id`. Always supply a valid JWT via
-> the `Authorization: Bearer <token>` header so the backend can resolve the correct profile record.
+> **Note:** These profile operations execute behind the `SupabaseAuthGuard`, which resolves the authenticated Supabase user into `request.user.id`. Always supply a valid JWT via the `Authorization: Bearer <token>` header so the backend can resolve the correct profile record.
 
 ### GET /v1/users/profile
 **Group:** users  

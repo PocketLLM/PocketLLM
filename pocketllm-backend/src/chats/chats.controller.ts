@@ -9,13 +9,16 @@ import {
   Query, 
   Req, 
   HttpCode, 
-  HttpStatus 
+  HttpStatus,
+  UseGuards,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse, ApiBody, ApiBearerAuth } from '@nestjs/swagger';
 import { ChatsService } from './chats.service';
+import { SupabaseAuthGuard } from '../auth/guards/supabase-auth.guard';
 
 @ApiTags('Chats')
 @Controller('chats')
+@UseGuards(SupabaseAuthGuard)
 @ApiBearerAuth()
 export class ChatsController {
   constructor(private readonly chatsService: ChatsService) {}
