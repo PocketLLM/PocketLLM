@@ -20,7 +20,7 @@ The backend code is organized to separate concerns, making it easier to maintain
 
 ### Prerequisites
 
--   [Deno](https://deno.land/) installed on your machine.
+-   [Deno](https://deno.land/) installed on your machine. You can install it for windows by running `irm https://deno.land/install.ps1 | iex` and for mac/linux by running `curl -fsSL https://deno.land/install.sh | sh`
 -   A Supabase project. You can create one for free at [supabase.com](https://supabase.com).
 
 ### 1. Environment Setup
