@@ -89,6 +89,8 @@ class AuthStateNotifier extends ChangeNotifier {
   final FlutterSecureStorage _secureStorage;
   final Completer<void> _readyCompleter = Completer<void>();
 
+  static const Duration _deletionGracePeriod = Duration(days: 30);
+
   String? _accessToken;
   String? _refreshToken;
   DateTime? _accessTokenExpiresAt;
@@ -254,17 +256,61 @@ class AuthStateNotifier extends ChangeNotifier {
 
   Future<void> requestAccountDeletion() async {
     _ensureAuthenticated();
-    final now = DateTime.now().toUtc();
-    final scheduled = now.add(const Duration(days: 30));
-    _deletionSchedule = DeletionSchedule(requestedAt: now, scheduledFor: scheduled);
-    await _persistDeletionSchedule();
-    _applyDeletionScheduleToProfile();
+    await _runWithLoading(() async {
+      final requestedAt = DateTime.now().toUtc();
+      final scheduledFor = requestedAt.add(_deletionGracePeriod);
+
+      final payload = await _post(
+        '/users/profile/deletion',
+        requiresAuth: true,
+        body: {
+          'requested_at': requestedAt.toIso8601String(),
+          'scheduled_for': scheduledFor.toIso8601String(),
+        },
+      );
+
+      final data = _extractData(payload);
+      final profileData = _extractProfilePayload(data);
+      final schedule = _parseDeletionSchedule(
+            profileData ?? data,
+            fallbackRequestedAt: requestedAt,
+            fallbackScheduledFor: scheduledFor,
+          ) ??
+          DeletionSchedule(requestedAt: requestedAt, scheduledFor: scheduledFor);
+
+      await _saveDeletionSchedule(schedule);
+
+      if (profileData != null) {
+        _profile = UserProfile.fromMap(profileData);
+        _applyDeletionScheduleToProfile();
+      } else {
+        await _fetchProfile();
+      }
+    });
+
     notifyListeners();
   }
 
   Future<void> cancelAccountDeletion() async {
     _ensureAuthenticated();
-    await _clearDeletionSchedule();
+    await _runWithLoading(() async {
+      final payload = await _post(
+        '/users/profile/deletion/cancel',
+        requiresAuth: true,
+      );
+
+      final data = _extractData(payload);
+      await _removeDeletionSchedule();
+
+      final profileData = _extractProfilePayload(data);
+      if (profileData != null) {
+        _profile = UserProfile.fromMap(profileData);
+        _applyDeletionScheduleToProfile();
+      } else {
+        await _fetchProfile();
+      }
+    });
+
     notifyListeners();
   }
 
@@ -278,7 +324,22 @@ class AuthStateNotifier extends ChangeNotifier {
       return false;
     }
 
-    await _clearDeletionSchedule();
+    final payload = await _post(
+      '/users/profile/deletion/cancel',
+      requiresAuth: true,
+    );
+
+    final data = _extractData(payload);
+    await _removeDeletionSchedule();
+
+    final profileData = _extractProfilePayload(data);
+    if (profileData != null) {
+      _profile = UserProfile.fromMap(profileData);
+      _applyDeletionScheduleToProfile();
+    } else {
+      await _fetchProfile();
+    }
+
     return true;
   }
 
@@ -297,7 +358,10 @@ class AuthStateNotifier extends ChangeNotifier {
     final response = await _get('/users/profile', requiresAuth: true);
     final data = _extractData(response);
     if (data is Map<String, dynamic>) {
-      _profile = UserProfile.fromMap(_mergeProfileWithDeletion(data));
+      final profile = UserProfile.fromMap(data);
+      await _synchronizeDeletionSchedule(profile);
+      _profile = profile;
+      _applyDeletionScheduleToProfile();
     }
   }
 
@@ -479,22 +543,8 @@ class AuthStateNotifier extends ChangeNotifier {
     }
   }
 
-  Future<void> _persistDeletionSchedule() async {
-    if (_userId == null || _deletionSchedule == null) {
-      return;
-    }
-    await _secureStorage.write(
-      key: _deletionStorageKey(_userId!),
-      value: jsonEncode(_deletionSchedule!.toJson()),
-    );
-  }
-
   Future<void> _clearDeletionSchedule() async {
-    _deletionSchedule = null;
-    if (_userId != null) {
-      await _secureStorage.delete(key: _deletionStorageKey(_userId!));
-    }
-    _applyDeletionScheduleToProfile();
+    await _removeDeletionSchedule();
   }
 
   void _applyDeletionScheduleToProfile() {
@@ -515,6 +565,103 @@ class AuthStateNotifier extends ChangeNotifier {
   }
 
   String _deletionStorageKey(String userId) => '$_deletionInfoPrefix$userId';
+
+  Future<void> _saveDeletionSchedule(DeletionSchedule schedule, {bool updateProfile = true}) async {
+    final existing = _deletionSchedule;
+    final matchesExisting = existing != null &&
+        existing.requestedAt.isAtSameMomentAs(schedule.requestedAt) &&
+        existing.scheduledFor.isAtSameMomentAs(schedule.scheduledFor);
+
+    _deletionSchedule = schedule;
+    if (!matchesExisting && _userId != null) {
+      await _secureStorage.write(
+        key: _deletionStorageKey(_userId!),
+        value: jsonEncode(schedule.toJson()),
+      );
+    }
+    if (updateProfile) {
+      _applyDeletionScheduleToProfile();
+    }
+  }
+
+  Future<void> _removeDeletionSchedule({bool updateProfile = true}) async {
+    final hadSchedule = _deletionSchedule != null;
+    _deletionSchedule = null;
+    if (_userId != null) {
+      await _secureStorage.delete(key: _deletionStorageKey(_userId!));
+    }
+    if (updateProfile && (hadSchedule || _profile != null)) {
+      _applyDeletionScheduleToProfile();
+    }
+  }
+
+  Future<void> _synchronizeDeletionSchedule(UserProfile profile) async {
+    if (profile.deletionStatus == 'pending' && profile.deletionScheduledFor != null) {
+      final requestedAt = (profile.deletionRequestedAt ??
+              profile.deletionScheduledFor!.subtract(_deletionGracePeriod))
+          .toUtc();
+      final scheduledFor = profile.deletionScheduledFor!.toUtc();
+      await _saveDeletionSchedule(
+        DeletionSchedule(requestedAt: requestedAt, scheduledFor: scheduledFor),
+        updateProfile: false,
+      );
+    } else if (_deletionSchedule != null) {
+      await _removeDeletionSchedule(updateProfile: false);
+    }
+  }
+
+  Map<String, dynamic>? _extractProfilePayload(Map<String, dynamic> data) {
+    final profile = data['profile'];
+    if (profile is Map<String, dynamic>) {
+      return Map<String, dynamic>.from(profile);
+    }
+    if (data.containsKey('id') && data.containsKey('email')) {
+      return data;
+    }
+    return null;
+  }
+
+  DeletionSchedule? _parseDeletionSchedule(
+    Map<String, dynamic> data, {
+    DateTime? fallbackRequestedAt,
+    DateTime? fallbackScheduledFor,
+  }) {
+    final requestedAt = _parseDateTime(
+          data['deletion_requested_at'] ?? data['requested_at'] ?? data['requestedAt'],
+        ) ??
+        fallbackRequestedAt;
+
+    DateTime? scheduledFor = _parseDateTime(
+      data['deletion_scheduled_for'] ?? data['scheduled_for'] ?? data['scheduledFor'],
+    );
+
+    if (scheduledFor == null && fallbackScheduledFor != null) {
+      scheduledFor = fallbackScheduledFor;
+    } else if (scheduledFor == null && requestedAt != null) {
+      scheduledFor = requestedAt.add(_deletionGracePeriod);
+    }
+
+    if (requestedAt != null && scheduledFor != null) {
+      return DeletionSchedule(requestedAt: requestedAt.toUtc(), scheduledFor: scheduledFor.toUtc());
+    }
+
+    return null;
+  }
+
+  DateTime? _parseDateTime(dynamic value) {
+    if (value == null) return null;
+    if (value is DateTime) {
+      return value.toUtc();
+    }
+    if (value is int) {
+      return DateTime.fromMillisecondsSinceEpoch(value).toUtc();
+    }
+    if (value is String && value.isNotEmpty) {
+      final parsed = DateTime.tryParse(value);
+      return parsed?.toUtc();
+    }
+    return null;
+  }
 
   void _ensureAuthenticated() {
     if (_accessToken == null) {
