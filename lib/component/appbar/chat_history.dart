@@ -83,6 +83,7 @@ class _ChatHistoryState extends State<ChatHistory>
     setState(() {
       _isLoading = true;
     });
+    _ensurePageVisible();
 
     try {
       final conversations = await _chatHistoryService.loadConversations();
@@ -99,6 +100,7 @@ class _ChatHistoryState extends State<ChatHistory>
       setState(() {
         _isLoading = false;
       });
+      _ensurePageVisible();
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Failed to load chat history: $e')),
       );
@@ -135,7 +137,19 @@ class _ChatHistoryState extends State<ChatHistory>
     });
 
     if (shouldAnimate) {
+      _ensurePageVisible(restart: true);
+    }
+  }
+
+  void _ensurePageVisible({bool restart = false}) {
+    if (restart) {
       _pageAnimationController.forward(from: 0.0);
+      return;
+    }
+
+    if (_pageAnimationController.status == AnimationStatus.dismissed ||
+        _pageAnimationController.value == 0.0) {
+      _pageAnimationController.forward();
     }
   }
 
