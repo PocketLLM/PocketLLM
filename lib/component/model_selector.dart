@@ -543,6 +543,10 @@ class _ModelSelectorState extends State<ModelSelector> {
         iconData = Icons.psychology;
         iconColor = Colors.purple;
         break;
+      case ModelProvider.openRouter:
+        iconData = Icons.route;
+        iconColor = Colors.deepPurple;
+        break;
       case ModelProvider.lmStudio:
         iconData = Icons.science;
         iconColor = Colors.orange;
