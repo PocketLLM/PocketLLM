@@ -1,13 +1,21 @@
 {
-  "functions": {
-    "api/index.ts": {
-      "runtime": "nodejs22.x",
-      "memory": 1024,
-      "maxDuration": 10
+  "version": 2,
+  "builds": [
+    {
+      "src": "api/index.ts",
+      "use": "@vercel/node",
+      "config": {
+        "includeFiles": [
+          "dist/**"
+        ]
+      }
     }
-  },
+  ],
   "routes": [
-    { "src": "/(.*)", "dest": "/api/index.ts" }
+    {
+      "src": "/(.*)",
+      "dest": "api/index.ts"
+    }
   ],
   "env": {
     "NODE_ENV": "production"
