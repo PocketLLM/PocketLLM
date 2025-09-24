@@ -1,11 +1,14 @@
-import { FastifyInstance, FastifyPluginOptions } from 'fastify'
+import { FastifyInstance, FastifyPluginOptions, FastifyRequest, FastifyReply } from 'fastify'
 import {
     createModelConfigHandler,
     listModelConfigsHandler,
     getModelConfigHandler,
     updateModelConfigHandler,
-    deleteModelConfigHandler
+    deleteModelConfigHandler,
+    listOllamaModelsHandler,
+    getOllamaModelDetailHandler
 } from '../v1/controllers/modelController.ts'
+import { sendResponse } from '../../shared/utils/responseHandler.ts'
 import {
     createModelConfigSchema,
     listModelConfigsSchema,
@@ -50,5 +53,32 @@ export default async function(fastify: FastifyInstance, opts: FastifyPluginOptio
     schema: deleteModelConfigSchema,
     handler: deleteModelConfigHandler
   })
+
+  // =================================================================
+  // OLLAMA-SPECIFIC ROUTES
+  // =================================================================
+
+  fastify.route({
+    method: 'GET',
+    url: '/v1/ollama/models',
+    // No schema here as the response comes directly from Ollama
+    handler: listOllamaModelsHandler
+  })
+
+  fastify.route({
+    method: 'GET',
+    url: '/v1/ollama/models/:modelName',
+    handler: getOllamaModelDetailHandler
+  })
+
+  // "Coming Soon" placeholder handler for more complex Ollama operations
+  const comingSoonHandler = (request: FastifyRequest, reply: FastifyReply) => {
+    return sendResponse(reply, request, null, 'This feature is coming soon.', 501);
+  }
+
+  fastify.post('/v1/ollama/models/pull', { handler: comingSoonHandler });
+  fastify.delete('/v1/ollama/models', { handler: comingSoonHandler });
+  fastify.post('/v1/ollama/models/copy', { handler: comingSoonHandler });
+  fastify.post('/v1/ollama/models/push', { handler: comingSoonHandler });
 
 }

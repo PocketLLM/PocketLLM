@@ -1,12 +1,15 @@
 import Fastify from 'fastify'
 import { ZodTypeProvider, withZod } from 'fastify-zod'
 import { supabaseAdmin } from '../shared/supabaseClient.ts'
+import { addRequestHooks } from '../shared/utils/responseHandler.ts'
 
 // Import route plugins
 import authRoutes from './routes/auth.ts'
 import chatRoutes from './routes/chats.ts'
 import jobRoutes from './routes/jobs.ts'
 import modelRoutes from './routes/models.ts'
+import profileRoutes from './routes/profiles.ts'
+import embeddingRoutes from './routes/embeddings.ts'
 
 // Augment FastifyRequest to include the 'user' property, making it available on authenticated requests
 declare module 'fastify' {
@@ -18,6 +21,9 @@ declare module 'fastify' {
 // Initialize Fastify with Zod support
 const fastify = Fastify().withTypeProvider<ZodTypeProvider>()
 withZod(fastify)
+
+// Register hooks for request metadata (requestId, startTime)
+addRequestHooks(fastify)
 
 // Decorate the Fastify instance with an authentication handler
 fastify.decorate('authenticate', async function(request, reply) {
@@ -48,6 +54,8 @@ fastify.register(async (instance) => {
   instance.register(chatRoutes)
   instance.register(jobRoutes)
   instance.register(modelRoutes)
+  instance.register(profileRoutes)
+  instance.register(embeddingRoutes)
 })
 
 // Main handler for the Supabase Edge Function

@@ -62,3 +62,42 @@ export const deleteModelConfigSchema = asConst({
   params: z.object({ id: z.string().uuid() }),
   response: { 204: z.null() } // Use z.null() for empty response body
 });
+
+// =================================================================
+// Schemas for interacting with the Ollama API
+// =================================================================
+
+// Schema for the details of a single Ollama model tag from /api/tags
+export const ollamaModelDetailsSchema = z.object({
+  format: z.string(),
+  family: z.string(),
+  families: z.array(z.string()).nullable(),
+  parameter_size: z.string(),
+  quantization_level: z.string(),
+});
+
+// Schema for a single Ollama model from the /api/tags endpoint
+export const ollamaModelSchema = z.object({
+  name: z.string(),
+  modified_at: z.string(),
+  size: z.number(),
+  digest: z.string(),
+  details: ollamaModelDetailsSchema,
+});
+
+// Schema for the response from the GET /api/tags endpoint
+export const ollamaListModelsResponseSchema = z.object({
+  models: z.array(ollamaModelSchema),
+});
+
+// Schema for the detailed response from the POST /api/show endpoint
+export const ollamaShowModelResponseSchema = z.object({
+    modelfile: z.string(),
+    parameters: z.string(),
+    template: z.string(),
+    details: ollamaModelDetailsSchema.extend({
+        parent_model: z.string(),
+    }),
+    model_info: z.record(z.any()), // This is a large, dynamic object that we don't need to strictly validate
+    capabilities: z.array(z.string()).optional(),
+});
