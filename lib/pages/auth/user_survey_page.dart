@@ -1,19 +1,17 @@
-import 'package:flutter/material.dart';
-// import 'package:supabase_flutter/supabase_flutter.dart';
-import 'package:image_picker/image_picker.dart';
-// import '../../services/auth_service.dart';
-import '../../services/local_db_service.dart';
-import '../../pages/settings/profile_settings.dart';
-import 'dart:math' as math;
 import 'dart:io';
+import 'dart:math' as math;
+
+import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
+import 'package:provider/provider.dart';
+
+import '../../services/auth_state.dart';
 
 class UserSurveyPage extends StatefulWidget {
-  final String userId;
   final VoidCallback onComplete;
 
   const UserSurveyPage({
     super.key,
-    required this.userId,
     required this.onComplete,
   });
 
@@ -29,19 +27,15 @@ class _UserSurveyPageState extends State<UserSurveyPage> with SingleTickerProvid
   DateTime? _selectedDate;
   String? _selectedProfession;
   String? _selectedSource;
-  bool _isSubmitting = false;
-  String? _errorMessage;
-  // final _supabase = Supabase.instance.client;
-  // final _authService = AuthService();
-  final _localDBService = LocalDBService();
   File? _profileImage;
   String? _selectedAvatar;
+  bool _isSubmitting = false;
+  String? _errorMessage;
   double _progressValue = 0.0;
 
   AnimationController? _controller;
   Animation<double>? _fadeAnimation;
   Animation<Offset>? _slideAnimation;
-  bool _isControllerInitialized = false;
 
   final List<String> _professions = [
     'Student',
@@ -77,14 +71,11 @@ class _UserSurveyPageState extends State<UserSurveyPage> with SingleTickerProvid
 
     _controller = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 1000),
+      duration: const Duration(milliseconds: 900),
     );
     _fadeAnimation = CurvedAnimation(parent: _controller!, curve: Curves.easeInOut);
-    _slideAnimation = Tween<Offset>(begin: const Offset(0.0, 0.5), end: Offset.zero)
+    _slideAnimation = Tween<Offset>(begin: const Offset(0.0, 0.25), end: Offset.zero)
         .animate(CurvedAnimation(parent: _controller!, curve: Curves.easeInOut));
-    setState(() {
-      _isControllerInitialized = true;
-    });
     _controller!.forward();
   }
 
@@ -99,12 +90,12 @@ class _UserSurveyPageState extends State<UserSurveyPage> with SingleTickerProvid
 
   void _updateProgress() {
     double progress = 0.0;
-    if (_nameController.text.isNotEmpty) progress += 0.166;
-    if (_usernameController.text.isNotEmpty) progress += 0.166;
-    if (_selectedDate != null) progress += 0.166;
-    if (_selectedProfession != null) progress += 0.166;
-    if (_selectedSource != null) progress += 0.166;
-    if (_profileImage != null || _selectedAvatar != null) progress += 0.166;
+    if (_nameController.text.isNotEmpty) progress += 0.17;
+    if (_usernameController.text.isNotEmpty) progress += 0.17;
+    if (_selectedDate != null) progress += 0.17;
+    if (_selectedProfession != null) progress += 0.17;
+    if (_selectedSource != null) progress += 0.16;
+    if (_profileImage != null || _selectedAvatar != null) progress += 0.16;
 
     setState(() {
       _progressValue = progress.clamp(0.0, 1.0);
@@ -113,13 +104,8 @@ class _UserSurveyPageState extends State<UserSurveyPage> with SingleTickerProvid
 
   Future<void> _pickImage() async {
     try {
-      final ImagePicker picker = ImagePicker();
-      final XFile? image = await picker.pickImage(
-        source: ImageSource.gallery,
-        maxHeight: 400,
-        maxWidth: 400,
-      );
-
+      final picker = ImagePicker();
+      final image = await picker.pickImage(source: ImageSource.gallery, maxHeight: 600, maxWidth: 600);
       if (image != null) {
         setState(() {
           _profileImage = File(image.path);
@@ -129,13 +115,13 @@ class _UserSurveyPageState extends State<UserSurveyPage> with SingleTickerProvid
       }
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error picking image: $e')),
+        SnackBar(content: Text('Error selecting image: $e')),
       );
     }
   }
 
   Future<void> _selectDate(BuildContext context) async {
-    final DateTime? picked = await showDatePicker(
+    final picked = await showDatePicker(
       context: context,
       initialDate: DateTime.now().subtract(const Duration(days: 365 * 18)),
       firstDate: DateTime(1950),
@@ -152,7 +138,8 @@ class _UserSurveyPageState extends State<UserSurveyPage> with SingleTickerProvid
         );
       },
     );
-    if (picked != null && picked != _selectedDate) {
+
+    if (picked != null) {
       setState(() {
         _selectedDate = picked;
         _updateProgress();
@@ -161,89 +148,73 @@ class _UserSurveyPageState extends State<UserSurveyPage> with SingleTickerProvid
   }
 
   Future<void> _saveProfileAndComplete() async {
-    if (_formKey.currentState!.validate()) {
-      try {
-        if (!mounted) return;
-        setState(() {
-          _isSubmitting = true;
-          _errorMessage = null;
-        });
+    if (!(_formKey.currentState?.validate() ?? false)) {
+      return;
+    }
 
-        String? avatarUrl = _selectedAvatar;
-        // If using profile image, store it locally instead of Supabase
-        if (_profileImage != null) {
-          // In a real app, you'd copy the file to app documents directory
-          // For now, just use the path
-          avatarUrl = _profileImage!.path;
-        }
+    final authState = context.read<AuthState>();
+    try {
+      setState(() {
+        _isSubmitting = true;
+        _errorMessage = null;
+      });
 
-        // Use LocalDBService to update user profile
-        await _localDBService.updateUserProfile(
-          userId: widget.userId,
-          fullName: _nameController.text,
-          username: _usernameController.text,
-          bio: _bioController.text,
-          dateOfBirth: _selectedDate,
-          profession: _selectedProfession,
-          avatarUrl: avatarUrl,
-          surveyCompleted: true,
-        );
-
-        if (!mounted) return;
-        setState(() {
-          _isSubmitting = false;
-        });
-
-        if (!mounted) return;
-
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Profile completed successfully!'),
-            backgroundColor: Color(0xFF6D28D9),
-          ),
-        );
-
-        // Navigate to ProfileSettingsPage after successful submission
-        if (mounted) {
-          // Ensure we're still mounted before starting the delay
-          Future.delayed(const Duration(seconds: 1)).then((_) {
-            // Check again if we're still mounted after the delay
-            if (mounted) {
-              // First navigate to ProfileSettingsPage
-              Navigator.pushReplacement(
-                context,
-                MaterialPageRoute(builder: (context) => const ProfileSettingsPage()),
-              );
-              // Then call the onComplete callback
-              widget.onComplete();
-            }
-          });
-        }
-      } catch (e) {
-        if (!mounted) return;
-        setState(() {
-          _isSubmitting = false;
-          _errorMessage = 'Error saving profile: ${e.toString()}';
-        });
-
-        if (mounted) {
+      String? avatarUrl = _selectedAvatar;
+      if (_profileImage != null) {
+        try {
+          avatarUrl = await authState.uploadProfileImage(_profileImage!);
+        } catch (e) {
+          avatarUrl = null;
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(_errorMessage ?? 'An error occurred'),
-              backgroundColor: Colors.redAccent,
-            ),
+            SnackBar(content: Text('Unable to upload profile image: $e')),
           );
         }
       }
+
+      await authState.completeProfile(
+        fullName: _nameController.text.trim(),
+        username: _usernameController.text.trim(),
+        bio: _bioController.text.trim().isEmpty ? null : _bioController.text.trim(),
+        dateOfBirth: _selectedDate,
+        profession: _selectedProfession,
+        heardFrom: _selectedSource,
+        avatarUrl: avatarUrl,
+      );
+
+      await authState.refreshProfile();
+
+      if (!mounted) return;
+      setState(() {
+        _isSubmitting = false;
+      });
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Profile completed successfully!'),
+          backgroundColor: Color(0xFF6D28D9),
+        ),
+      );
+
+      widget.onComplete();
+      if (Navigator.canPop(context)) {
+        Navigator.pop(context);
+      }
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _isSubmitting = false;
+        _errorMessage = 'Error saving profile: $e';
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(_errorMessage ?? 'An error occurred'), backgroundColor: Colors.redAccent),
+      );
     }
   }
 
   InputDecoration _buildInputDecoration(String label) {
     return InputDecoration(
       labelText: label,
-      border: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(8),
-      ),
+      border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
     );
   }
 
@@ -255,10 +226,7 @@ class _UserSurveyPageState extends State<UserSurveyPage> with SingleTickerProvid
         appBar: AppBar(
           backgroundColor: Colors.grey[50],
           elevation: 0,
-          leading: IconButton(
-            icon: const Icon(Icons.arrow_back, color: Colors.black, size: 28),
-            onPressed: () => {}, // Disabled since this is a required survey
-          ),
+          automaticallyImplyLeading: false,
           title: const Text(
             'Profile Setup',
             style: TextStyle(
@@ -274,6 +242,7 @@ class _UserSurveyPageState extends State<UserSurveyPage> with SingleTickerProvid
               Padding(
                 padding: const EdgeInsets.all(16.0),
                 child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     LinearProgressIndicator(
                       value: _progressValue,
@@ -292,14 +261,15 @@ class _UserSurveyPageState extends State<UserSurveyPage> with SingleTickerProvid
               Expanded(
                 child: SingleChildScrollView(
                   padding: const EdgeInsets.all(16.0),
-                  child: _isControllerInitialized && _controller != null
-                      ? AnimatedBuilder(
+                  child: _controller == null
+                      ? const SizedBox.shrink()
+                      : AnimatedBuilder(
                           animation: _controller!,
                           builder: (context, child) {
                             return Opacity(
-                              opacity: _fadeAnimation!.value,
+                              opacity: _fadeAnimation?.value ?? 1.0,
                               child: Transform.translate(
-                                offset: _slideAnimation!.value,
+                                offset: _slideAnimation?.value ?? Offset.zero,
                                 child: child,
                               ),
                             );
@@ -317,9 +287,7 @@ class _UserSurveyPageState extends State<UserSurveyPage> with SingleTickerProvid
                                         radius: 50,
                                         backgroundImage: _profileImage != null
                                             ? FileImage(_profileImage!)
-                                            : _selectedAvatar != null
-                                                ? AssetImage(_selectedAvatar!)
-                                                : null,
+                                            : (_selectedAvatar != null ? AssetImage(_selectedAvatar!) as ImageProvider : null),
                                         child: _profileImage == null && _selectedAvatar == null
                                             ? const Icon(Icons.person, size: 50)
                                             : null,
@@ -342,21 +310,21 @@ class _UserSurveyPageState extends State<UserSurveyPage> with SingleTickerProvid
                                 TextFormField(
                                   controller: _nameController,
                                   decoration: _buildInputDecoration('Full Name'),
-                                  validator: (value) => value?.isEmpty ?? true ? 'Required' : null,
+                                  validator: (value) => value == null || value.trim().isEmpty ? 'Required' : null,
                                   onChanged: (_) => _updateProgress(),
                                 ),
                                 const SizedBox(height: 16),
                                 TextFormField(
                                   controller: _usernameController,
                                   decoration: _buildInputDecoration('Username'),
-                                  validator: (value) => value?.isEmpty ?? true ? 'Required' : null,
+                                  validator: (value) => value == null || value.trim().isEmpty ? 'Required' : null,
                                   onChanged: (_) => _updateProgress(),
                                 ),
                                 const SizedBox(height: 16),
                                 TextFormField(
                                   controller: _bioController,
                                   maxLines: 3,
-                                  decoration: _buildInputDecoration('Bio'),
+                                  decoration: _buildInputDecoration('Bio (optional)'),
                                   onChanged: (_) => _updateProgress(),
                                 ),
                                 const SizedBox(height: 16),
@@ -375,12 +343,9 @@ class _UserSurveyPageState extends State<UserSurveyPage> with SingleTickerProvid
                                 DropdownButtonFormField<String>(
                                   value: _selectedProfession,
                                   decoration: _buildInputDecoration('Profession'),
-                                  items: _professions.map((String value) {
-                                    return DropdownMenuItem<String>(
-                                      value: value,
-                                      child: Text(value),
-                                    );
-                                  }).toList(),
+                                  items: _professions
+                                      .map((value) => DropdownMenuItem(value: value, child: Text(value)))
+                                      .toList(),
                                   onChanged: (newValue) {
                                     setState(() {
                                       _selectedProfession = newValue;
@@ -392,12 +357,9 @@ class _UserSurveyPageState extends State<UserSurveyPage> with SingleTickerProvid
                                 DropdownButtonFormField<String>(
                                   value: _selectedSource,
                                   decoration: _buildInputDecoration('How did you hear about us?'),
-                                  items: _sources.map((String value) {
-                                    return DropdownMenuItem<String>(
-                                      value: value,
-                                      child: Text(value),
-                                    );
-                                  }).toList(),
+                                  items: _sources
+                                      .map((value) => DropdownMenuItem(value: value, child: Text(value)))
+                                      .toList(),
                                   onChanged: (newValue) {
                                     setState(() {
                                       _selectedSource = newValue;
@@ -405,16 +367,22 @@ class _UserSurveyPageState extends State<UserSurveyPage> with SingleTickerProvid
                                     });
                                   },
                                 ),
-                                const SizedBox(height: 20),
+                                const SizedBox(height: 24),
+                                if (_errorMessage != null)
+                                  Padding(
+                                    padding: const EdgeInsets.only(bottom: 12.0),
+                                    child: Text(
+                                      _errorMessage!,
+                                      style: const TextStyle(color: Colors.redAccent),
+                                    ),
+                                  ),
                                 ElevatedButton(
                                   onPressed: _isSubmitting ? null : _saveProfileAndComplete,
                                   style: ElevatedButton.styleFrom(
                                     backgroundColor: const Color(0xFF6D28D9),
                                     foregroundColor: Colors.white,
                                     minimumSize: const Size(double.infinity, 50),
-                                    shape: RoundedRectangleBorder(
-                                      borderRadius: BorderRadius.circular(8),
-                                    ),
+                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                                   ),
                                   child: _isSubmitting
                                       ? const CircularProgressIndicator(color: Colors.white)
@@ -423,8 +391,7 @@ class _UserSurveyPageState extends State<UserSurveyPage> with SingleTickerProvid
                               ],
                             ),
                           ),
-                        )
-                      : const Center(child: CircularProgressIndicator()),
+                        ),
                 ),
               ),
             ],

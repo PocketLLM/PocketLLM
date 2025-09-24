@@ -1,27 +1,26 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter/foundation.dart';
 import 'component/splash_screen.dart';
 import 'component/home_screen.dart';
 import 'component/onboarding_screens/onboarding_screen.dart';
-import 'services/local_db_service.dart';
+import 'pages/auth/auth_flow_screen.dart';
 import 'package:pocketllm/services/pocket_llm_service.dart';
 import 'services/model_state.dart';
 import 'services/error_service.dart';
 import 'services/app_lifecycle_service.dart';
+import 'services/auth_state.dart';
 
 import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:async';
+import 'package:provider/provider.dart';
 
 // Initialize core services that need to be available before lifecycle service
 Future<void> _initializeCoreServices() async {
   try {
-    // Initialize LocalDBService
-    final localDBService = LocalDBService();
-    await localDBService.initialize();
-
     // Initialize API key
     await PocketLLMService.initializeApiKey();
-    
+
     // Initialize model state
     await ModelState().init();
   } catch (e, stackTrace) {
@@ -34,6 +33,18 @@ Future<void> _initializeCoreServices() async {
     );
     rethrow;
   }
+}
+
+Widget _buildApp(AppLifecycleService appLifecycleService, {String? initializationError}) {
+  return MultiProvider(
+    providers: [
+      ChangeNotifierProvider(create: (_) => AuthState()),
+    ],
+    child: MyApp(
+      appLifecycleService: appLifecycleService,
+      initializationError: initializationError,
+    ),
+  );
 }
 
 void main() async {
@@ -59,7 +70,7 @@ void main() async {
       
       if (initializationSuccess) {
         // Run the app with successful initialization
-        runApp(MyApp(appLifecycleService: appLifecycleService));
+        runApp(_buildApp(appLifecycleService));
       } else {
         // Run the app with initialization errors
         final summary = appLifecycleService.getInitializationSummary();
@@ -68,8 +79,8 @@ void main() async {
             .map((r) => r['service'])
             .join(', ');
         
-        runApp(MyApp(
-          appLifecycleService: appLifecycleService,
+        runApp(_buildApp(
+          appLifecycleService,
           initializationError: 'Failed to initialize services: $failedServices',
         ));
       }
@@ -84,8 +95,8 @@ void main() async {
       );
       
       // Still run the app, but with a fallback to show an error message
-      runApp(MyApp(
-        appLifecycleService: appLifecycleService,
+      runApp(_buildApp(
+        appLifecycleService,
         initializationError: error.toString(),
       ));
     }
@@ -402,13 +413,25 @@ class _SplashLoaderState extends State<SplashLoader> {
 
       // Check onboarding status
       final prefs = await SharedPreferences.getInstance();
+      final authState = Provider.of<AuthState>(context, listen: false);
+      await authState.ready;
+
       final bool showHome = prefs.getBool('showHome') ?? false;
 
-      // Navigate to appropriate screen
+      Widget destination;
+      if (!showHome) {
+        destination = const OnboardingScreen();
+      } else if (!authState.isServiceAvailable) {
+        destination = const HomeScreen();
+      } else if (authState.isAuthenticated) {
+        destination = const HomeScreen();
+      } else {
+        final skipped = prefs.getBool('authSkipped') ?? false;
+        destination = skipped ? const HomeScreen() : const AuthFlowScreen();
+      }
+
       Navigator.of(context).pushReplacement(
-        MaterialPageRoute(
-          builder: (context) => showHome ? const HomeScreen() : const OnboardingScreen(),
-        ),
+        MaterialPageRoute(builder: (context) => destination),
       );
     } catch (e, stackTrace) {
       // Log the error

@@ -3,7 +3,6 @@ import '../services/model_service.dart';
 import '../component/models.dart';
 import '../component/model_config_dialog.dart';
 import '../component/model_list_item.dart';
-import '../services/auth_service.dart';
 import '../services/pocket_llm_service.dart';
 import 'auth/auth_page.dart';
 
@@ -18,7 +17,6 @@ class _ModelSettingsPageState extends State<ModelSettingsPage> {
   List<ModelConfig> _modelConfigs = [];
   bool _isLoading = true;
   String? _selectedModelId;
-  final _authService = AuthService();
   final _modelService = ModelService();
 
   @override
