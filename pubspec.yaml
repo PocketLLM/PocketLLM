@@ -39,10 +39,6 @@ dependencies:
   ollama_dart: ^0.0.2
   flutter_bloc: ^8.1.4
   equatable: ^2.0.5
-<<<<<<< HEAD
-  supabase_flutter: ^2.8.4
-=======
->>>>>>> ba8863400ee62088e78eac9f1c8ba6c67a919ae6
   sign_in_with_apple: ^6.1.4
   # The following adds the Cupertino Icons font to your application.
   # Use with the CupertinoIcons class for iOS style icons.
