@@ -4,10 +4,9 @@ import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
-import 'package:http/http.dart' as http;
 
 import '../models/user_profile.dart';
-import 'api_config.dart';
+import 'backend_api_service.dart';
 
 class AuthException implements Exception {
   final String message;
@@ -61,9 +60,8 @@ class DeletionSchedule {
 }
 
 class AuthStateNotifier extends ChangeNotifier {
-  AuthStateNotifier({http.Client? httpClient, FlutterSecureStorage? secureStorage})
-      : _httpClient = httpClient ?? http.Client(),
-        _secureStorage = secureStorage ?? const FlutterSecureStorage() {
+  AuthStateNotifier({FlutterSecureStorage? secureStorage})
+      : _secureStorage = secureStorage ?? const FlutterSecureStorage() {
     _initialize();
   }
 
@@ -85,8 +83,8 @@ class AuthStateNotifier extends ChangeNotifier {
     'heard_from',
   };
 
-  final http.Client _httpClient;
   final FlutterSecureStorage _secureStorage;
+  final BackendApiService _backendApi = BackendApiService();
   final Completer<void> _readyCompleter = Completer<void>();
 
   static const Duration _deletionGracePeriod = Duration(days: 30);
@@ -112,7 +110,7 @@ class AuthStateNotifier extends ChangeNotifier {
 
   Future<void> _initialize() async {
     try {
-      _serviceAvailable = apiBaseUrl.trim().isNotEmpty;
+      _serviceAvailable = BackendApiService.baseUrls.isNotEmpty;
       if (!_serviceAvailable) {
         return;
       }
@@ -472,6 +470,7 @@ class AuthStateNotifier extends ChangeNotifier {
     }
 
     await _secureStorage.write(key: _accessTokenKey, value: _accessToken);
+    await _secureStorage.write(key: 'supabase_access_token', value: _accessToken);
     if (_refreshToken != null) {
       await _secureStorage.write(key: _refreshTokenKey, value: _refreshToken);
     } else {
@@ -507,6 +506,7 @@ class AuthStateNotifier extends ChangeNotifier {
     await _secureStorage.delete(key: _tokenExpiryKey);
     await _secureStorage.delete(key: _userIdKey);
     await _secureStorage.delete(key: _userEmailKey);
+    await _secureStorage.delete(key: 'supabase_access_token');
   }
 
   Future<void> _runWithLoading(Future<void> Function() action) async {
@@ -729,77 +729,73 @@ class AuthStateNotifier extends ChangeNotifier {
     Map<String, dynamic>? body,
     bool requiresAuth = false,
   }) async {
-    if (apiBaseUrl.trim().isEmpty) {
+    if (BackendApiService.baseUrls.isEmpty) {
       _serviceAvailable = false;
       throw const AuthException('Authentication service is not configured.');
     }
 
-    final uri = Uri.parse('${apiBaseUrl.trim()}$path');
-    final headers = <String, String>{
-      HttpHeaders.contentTypeHeader: 'application/json',
-    };
-
-    if (requiresAuth) {
-      if (_accessToken == null) {
-        throw const AuthException('You need to be signed in to continue.', statusCode: 401);
-      }
-      headers[HttpHeaders.authorizationHeader] = 'Bearer $_accessToken';
+    if (requiresAuth && _accessToken == null) {
+      throw const AuthException('You need to be signed in to continue.', statusCode: 401);
     }
 
-    http.Response response;
-
     try {
+      dynamic response;
       switch (method) {
         case 'GET':
-          response = await _httpClient.get(uri, headers: headers);
+          response = await _backendApi.get(path);
           break;
         case 'POST':
-          response = await _httpClient.post(uri, headers: headers, body: jsonEncode(body ?? {}));
+          response = await _backendApi.post(path, body: body);
           break;
         case 'PUT':
-          response = await _httpClient.put(uri, headers: headers, body: jsonEncode(body ?? {}));
+          response = await _backendApi.put(path, body: body);
           break;
         case 'DELETE':
-          response = await _httpClient.delete(uri, headers: headers, body: jsonEncode(body ?? {}));
+          response = await _backendApi.delete(path);
           break;
         default:
           throw AuthException('Unsupported HTTP method: $method');
       }
+
+      _serviceAvailable = true;
+      return _wrapBackendResponse(response);
+    } on BackendApiException catch (error) {
+      if (error.statusCode == 401 && requiresAuth) {
+        await _clearSession();
+      }
+      throw AuthException(error.message, statusCode: error.statusCode);
     } on SocketException {
       _serviceAvailable = false;
       notifyListeners();
       throw const AuthException('Unable to reach the PocketLLM service. Check your internet connection.');
+    } catch (error) {
+      throw AuthException(error.toString());
     }
+  }
 
-    _serviceAvailable = true;
-
-    Map<String, dynamic> payload;
-    try {
-      payload = response.body.isNotEmpty
-          ? jsonDecode(response.body) as Map<String, dynamic>
-          : <String, dynamic>{'success': response.statusCode >= 200 && response.statusCode < 300};
-    } catch (_) {
-      throw AuthException('Unexpected response from the server.', statusCode: response.statusCode);
+  Map<String, dynamic> _wrapBackendResponse(dynamic response) {
+    if (response == null) {
+      return {'data': <String, dynamic>{}};
     }
-
-    final success = payload['success'] as bool? ?? (response.statusCode >= 200 && response.statusCode < 300);
-    if (!success || response.statusCode >= 400) {
-      String message = response.reasonPhrase ?? 'Request failed with status ${response.statusCode}';
-      final error = payload['error'];
-      if (error is Map<String, dynamic>) {
-        message = error['message']?.toString() ?? message;
-      } else if (payload['message'] != null) {
-        message = payload['message'].toString();
-      }
-      throw AuthException(message, statusCode: response.statusCode);
+    if (response is Map<String, dynamic>) {
+      return {'data': response};
     }
-
-    return payload;
+    if (response is List) {
+      return {
+        'data': {
+          'items': response,
+        },
+      };
+    }
+    return {
+      'data': {
+        'value': response,
+      },
+    };
   }
 
   @override
   void dispose() {
-    _httpClient.close();
     super.dispose();
   }
 }

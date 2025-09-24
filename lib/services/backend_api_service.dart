@@ -10,6 +10,7 @@ class BackendApiService {
   factory BackendApiService() => _instance;
 
   static final List<String> _baseUrls = _resolveBaseUrls();
+  static List<String> get baseUrls => _baseUrls;
 
   final FlutterSecureStorage _secureStorage = const FlutterSecureStorage();
 
@@ -19,7 +20,15 @@ class BackendApiService {
       'Accept': 'application/json',
     };
 
-    final token = await _secureStorage.read(key: 'supabase_access_token');
+    final candidates = [
+      await _secureStorage.read(key: 'supabase_access_token'),
+      await _secureStorage.read(key: 'auth.accessToken'),
+    ];
+
+    final token = candidates.firstWhere(
+      (value) => value != null && value.isNotEmpty,
+      orElse: () => null,
+    );
     if (token != null && token.isNotEmpty) {
       headers['Authorization'] = 'Bearer $token';
     }
@@ -47,6 +56,18 @@ class BackendApiService {
     final headers = await _buildHeaders();
     final response = await _executeWithFallback(
       (baseUrl) => http.post(
+        _resolveUri(baseUrl, path),
+        headers: headers,
+        body: jsonEncode(body ?? {}),
+      ),
+    );
+    return _handleResponse(response);
+  }
+
+  Future<dynamic> put(String path, {Map<String, dynamic>? body}) async {
+    final headers = await _buildHeaders();
+    final response = await _executeWithFallback(
+      (baseUrl) => http.put(
         _resolveUri(baseUrl, path),
         headers: headers,
         body: jsonEncode(body ?? {}),
