@@ -238,13 +238,17 @@ class _AuthPageState extends State<AuthPage> {
                 hintText: 'Email',
                 keyboardType: TextInputType.emailAddress,
                 textInputAction: TextInputAction.next,
-                onSubmitted: (_) => FocusScope.of(context).requestFocus(_passwordFocus),
+                autovalidateMode: AutovalidateMode.onUserInteraction,
+                onSubmitted: (_) =>
+                    FocusScope.of(context).requestFocus(_passwordFocus),
                 validator: (value) {
                   if (value == null || value.isEmpty) {
                     return 'Please enter your email address';
                   }
-                  final emailRegex = RegExp(r'^[\\w-\\.]+@([\\w-]+\\.)+[\\w-]{2,4}\\$');
-                  if (!emailRegex.hasMatch(value.trim())) {
+                  final normalizedValue = value.trim();
+                  final emailRegex =
+                      RegExp(r'^[\w\-.]+@([\w-]+\.)+[\w-]{2,}$');
+                  if (!emailRegex.hasMatch(normalizedValue)) {
                     return 'Enter a valid email address';
                   }
                   return null;
