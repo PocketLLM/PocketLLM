@@ -1,20 +1,15 @@
-import 'package:flutter/material.dart';
 import 'dart:io';
+
+import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
-// import 'package:supabase_flutter/supabase_flutter.dart';
-import '../auth/auth_page.dart';
-import '../auth/user_survey_page.dart';
-// import '../../services/auth_service.dart';
-import '../../services/local_db_service.dart';
-import 'dart:ui';
+import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:path_provider/path_provider.dart';
-import 'package:path/path.dart' as path;
+
+import '../auth/auth_page.dart';
+import '../../services/auth_state.dart';
 
 extension StringExtension on String {
-  String capitalize() {
-    return "${this[0].toUpperCase()}${substring(1)}";
-  }
+  String capitalize() => isEmpty ? this : '${this[0].toUpperCase()}${substring(1)}';
 }
 
 class ProfileSettingsPage extends StatefulWidget {
@@ -25,163 +20,270 @@ class ProfileSettingsPage extends StatefulWidget {
 }
 
 class _ProfileSettingsPageState extends State<ProfileSettingsPage> {
-  bool _isLoggedIn = false;
-  File? _profileImageFile;
-  String? _profileImageUrl;
-  String? _username;
-  String? _email;
-  DateTime? _signupDate;
-  String? _profession;
-  String? _fullName;
-  DateTime? _dateOfBirth;
-  String? _heardFrom;
-  bool _isLoading = false;
   final ImagePicker _picker = ImagePicker();
-  // final _authService = AuthService();
-  // final _supabase = Supabase.instance.client;
-  final _localDBService = LocalDBService();
-  User? _userData;
+  bool _isProcessing = false;
 
   @override
   void initState() {
     super.initState();
-    _loadUserData();
+    Future.microtask(() => context.read<AuthState>().refreshProfile());
   }
 
-  Future<void> _loadUserData() async {
-    setState(() {
-      _isLoading = true;
-    });
-
+  Future<void> _pickImage(AuthState authState) async {
     try {
-      final currentUser = _localDBService.currentUser;
-      
-      if (currentUser != null) {
-        setState(() {
-          _isLoggedIn = true;
-          _email = currentUser.email;
-          _username = currentUser.username;
-          _profileImageUrl = currentUser.avatarUrl;
-          _profession = currentUser.profession;
-          _signupDate = currentUser.createdAt;
-          _fullName = currentUser.fullName;
-          _dateOfBirth = currentUser.dateOfBirth;
-          _userData = currentUser;
-          
-          // If avatar URL is a local file path, create File object
-          if (_profileImageUrl != null && _profileImageUrl!.isNotEmpty) {
-            _profileImageFile = File(_profileImageUrl!);
-          }
-        });
-      } else {
-        setState(() {
-          _isLoggedIn = false;
-        });
-      }
-    } catch (e) {
-      print('Error loading user data: $e');
+      final image = await _picker.pickImage(source: ImageSource.gallery, maxWidth: 600, maxHeight: 600);
+      if (image == null) return;
+
+      setState(() => _isProcessing = true);
+      final file = File(image.path);
+      final avatarUrl = await authState.uploadProfileImage(file);
+      await authState.updateProfileFields({'avatar_url': avatarUrl});
+      await authState.refreshProfile();
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error loading profile: ${e.toString()}')),
+        const SnackBar(content: Text('Profile image updated'), backgroundColor: Color(0xFF8B5CF6)),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error updating image: $e')),
       );
     } finally {
-      setState(() {
-        _isLoading = false;
-      });
+      if (mounted) setState(() => _isProcessing = false);
     }
   }
 
-  Future<void> _pickImage() async {
-    final XFile? image = await _picker.pickImage(source: ImageSource.gallery);
-    if (image != null) {
-      setState(() {
-        _isLoading = true;
-      });
-      
+  Future<void> _updateField(AuthState authState, String field, String currentValue) async {
+    final controller = TextEditingController(text: currentValue);
+    final result = await showDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('Edit ${field.replaceAll('_', ' ').capitalize()}'),
+        content: TextField(
+          controller: controller,
+          decoration: InputDecoration(
+            hintText: 'Enter ${field.replaceAll('_', ' ')}',
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+          ),
+          maxLines: field == 'bio' ? 3 : 1,
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(context, controller.text.trim()),
+            style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF8B5CF6), foregroundColor: Colors.white),
+            child: const Text('Save'),
+          ),
+        ],
+      ),
+    );
+
+    if (result != null && result.isNotEmpty) {
+      setState(() => _isProcessing = true);
       try {
-        final currentUser = _localDBService.currentUser;
-        if (currentUser != null) {
-          // Copy the selected image to app documents directory
-          final appDir = await getApplicationDocumentsDirectory();
-          final fileName = 'profile_${currentUser.id}_${DateTime.now().millisecondsSinceEpoch}.jpg';
-          final savedImagePath = path.join(appDir.path, fileName);
-          
-          // Copy the image
-          final File imageFile = File(image.path);
-          await imageFile.copy(savedImagePath);
-
-          // Update user profile with new image path
-          await _localDBService.updateUserProfile(
-            userId: currentUser.id,
-            avatarUrl: savedImagePath,
-          );
-
-          setState(() {
-            _profileImageFile = File(savedImagePath);
-            _profileImageUrl = savedImagePath;
-          });
-          
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Profile image updated'),
-              backgroundColor: Color(0xFF8B5CF6),
-            ),
-          );
-        }
-      } catch (e) {
+        await authState.updateProfileFields({field: result});
+        await authState.refreshProfile();
+        if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error uploading image: ${e.toString()}')),
+          const SnackBar(content: Text('Profile updated'), backgroundColor: Color(0xFF8B5CF6)),
+        );
+      } catch (e) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error updating profile: $e'), backgroundColor: Colors.redAccent),
         );
       } finally {
-        setState(() {
-          _isLoading = false;
-        });
+        if (mounted) setState(() => _isProcessing = false);
       }
     }
   }
 
-  Future<void> _signOut() async {
-    setState(() {
-      _isLoading = true;
-    });
-    
-    try {
-      await _localDBService.logout();
-      setState(() {
-        _isLoggedIn = false;
-        _email = null;
-        _username = null;
-        _profileImageFile = null;
-        _profileImageUrl = null;
-        _profession = null;
-        _signupDate = null;
-        _fullName = null;
-        _dateOfBirth = null;
-        _heardFrom = null;
-      });
-      
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Successfully signed out')),
-      );
-    } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error signing out: ${e.toString()}')),
-      );
-    } finally {
-      setState(() {
-        _isLoading = false;
-      });
+  Future<void> _selectDate(AuthState authState) async {
+    final profile = authState.profile;
+    final initial = profile?.dateOfBirth ?? DateTime.now().subtract(const Duration(days: 365 * 18));
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: initial,
+      firstDate: DateTime(1950),
+      lastDate: DateTime.now(),
+    );
+    if (picked != null) {
+      setState(() => _isProcessing = true);
+      try {
+        await authState.updateProfileFields({'date_of_birth': picked.toIso8601String()});
+        await authState.refreshProfile();
+      } finally {
+        if (mounted) setState(() => _isProcessing = false);
+      }
     }
   }
 
-  void _handleLoginSuccess(String email) {
-    setState(() {
-      _email = email;
-      _isLoggedIn = true;
-    });
-    _loadUserData();
+  Future<void> _changePassword(AuthState authState) async {
+    final newPasswordController = TextEditingController();
+    final confirmPasswordController = TextEditingController();
+    final result = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Change Password'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              controller: newPasswordController,
+              obscureText: true,
+              decoration: InputDecoration(
+                hintText: 'New Password',
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+              ),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: confirmPasswordController,
+              obscureText: true,
+              decoration: InputDecoration(
+                hintText: 'Confirm Password',
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
+          ElevatedButton(
+            onPressed: () {
+              final newPassword = newPasswordController.text.trim();
+              if (newPassword.length < 8) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Password must be at least 8 characters'), backgroundColor: Colors.redAccent),
+                );
+                return;
+              }
+              if (newPassword != confirmPasswordController.text.trim()) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Passwords do not match'), backgroundColor: Colors.redAccent),
+                );
+                return;
+              }
+              Navigator.pop(context, true);
+            },
+            style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF8B5CF6), foregroundColor: Colors.white),
+            child: const Text('Update'),
+          ),
+        ],
+      ),
+    );
+
+    if (result == true) {
+      setState(() => _isProcessing = true);
+      try {
+        await authState.updatePassword(newPasswordController.text.trim());
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Password updated'), backgroundColor: Color(0xFF8B5CF6)),
+        );
+      } catch (e) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error updating password: $e'), backgroundColor: Colors.redAccent),
+        );
+      } finally {
+        if (mounted) setState(() => _isProcessing = false);
+      }
+    }
   }
 
-  Widget _buildLoggedInView() {
+  Future<void> _handleSignOut(AuthState authState) async {
+    setState(() => _isProcessing = true);
+    try {
+      await authState.signOut();
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool('authSkipped', true);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Signed out')));
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error signing out: $e'), backgroundColor: Colors.redAccent),
+      );
+    } finally {
+      if (mounted) setState(() => _isProcessing = false);
+    }
+  }
+
+  Future<void> _handleDeleteAccount(AuthState authState) async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Delete Account'),
+        content: const Text('Deleting your account will schedule removal in 30 days. You can cancel by logging in before then.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red, foregroundColor: Colors.white),
+            child: const Text('Confirm'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm == true) {
+      setState(() => _isProcessing = true);
+      try {
+        await authState.requestAccountDeletion();
+        await authState.refreshProfile();
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Account scheduled for deletion in 30 days'), backgroundColor: Colors.orange),
+        );
+      } catch (e) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error scheduling deletion: $e'), backgroundColor: Colors.redAccent),
+        );
+      } finally {
+        if (mounted) setState(() => _isProcessing = false);
+      }
+    }
+  }
+
+  Future<void> _cancelDeletion(AuthState authState) async {
+    setState(() => _isProcessing = true);
+    try {
+      await authState.cancelAccountDeletion();
+      await authState.refreshProfile();
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Deletion cancelled'), backgroundColor: Color(0xFF8B5CF6)),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error cancelling deletion: $e'), backgroundColor: Colors.redAccent),
+      );
+    } finally {
+      if (mounted) setState(() => _isProcessing = false);
+    }
+  }
+
+  Widget _buildProfileContent(AuthState authState) {
+    final profile = authState.profile;
+    if (profile == null) {
+      return const Center(child: CircularProgressIndicator());
+    }
+
+    ImageProvider? avatarProvider;
+    if (profile.avatarUrl != null && profile.avatarUrl!.isNotEmpty) {
+      if (profile.avatarUrl!.startsWith('http')) {
+        avatarProvider = NetworkImage(profile.avatarUrl!);
+      } else {
+        final file = File(profile.avatarUrl!);
+        if (file.existsSync()) {
+          avatarProvider = FileImage(file);
+        }
+      }
+    }
+
     return SingleChildScrollView(
       padding: const EdgeInsets.all(16.0),
       child: Column(
@@ -191,16 +293,14 @@ class _ProfileSettingsPageState extends State<ProfileSettingsPage> {
             child: Column(
               children: [
                 GestureDetector(
-                  onTap: _pickImage,
+                  onTap: _isProcessing ? null : () => _pickImage(authState),
                   child: Stack(
                     children: [
                       CircleAvatar(
                         radius: 60,
                         backgroundColor: Colors.grey[200],
-                        backgroundImage: _profileImageFile != null
-                            ? FileImage(_profileImageFile!)
-                            : null,
-                        child: (_profileImageFile == null)
+                        backgroundImage: avatarProvider,
+                        child: avatarProvider == null
                             ? const Icon(Icons.person, size: 60, color: Colors.grey)
                             : null,
                       ),
@@ -209,173 +309,78 @@ class _ProfileSettingsPageState extends State<ProfileSettingsPage> {
                         right: 0,
                         child: Container(
                           padding: const EdgeInsets.all(4),
-                          decoration: const BoxDecoration(
-                            color: Color(0xFF8B5CF6),
-                            shape: BoxShape.circle,
-                          ),
-                          child: const Icon(
-                            Icons.camera_alt,
-                            color: Colors.white,
-                            size: 20,
-                          ),
+                          decoration: const BoxDecoration(color: Color(0xFF8B5CF6), shape: BoxShape.circle),
+                          child: const Icon(Icons.camera_alt, color: Colors.white, size: 20),
                         ),
                       ),
                     ],
                   ),
                 ),
                 const SizedBox(height: 16),
-                Text(
-                  _username ?? 'Username',
-                  style: const TextStyle(
-                    fontSize: 24,
-                    fontWeight: FontWeight.bold,
+                Text(profile.username ?? 'Username', style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold)),
+                Text(profile.email, style: TextStyle(fontSize: 16, color: Colors.grey[600])),
+                if (profile.hasPendingDeletion) ...[
+                  const SizedBox(height: 12),
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: Colors.orange[50],
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: Colors.orange[200]!),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text('Account scheduled for deletion', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.orange)),
+                        const SizedBox(height: 4),
+                        Text(
+                          'Your account will be removed on ${_formatDateDisplay(profile.deletionScheduledFor)} unless you cancel.',
+                          style: const TextStyle(color: Colors.orange),
+                        ),
+                        const SizedBox(height: 8),
+                        TextButton(
+                          onPressed: _isProcessing ? null : () => _cancelDeletion(authState),
+                          child: const Text('Cancel deletion'),
+                        ),
+                      ],
+                    ),
                   ),
-                ),
-                Text(
-                  _email ?? 'Email',
-                  style: TextStyle(
-                    fontSize: 16,
-                    color: Colors.grey[600],
-                  ),
-                ),
+                ],
               ],
             ),
           ),
           const SizedBox(height: 32),
           _buildSectionTitle('Personal Information'),
           const SizedBox(height: 16),
+          _buildEditableField('Full Name', profile.fullName ?? '', () => _updateField(authState, 'full_name', profile.fullName ?? '')),
+          _buildEditableField('Username', profile.username ?? '', () => _updateField(authState, 'username', profile.username ?? '')),
+          _buildEditableField('Bio', profile.bio ?? '', () => _updateField(authState, 'bio', profile.bio ?? '')),
           _buildEditableField(
-            label: 'Full Name',
-            value: _userData?.fullName ?? '',
-            onEdit: () => _editField('full_name', _userData?.fullName ?? ''),
+            'Date of Birth',
+            _formatDateDisplay(profile.dateOfBirth),
+            () => _selectDate(authState),
           ),
-          _buildEditableField(
-            label: 'Username',
-            value: _userData?.username ?? '',
-            onEdit: () => _editField('username', _userData?.username ?? ''),
-          ),
-          _buildEditableField(
-            label: 'Bio',
-            value: _userData?.bio ?? '',
-            onEdit: () => _editField('bio', _userData?.bio ?? ''),
-          ),
-          _buildEditableField(
-            label: 'Date of Birth',
-            value: _userData?.dateOfBirth != null ? _formatDate(_userData!.dateOfBirth!.toIso8601String()) : '',
-            onEdit: () => _selectDate(context),
-          ),
-          _buildEditableField(
-            label: 'Profession',
-            value: _userData?.profession ?? '',
-            onEdit: () => _editField('profession', _userData?.profession ?? ''),
-          ),
+          _buildEditableField('Profession', profile.profession ?? '', () => _updateField(authState, 'profession', profile.profession ?? '')),
+          _buildEditableField('How you heard about us', profile.heardFrom ?? '', () => _updateField(authState, 'heard_from', profile.heardFrom ?? '')),
           const SizedBox(height: 32),
           _buildSectionTitle('Account Settings'),
           const SizedBox(height: 16),
-          _buildSettingsItem(
-            icon: Icons.email_outlined,
-            title: 'Change Email',
-            onTap: () => _editField('email', _userData?.email ?? ''),
-          ),
-          _buildSettingsItem(
-            icon: Icons.lock_outline,
-            title: 'Change Password',
-            onTap: _changePassword,
-          ),
-          _buildSettingsItem(
-            icon: Icons.delete_outline,
-            title: 'Delete Account',
-            onTap: _deleteAccount,
-            isDestructive: true,
-          ),
+          _buildSettingsItem(Icons.lock_outline, 'Change Password', () => _changePassword(authState)),
+          _buildSettingsItem(Icons.delete_outline, 'Delete Account', () => _handleDeleteAccount(authState), isDestructive: true),
           const SizedBox(height: 32),
           Center(
-            child: ElevatedButton(
-              onPressed: _isLoading ? null : () async {
-                final shouldLogout = await showDialog<bool>(
-                  context: context,
-                  builder: (context) => AlertDialog(
-                    title: const Text('Logout'),
-                    content: const Text('Are you sure you want to logout?'),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    actions: [
-                      TextButton(
-                        onPressed: () => Navigator.pop(context, false),
-                        child: Text(
-                          'Cancel',
-                          style: TextStyle(color: Colors.grey[700]),
-                        ),
-                      ),
-                      ElevatedButton(
-                        onPressed: () => Navigator.pop(context, true),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: const Color(0xFF8B5CF6),
-                          foregroundColor: Colors.white,
-                        ),
-                        child: const Text('Logout'),
-                      ),
-                    ],
-                  ),
-                );
-              
-                if (shouldLogout == true) {
-                  setState(() => _isLoading = true);
-                  try {
-                    await _signOut();
-                    if (!mounted) return;
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        content: Text('Logged out successfully'),
-                        backgroundColor: Color(0xFF8B5CF6),
-                      ),
-                    );
-                  } catch (e) {
-                    if (!mounted) return;
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        content: Text('Error logging out: $e'),
-                        backgroundColor: Colors.red,
-                      ),
-                    );
-                  } finally {
-                    if (mounted) setState(() => _isLoading = false);
-                  }
-                }
-              },
+            child: ElevatedButton.icon(
+              onPressed: _isProcessing ? null : () => _handleSignOut(authState),
+              icon: const Icon(Icons.logout),
+              label: const Text('Logout'),
               style: ElevatedButton.styleFrom(
                 backgroundColor: const Color(0xFF8B5CF6),
                 foregroundColor: Colors.white,
                 padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                elevation: 2,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
               ),
-              child: _isLoading
-                ? const SizedBox(
-                    width: 20,
-                    height: 20,
-                    child: CircularProgressIndicator(
-                      valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                      strokeWidth: 2,
-                    ),
-                  )
-                : const Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(Icons.logout, size: 20),
-                      SizedBox(width: 8),
-                      Text(
-                        'Logout',
-                        style: TextStyle(fontSize: 16),
-                      ),
-                    ],
-                  ),
             ),
           ),
-          const SizedBox(height: 32),
         ],
       ),
     );
@@ -384,19 +389,17 @@ class _ProfileSettingsPageState extends State<ProfileSettingsPage> {
   Widget _buildSectionTitle(String title) {
     return Text(
       title,
-      style: const TextStyle(
-        fontSize: 18,
-        fontWeight: FontWeight.bold,
-        color: Color(0xFF8B5CF6),
-      ),
+      style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Color(0xFF8B5CF6)),
     );
   }
 
-  Widget _buildEditableField({
-    required String label,
-    required String value,
-    required VoidCallback onEdit,
-  }) {
+  String _formatDateDisplay(DateTime? date) {
+    if (date == null) return '';
+    final local = date.toLocal();
+    return '${local.month}/${local.day}/${local.year}';
+  }
+
+  Widget _buildEditableField(String label, String value, VoidCallback onEdit) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 16.0),
       child: InkWell(
@@ -415,29 +418,16 @@ class _ProfileSettingsPageState extends State<ProfileSettingsPage> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      label,
-                      style: TextStyle(
-                        fontSize: 14,
-                        color: Colors.grey[600],
-                      ),
-                    ),
+                    Text(label, style: TextStyle(fontSize: 14, color: Colors.grey[600])),
                     const SizedBox(height: 4),
                     Text(
                       value.isNotEmpty ? value : 'Not set',
-                      style: TextStyle(
-                        fontSize: 16,
-                        color: value.isNotEmpty ? Colors.black : Colors.grey[400],
-                      ),
+                      style: TextStyle(fontSize: 16, color: value.isNotEmpty ? Colors.black : Colors.grey[400]),
                     ),
                   ],
                 ),
               ),
-              Icon(
-                Icons.edit,
-                color: Colors.grey[400],
-                size: 20,
-              ),
+              Icon(Icons.edit, color: Colors.grey[400], size: 20),
             ],
           ),
         ),
@@ -445,12 +435,7 @@ class _ProfileSettingsPageState extends State<ProfileSettingsPage> {
     );
   }
 
-  Widget _buildSettingsItem({
-    required IconData icon,
-    required String title,
-    required VoidCallback onTap,
-    bool isDestructive = false,
-  }) {
+  Widget _buildSettingsItem(IconData icon, String title, VoidCallback onTap, {bool isDestructive = false}) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 16.0),
       child: InkWell(
@@ -465,403 +450,77 @@ class _ProfileSettingsPageState extends State<ProfileSettingsPage> {
           ),
           child: Row(
             children: [
-              Icon(
-                icon,
-                color: isDestructive ? Colors.red : Colors.grey[700],
-                size: 24,
-              ),
+              Icon(icon, color: isDestructive ? Colors.red : Colors.grey[700], size: 24),
               const SizedBox(width: 16),
               Expanded(
                 child: Text(
                   title,
-                  style: TextStyle(
-                    fontSize: 16,
-                    color: isDestructive ? Colors.red : Colors.black,
-                  ),
+                  style: TextStyle(fontSize: 16, color: isDestructive ? Colors.red : Colors.black),
                 ),
               ),
-              Icon(
-                Icons.chevron_right,
-                color: Colors.grey[400],
-                size: 20,
-              ),
+              Icon(Icons.chevron_right, color: Colors.grey[400], size: 20),
             ],
           ),
         ),
       ),
     );
-  }
-
-  void _editField(String field, String value) {
-    showDialog(
-      context: context,
-      builder: (context) {
-        final TextEditingController controller = TextEditingController(text: value);
-        return AlertDialog(
-          title: Text('Edit ${field.replaceAll('_', ' ').capitalize()}'),
-          content: TextField(
-            controller: controller,
-            decoration: InputDecoration(
-              hintText: 'Enter ${field.replaceAll('_', ' ')}',
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(12),
-              ),
-            ),
-            maxLines: field == 'bio' ? 3 : 1,
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('Cancel'),
-            ),
-            ElevatedButton(
-              onPressed: () async {
-                if (controller.text.isNotEmpty) {
-                  Navigator.pop(context);
-                  setState(() => _isLoading = true);
-                  
-                  try {
-                    // Update the profile
-                    if (field == 'username') {
-                      await _localDBService.updateUserProfile(
-                        userId: _localDBService.currentUser!.id,
-                        username: controller.text,
-                      );
-                    } else if (field == 'full_name') {
-                      await _localDBService.updateUserProfile(
-                        userId: _localDBService.currentUser!.id,
-                        fullName: controller.text,
-                      );
-                    } else if (field == 'profession') {
-                      await _localDBService.updateUserProfile(
-                        userId: _localDBService.currentUser!.id,
-                        profession: controller.text,
-                      );
-                    } else if (field == 'bio') {
-                      await _localDBService.updateUserProfile(
-                        userId: _localDBService.currentUser!.id,
-                        bio: controller.text,
-                      );
-                    }
-                    
-                    if (!mounted) return;
-                    setState(() {
-                      if (field == 'username') {
-                        _username = controller.text;
-                      } else if (field == 'full_name') {
-                        _fullName = controller.text;
-                      } else if (field == 'bio') {
-                        // No UI field to update
-                      } else if (field == 'profession') {
-                        _profession = controller.text;
-                      }
-                      // Reload user data to ensure all fields are updated
-                      _loadUserData();
-                      _isLoading = false;
-                    });
-                    
-                    if (!mounted) return;
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        content: Text('Profile updated successfully'),
-                        backgroundColor: Color(0xFF8B5CF6),
-                      ),
-                    );
-                  } catch (e) {
-                    if (!mounted) return;
-                    setState(() => _isLoading = false);
-                    if (!mounted) return;
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        content: Text('Error updating profile: $e'),
-                        backgroundColor: Colors.red,
-                      ),
-                    );
-                  }
-                }
-              },
-              style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFF8B5CF6),
-                foregroundColor: Colors.white,
-              ),
-              child: const Text('Save'),
-            ),
-          ],
-        );
-      },
-    );
-  }
-
-  void _selectDate(BuildContext context) async {
-    final DateTime? picked = await showDatePicker(
-      context: context,
-      initialDate: _dateOfBirth ?? DateTime(2000),
-      firstDate: DateTime(1900),
-      lastDate: DateTime.now(),
-      builder: (context, child) {
-        return Theme(
-          data: ThemeData.light().copyWith(
-            colorScheme: const ColorScheme.light(
-              primary: Color(0xFF8B5CF6),
-            ),
-          ),
-          child: child!,
-        );
-      },
-    );
-    
-    if (picked != null && picked != _dateOfBirth) {
-      setState(() => _isLoading = true);
-      
-      try {
-        await _localDBService.updateUserProfile(
-          userId: _localDBService.currentUser!.id,
-          dateOfBirth: picked,
-        );
-        
-        if (!mounted) return;
-        setState(() {
-          _dateOfBirth = picked;
-        });
-
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Date of birth updated successfully'),
-            backgroundColor: Color(0xFF8B5CF6),
-          ),
-        );
-      } catch (e) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error updating date of birth: ${e.toString()}')),
-        );
-      } finally {
-        setState(() {
-          _isLoading = false;
-        });
-      }
-    }
-  }
-
-  void _changePassword() {
-    showDialog(
-      context: context,
-      builder: (context) {
-        final TextEditingController currentPasswordController = TextEditingController();
-        final TextEditingController newPasswordController = TextEditingController();
-        final TextEditingController confirmPasswordController = TextEditingController();
-        
-        return AlertDialog(
-          title: const Text('Change Password'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(
-                controller: currentPasswordController,
-                obscureText: true,
-                decoration: InputDecoration(
-                  hintText: 'Current Password',
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 16),
-              TextField(
-                controller: newPasswordController,
-                obscureText: true,
-                decoration: InputDecoration(
-                  hintText: 'New Password',
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 16),
-              TextField(
-                controller: confirmPasswordController,
-                obscureText: true,
-                decoration: InputDecoration(
-                  hintText: 'Confirm New Password',
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                ),
-              ),
-            ],
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('Cancel'),
-            ),
-            ElevatedButton(
-              onPressed: () async {
-                if (newPasswordController.text.isEmpty || 
-                    currentPasswordController.text.isEmpty ||
-                    confirmPasswordController.text.isEmpty) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text('Please fill all fields'),
-                      backgroundColor: Colors.red,
-                    ),
-                  );
-                  return;
-                }
-                
-                if (newPasswordController.text != confirmPasswordController.text) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text('New passwords do not match'),
-                      backgroundColor: Colors.red,
-                    ),
-                  );
-                  return;
-                }
-                
-                Navigator.pop(context);
-                setState(() => _isLoading = true);
-                
-                try {
-                  // Change password using the local DB service
-                  await _localDBService.changePassword(
-                    userId: _localDBService.currentUser!.id,
-                    currentPassword: currentPasswordController.text,
-                    newPassword: newPasswordController.text,
-                  );
-                  
-                  Navigator.of(context).pop();
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text('Password changed successfully'),
-                      backgroundColor: Color(0xFF8B5CF6),
-                    ),
-                  );
-                } catch (e) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text('Error changing password: ${e.toString()}'),
-                      backgroundColor: Colors.red,
-                    ),
-                  );
-                }
-              },
-              style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFF8B5CF6),
-                foregroundColor: Colors.white,
-              ),
-              child: const Text('Change Password'),
-            ),
-          ],
-        );
-      },
-    );
-  }
-
-  void _deleteAccount() {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Delete Account'),
-        content: const Text(
-          'Are you sure you want to delete your account? This action cannot be undone.',
-          style: TextStyle(fontSize: 16),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
-          ),
-          ElevatedButton(
-            onPressed: () async {
-              Navigator.pop(context);
-              setState(() => _isLoading = true);
-              
-              try {
-                // Delete user account from local database
-                await _localDBService.deleteUser(_localDBService.currentUser!.id);
-                
-                setState(() {
-                  _isLoggedIn = false;
-                  _email = null;
-                  _username = null;
-                  _profileImageFile = null;
-                  _profileImageUrl = null;
-                  _fullName = null;
-                  _dateOfBirth = null;
-                  _profession = null;
-                });
-                
-                Navigator.of(context).pop();
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Account deleted successfully')),
-                );
-              } catch (e) {
-                setState(() => _isLoading = false);
-                if (!mounted) return;
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    content: Text('Error deleting account: $e'),
-                    backgroundColor: Colors.red,
-                  ),
-                );
-              }
-            },
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.red,
-              foregroundColor: Colors.white,
-            ),
-            child: const Text('Delete'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  String _formatDate(String date) {
-    try {
-      final DateTime dateTime = DateTime.parse(date);
-      return '${dateTime.day}/${dateTime.month}/${dateTime.year}';
-    } catch (e) {
-      return 'Invalid date';
-    }
-  }
-
-  void _logout() {
-    _signOut();
   }
 
   Widget _buildLoginView() {
     return AuthPage(
-      onLoginSuccess: _handleLoginSuccess,
+      onLoginSuccess: (_) => context.read<AuthState>().refreshProfile(),
       showAppBar: false,
     );
   }
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: Colors.grey[50],
-      appBar: AppBar(
-        backgroundColor: Colors.grey[50],
-        elevation: 0,
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back, color: Colors.black, size: 28),
-          onPressed: () => Navigator.pop(context),
-        ),
-        title: const Text(
-          'Profile',
-          style: TextStyle(
-            color: Colors.black,
-            fontSize: 32,
-            fontWeight: FontWeight.bold,
+    return Consumer<AuthState>(
+      builder: (context, authState, _) {
+        if (!authState.supabaseAvailable) {
+          return Scaffold(
+            appBar: AppBar(
+              backgroundColor: Colors.grey[50],
+              elevation: 0,
+              leading: IconButton(
+                icon: const Icon(Icons.arrow_back, color: Colors.black, size: 28),
+                onPressed: () => Navigator.pop(context),
+              ),
+              title: const Text('Profile', style: TextStyle(color: Colors.black, fontSize: 32, fontWeight: FontWeight.bold)),
+            ),
+            body: const Center(
+              child: Padding(
+                padding: EdgeInsets.all(24.0),
+                child: Text(
+                  'Authentication is disabled. Configure Supabase credentials to enable profile features.',
+                  textAlign: TextAlign.center,
+                ),
+              ),
+            ),
+          );
+        }
+
+        return Scaffold(
+          backgroundColor: Colors.grey[50],
+          appBar: AppBar(
+            backgroundColor: Colors.grey[50],
+            elevation: 0,
+            leading: IconButton(
+              icon: const Icon(Icons.arrow_back, color: Colors.black, size: 28),
+              onPressed: () => Navigator.pop(context),
+            ),
+            title: const Text(
+              'Profile',
+              style: TextStyle(color: Colors.black, fontSize: 32, fontWeight: FontWeight.bold),
+            ),
           ),
-        ),
-      ),
-      body: _isLoading
-          ? const Center(child: CircularProgressIndicator(color: Color(0xFF8B5CF6)))
-          : _isLoggedIn
-              ? _buildLoggedInView()
-              : _buildLoginView(),
+          body: _isProcessing
+              ? const Center(child: CircularProgressIndicator(color: Color(0xFF8B5CF6)))
+              : authState.isAuthenticated
+                  ? _buildProfileContent(authState)
+                  : _buildLoginView(),
+        );
+      },
     );
   }
 }

@@ -4,7 +4,6 @@ import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:ollama_dart/ollama_dart.dart';
 import 'pocket_llm_service.dart';
-import 'auth_service.dart';
 import '../component/models.dart';
 import 'package:flutter/foundation.dart';
 import 'package:uuid/uuid.dart';

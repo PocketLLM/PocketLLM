@@ -1,663 +1,788 @@
 import 'package:flutter/material.dart';
-// import 'package:pocketllm/services/auth_service.dart';
-import 'package:pocketllm/services/local_db_service.dart';
+import 'package:provider/provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:supabase_flutter/supabase_flutter.dart' as supa;
+
+import '../../models/user_profile.dart';
+import '../../services/auth_state.dart';
 import '../../widgets/clear_text_field.dart';
 import 'user_survey_page.dart';
-import '../settings/profile_settings.dart';
+
+enum _AuthMode { signIn, signUp }
 
 class AuthPage extends StatefulWidget {
-  final Function(String email) onLoginSuccess;
+  final ValueChanged<String>? onLoginSuccess;
   final bool showAppBar;
+  final bool allowSkip;
+  final VoidCallback? onSkip;
 
   const AuthPage({
-    Key? key,
-    required this.onLoginSuccess,
+    super.key,
+    this.onLoginSuccess,
     this.showAppBar = true,
-  }) : super(key: key);
+    this.allowSkip = false,
+    this.onSkip,
+  });
 
   @override
   State<AuthPage> createState() => _AuthPageState();
 }
 
 class _AuthPageState extends State<AuthPage> {
-  // final AuthService _authService = AuthService();
-  final LocalDBService _localDBService = LocalDBService();
+  final _formKey = GlobalKey<FormState>();
   final TextEditingController _emailController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
   final TextEditingController _confirmPasswordController = TextEditingController();
-  bool _isValidEmail = false;
-  bool _showPasswordField = false;
-  bool _showSignupFields = false;
-  bool _isLoading = false;
-  bool _emailExists = false;
-  String _selectedAvatar = 'assets/avatar1.jpg';
+  final FocusNode _emailFocus = FocusNode();
+  final FocusNode _passwordFocus = FocusNode();
+
+  _AuthMode _mode = _AuthMode.signIn;
+  bool _obscurePassword = true;
+  bool _obscureConfirmPassword = true;
+  bool _isSurveyActive = false;
 
   @override
-  void initState() {
-    super.initState();
-    // Randomly select avatar1 or avatar2
-    _selectedAvatar = 'assets/avatar${(DateTime.now().millisecondsSinceEpoch % 2) + 1}.jpg';
+  void dispose() {
+    _emailController.dispose();
+    _passwordController.dispose();
+    _confirmPasswordController.dispose();
+    _emailFocus.dispose();
+    _passwordFocus.dispose();
+    super.dispose();
   }
-  
-  bool _validateEmail(String email) {
-    return RegExp(r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$').hasMatch(email);
-  }
-  
-  Future<void> _handleEmailCheck() async {
-    if (!mounted) return;
-    try {
-      setState(() {
-        _isLoading = true;
-      });
-      
-      // Check if email exists in local database
-      final user = await _localDBService.getUserByEmail(_emailController.text);
-      final exists = user != null;
-      
-      if (!mounted) return;
-      setState(() {
-        _emailExists = exists;
-        _isLoading = false;
-        _showPasswordField = true;
-        
-        // If the email exists, show the login form
-        // If it doesn't, show the signup form
-        _showSignupFields = !exists;
-      });
-      
-      // Show appropriate message to the user based on email existence
-      if (exists) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Welcome back! Please enter your password to sign in.'),
-            backgroundColor: Color(0xFF8B5CF6),
+
+  @override
+  Widget build(BuildContext context) {
+    final authState = context.watch<AuthState>();
+    final content = SafeArea(
+      child: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 480),
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                const SizedBox(height: 16),
+                _buildHeader(authState),
+                const SizedBox(height: 32),
+                if (authState.supabaseAvailable)
+                  _buildAuthForm(context, authState)
+                else
+                  _buildUnavailableState(),
+              ],
+            ),
           ),
-        );
-      } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('This email is not registered. Please create a new account.'),
-            backgroundColor: Color(0xFF8B5CF6),
-          ),
-        );
-      }
-    } catch (e) {
-      if (!mounted) return;
-      setState(() {
-        _isLoading = false;
-      });
-      _showErrorSnackBar('Error checking email: ${e.toString()}');
+        ),
+      ),
+    );
+
+    if (!widget.showAppBar) {
+      return content;
     }
+
+    return Scaffold(
+      backgroundColor: Colors.grey[50],
+      appBar: AppBar(
+        backgroundColor: Colors.grey[50],
+        elevation: 0,
+        title: const Text(
+          'Account',
+          style: TextStyle(
+            color: Colors.black,
+            fontSize: 32,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+      ),
+      body: content,
+    );
   }
-  
-  void _showErrorSnackBar(String message) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(message),
-        backgroundColor: Colors.red,
+
+  Widget _buildHeader(AuthState authState) {
+    if (authState.isAuthenticated && authState.profile != null) {
+      final profile = authState.profile!;
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Welcome back, ${profile.fullName ?? profile.email}',
+            style: const TextStyle(
+              fontSize: 28,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'You\'re already signed in. Review your details or continue to PocketLLM.',
+            style: TextStyle(
+              fontSize: 16,
+              color: Colors.grey[700],
+            ),
+          ),
+        ],
+      );
+    }
+
+    final isSignUp = _mode == _AuthMode.signUp;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          isSignUp ? 'Create your PocketLLM account' : 'Welcome back to PocketLLM',
+          style: const TextStyle(
+            fontSize: 28,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+        const SizedBox(height: 8),
+        Text(
+          isSignUp
+              ? 'Unlock personalized AI experiences by creating an account.'
+              : 'Sign in to access your personalized workspace.',
+          style: TextStyle(
+            fontSize: 16,
+            color: Colors.grey[700],
+          ),
+        ),
+        const SizedBox(height: 24),
+        if (authState.supabaseAvailable)
+          Container(
+            padding: const EdgeInsets.all(4),
+            decoration: BoxDecoration(
+              color: Colors.grey[200],
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Row(
+              children: [
+                Expanded(
+                  child: _buildModeButton(
+                    label: 'Sign In',
+                    selected: _mode == _AuthMode.signIn,
+                    onTap: () {
+                      setState(() {
+                        _mode = _AuthMode.signIn;
+                      });
+                    },
+                  ),
+                ),
+                Expanded(
+                  child: _buildModeButton(
+                    label: 'Sign Up',
+                    selected: _mode == _AuthMode.signUp,
+                    onTap: () {
+                      setState(() {
+                        _mode = _AuthMode.signUp;
+                      });
+                    },
+                  ),
+                ),
+              ],
+            ),
+          ),
+      ],
+    );
+  }
+
+  Widget _buildModeButton({
+    required String label,
+    required bool selected,
+    required VoidCallback onTap,
+  }) {
+    return GestureDetector(
+      onTap: onTap,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        padding: const EdgeInsets.symmetric(vertical: 12),
+        decoration: BoxDecoration(
+          color: selected ? const Color(0xFF8B5CF6) : Colors.transparent,
+          borderRadius: BorderRadius.circular(10),
+        ),
+        child: Center(
+          child: Text(
+            label,
+            style: TextStyle(
+              color: selected ? Colors.white : Colors.grey[700],
+              fontSize: 16,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ),
       ),
     );
   }
-  
-  Future<void> _handleSignIn() async {
-    if (_passwordController.text.isEmpty) {
-      _showErrorSnackBar('Please enter your password');
-      return;
-    }
-    
-    if (!mounted) return;
-    try {
-      setState(() {
-        _isLoading = true;
-      });
-      
-      try {
-        // Use local database for login
-        await _localDBService.login(
-          email: _emailController.text,
-          password: _passwordController.text,
-        );
-        
-        if (!mounted) return;
-        setState(() {
-          _isLoading = false;
-        });
-        
-        ScaffoldMessenger.of(context).clearSnackBars();
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Login successful!'),
-            backgroundColor: Color(0xFF8B5CF6),
+
+  Widget _buildAuthForm(BuildContext context, AuthState authState) {
+    if (authState.isAuthenticated) {
+      if (authState.profile == null) {
+        return const Center(
+          child: Padding(
+            padding: EdgeInsets.symmetric(vertical: 48.0),
+            child: CircularProgressIndicator(),
           ),
         );
-        widget.onLoginSuccess(_emailController.text);
-      } catch (e) {
-        throw e; // Re-throw to be caught by the outer catch block
       }
-    } catch (e) {
-      if (!mounted) return;
-      setState(() {
-        _isLoading = false;
-      });
-      
-      // Check if it's an invalid credentials error
-      if (e.toString().toLowerCase().contains('invalid email or password')) {
-        _showErrorSnackBar('Incorrect password. Please try again or use "Forgot Password".');
-      } else if (e.toString().toLowerCase().contains('user not found')) {
-        // This case should be rare since we already checked if the email exists
-        _showErrorSnackBar('No account found with this email. Please create an account.');
-        setState(() {
-          _emailExists = false;
-          _showSignupFields = true;
-        });
-      } else {
-        _showErrorSnackBar('Login failed: ${e.toString()}');
-      }
-    }
-  }
-  
-  Future<void> _handleSignUp() async {
-    if (_passwordController.text.isEmpty) {
-      _showErrorSnackBar('Please enter a password');
-      return;
-    }
-    
-    if (_passwordController.text.length < 6) {
-      _showErrorSnackBar('Password must be at least 6 characters');
-      return;
-    }
-    
-    if (_passwordController.text != _confirmPasswordController.text) {
-      _showErrorSnackBar('Passwords do not match');
-      return;
-    }
-    
-    if (!mounted) return;
-    try {
-      // Check email existence one more time to ensure it doesn't exist
-      final user = await _localDBService.getUserByEmail(_emailController.text);
-      final exists = user != null;
-      
-      if (exists) {
-        setState(() {
-          _emailExists = true;
-          _showSignupFields = false;
-        });
-        _showErrorSnackBar('This email is already registered. Please login instead.');
-        return;
-      }
-      
-      setState(() {
-        _isLoading = true;
-      });
-      
-      // Register user with local database
-      final newUser = await _localDBService.register(
-        email: _emailController.text,
-        password: _passwordController.text,
-      );
-      
-      if (!mounted) return;
-      setState(() {
-        _isLoading = false;
-      });
-      
-      // Clear any previous error messages
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).clearSnackBars();
-      
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Account created successfully! Complete your profile to get started.'),
-          backgroundColor: Color(0xFF8B5CF6),
-          duration: Duration(seconds: 3),
-        ),
-      );
-      
-      // Navigate to user survey page using pushAndRemoveUntil to clear the stack
-      Navigator.pushAndRemoveUntil(
-        context,
-        MaterialPageRoute(
-          builder: (context) => UserSurveyPage(
-            userId: newUser.id,
-            onComplete: () {
-              widget.onLoginSuccess(_emailController.text);
-            },
-          ),
-        ),
-        (route) => false, // This will remove all previous routes
-      );
-    } catch (e) {
-      if (!mounted) return;
-      setState(() {
-        _isLoading = false;
-      });
-      
-      if (e.toString().toLowerCase().contains('user with this email already exists')) {
-        _showErrorSnackBar('This email is already registered. Please login instead.');
-        setState(() {
-          _emailExists = true;
-          _showSignupFields = false;
-        });
-      } else {
-        _showErrorSnackBar('Signup failed: ${e.toString()}');
-      }
-    }
-  }
-
-  void _forgotPassword() {
-    if (!_isValidEmail) {
-      _showErrorSnackBar('Please enter a valid email address');
-      return;
+      return _buildAuthenticatedView(context, authState);
     }
 
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Reset Password'),
-        content: Text('Send password reset instructions to ${_emailController.text}?'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
-          ),
-          ElevatedButton(
-            onPressed: () async {
-              Navigator.pop(context);
-              setState(() => _isLoading = true);
-              
-              try {
-                await _localDBService.resetPassword(
-                  email: _emailController.text,
-                  newPassword: 'Reset123!', // Default password after reset
-                );
-                
-                setState(() => _isLoading = false);
-                
-                if (!mounted) return;
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text('Password reset completed. Check your email for the new password'),
-                    backgroundColor: Color(0xFF8B5CF6),
+    final isSignUp = _mode == _AuthMode.signUp;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Form(
+          key: _formKey,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              ClearTextField(
+                controller: _emailController,
+                focusNode: _emailFocus,
+                hintText: 'Email',
+                keyboardType: TextInputType.emailAddress,
+                textInputAction: TextInputAction.next,
+                onSubmitted: (_) => FocusScope.of(context).requestFocus(_passwordFocus),
+                validator: (value) {
+                  if (value == null || value.isEmpty) {
+                    return 'Please enter your email address';
+                  }
+                  final emailRegex = RegExp(r'^[\\w-\\.]+@([\\w-]+\\.)+[\\w-]{2,4}\\$');
+                  if (!emailRegex.hasMatch(value.trim())) {
+                    return 'Enter a valid email address';
+                  }
+                  return null;
+                },
+              ),
+              const SizedBox(height: 16),
+              TextFormField(
+                controller: _passwordController,
+                focusNode: _passwordFocus,
+                obscureText: _obscurePassword,
+                decoration: InputDecoration(
+                  labelText: isSignUp ? 'Create Password' : 'Password',
+                  suffixIcon: IconButton(
+                    icon: Icon(_obscurePassword ? Icons.visibility_off : Icons.visibility),
+                    onPressed: () {
+                      setState(() {
+                        _obscurePassword = !_obscurePassword;
+                      });
+                    },
                   ),
-                );
-              } catch (e) {
-                setState(() => _isLoading = false);
-                
-                if (!mounted) return;
-                _showErrorSnackBar('Error sending reset instructions: ${e.toString()}');
-              }
-            },
-            style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFF8B5CF6),
-              foregroundColor: Colors.white,
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                  filled: true,
+                  fillColor: Colors.grey[100],
+                ),
+                validator: (value) {
+                  if (value == null || value.isEmpty) {
+                    return 'Enter your password';
+                  }
+                  if (value.length < 8) {
+                    return 'Password must be at least 8 characters';
+                  }
+                  return null;
+                },
+              ),
+              if (isSignUp) ...[
+                const SizedBox(height: 16),
+                TextFormField(
+                  controller: _confirmPasswordController,
+                  obscureText: _obscureConfirmPassword,
+                  decoration: InputDecoration(
+                    labelText: 'Confirm Password',
+                    suffixIcon: IconButton(
+                      icon: Icon(_obscureConfirmPassword ? Icons.visibility_off : Icons.visibility),
+                      onPressed: () {
+                        setState(() {
+                          _obscureConfirmPassword = !_obscureConfirmPassword;
+                        });
+                      },
+                    ),
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                    filled: true,
+                    fillColor: Colors.grey[100],
+                  ),
+                  validator: (value) {
+                    if (value == null || value.isEmpty) {
+                      return 'Confirm your password';
+                    }
+                    if (value != _passwordController.text) {
+                      return 'Passwords do not match';
+                    }
+                    return null;
+                  },
+                ),
+              ],
+            ],
+          ),
+        ),
+        if (_mode == _AuthMode.signIn)
+          Align(
+            alignment: Alignment.centerRight,
+            child: TextButton(
+              onPressed: () => _showPasswordResetInfo(context),
+              child: const Text('Forgot password?'),
             ),
-            child: const Text('Send Instructions'),
+          ),
+        const SizedBox(height: 16),
+        ElevatedButton(
+          onPressed: authState.isPerformingRequest ? null : () => _handleSubmit(context),
+          style: ElevatedButton.styleFrom(
+            backgroundColor: const Color(0xFF8B5CF6),
+            foregroundColor: Colors.white,
+            padding: const EdgeInsets.symmetric(vertical: 16),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          ),
+          child: authState.isPerformingRequest
+              ? const SizedBox(
+                  width: 22,
+                  height: 22,
+                  child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
+                )
+              : Text(isSignUp ? 'Create Account' : 'Sign In', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+        ),
+        const SizedBox(height: 16),
+        _buildDivider(),
+        const SizedBox(height: 16),
+        _buildComingSoonButtons(),
+        if (widget.allowSkip) ...[
+          const SizedBox(height: 32),
+          TextButton(
+            onPressed: widget.onSkip,
+            child: const Text('Skip for now'),
+          ),
+        ],
+      ],
+    );
+  }
+
+  Widget _buildAuthenticatedView(BuildContext context, AuthState authState) {
+    final UserProfile profile = authState.profile!;
+    final themeColor = const Color(0xFF8B5CF6);
+    final avatarUrl = profile.avatarUrl;
+    ImageProvider? avatarProvider;
+    if (avatarUrl != null && avatarUrl.isNotEmpty && avatarUrl.startsWith('http')) {
+      avatarProvider = NetworkImage(avatarUrl);
+    }
+
+    String _buildInitials() {
+      final source = profile.fullName?.trim().isNotEmpty == true
+          ? profile.fullName!
+          : profile.email;
+      final parts = source.trim().split(RegExp(r'\s+'));
+      final buffer = StringBuffer();
+      for (final part in parts) {
+        if (part.isNotEmpty) {
+          buffer.write(part.substring(0, 1).toUpperCase());
+        }
+        if (buffer.length == 2) break;
+      }
+      return buffer.isEmpty ? '?' : buffer.toString();
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Card(
+          elevation: 0,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          child: Padding(
+            padding: const EdgeInsets.all(16.0),
+            child: Row(
+              children: [
+                CircleAvatar(
+                  radius: 32,
+                  backgroundColor: themeColor.withOpacity(0.12),
+                  backgroundImage: avatarProvider,
+                  child: avatarProvider == null
+                      ? Text(
+                          _buildInitials(),
+                          style: const TextStyle(
+                            fontSize: 20,
+                            fontWeight: FontWeight.w600,
+                            color: Color(0xFF4C1D95),
+                          ),
+                        )
+                      : null,
+                ),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        profile.fullName ?? profile.email,
+                        style: const TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        profile.email,
+                        style: TextStyle(color: Colors.grey[600]),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+        if (profile.hasPendingDeletion) ...[
+          const SizedBox(height: 16),
+          _buildDeletionBanner(profile),
+        ],
+        if (!profile.surveyCompleted) ...[
+          const SizedBox(height: 16),
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: themeColor.withOpacity(0.08),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Icon(Icons.task_alt, color: Color(0xFF6D28D9)),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    'Let\'s finish setting up your profile so we can personalise your experience.',
+                    style: TextStyle(color: Colors.grey[800]),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 12),
+          Semantics(
+            button: true,
+            label: 'Complete profile questionnaire',
+            child: ElevatedButton(
+              onPressed: _isSurveyActive ? null : () => _navigateToSurvey(authState),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: themeColor,
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(vertical: 14),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              ),
+              child: const Text('Complete profile now'),
+            ),
+          ),
+        ],
+        const SizedBox(height: 24),
+        Semantics(
+          button: true,
+          label: 'Continue to PocketLLM',
+          child: ElevatedButton(
+            onPressed: () => _handleContinue(authState),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: themeColor,
+              foregroundColor: Colors.white,
+              padding: const EdgeInsets.symmetric(vertical: 16),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            ),
+            child: const Text('Continue to PocketLLM'),
+          ),
+        ),
+        const SizedBox(height: 12),
+        Semantics(
+          button: true,
+          label: 'Sign out',
+          child: TextButton(
+            onPressed: () => _handleSignOut(authState),
+            child: const Text('Sign out'),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildDeletionBanner(UserProfile profile) {
+    final timeLeft = profile.timeUntilDeletion;
+    String subtitle = 'Account scheduled for deletion.';
+    if (timeLeft != null) {
+      final days = timeLeft.inDays;
+      final hours = timeLeft.inHours.remainder(24);
+      if (days > 0) {
+        subtitle = '$subtitle ${days}d ${hours}h remaining.';
+      } else if (hours > 0) {
+        final minutes = timeLeft.inMinutes.remainder(60);
+        subtitle = '$subtitle ${hours}h ${minutes}m remaining.';
+      }
+    }
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.orange[50],
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.orange[200]!),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Icon(Icons.warning_amber_rounded, color: Colors.orange),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Deletion pending',
+                  style: TextStyle(fontWeight: FontWeight.bold, color: Colors.orange),
+                ),
+                const SizedBox(height: 4),
+                Text(subtitle, style: const TextStyle(color: Colors.orange)),
+              ],
+            ),
           ),
         ],
       ),
     );
   }
-  
-  @override
-  Widget build(BuildContext context) {
-    final content = SingleChildScrollView(
-      child: Padding(
-        padding: const EdgeInsets.all(24.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            const SizedBox(height: 20),
-            Center(
-              child: Container(
-                height: 80,
-                width: 80,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  image: DecorationImage(
-                    image: AssetImage(_selectedAvatar),
-                    fit: BoxFit.cover,
-                  ),
-                ),
-              ),
-            ),
-            const SizedBox(height: 40),
-            Text(
-              _showSignupFields 
-                ? 'Create New Account' 
-                : (_showPasswordField 
-                    ? (_emailExists ? 'Welcome Back' : 'Create New Account') 
-                    : 'Welcome to PocketLLM'),
-              style: const TextStyle(
-                fontSize: 24,
-                fontWeight: FontWeight.bold,
-              ),
-              textAlign: TextAlign.center,
-            ),
-            if (_showPasswordField && _emailExists) 
-              Padding(
-                padding: const EdgeInsets.only(top: 8.0),
-                child: Text(
-                  'Your account was found in our system',
-                  style: TextStyle(
-                    fontSize: 16,
-                    color: Colors.green[700],
-                  ),
-                  textAlign: TextAlign.center,
-                ),
-              ),
-            if (_showPasswordField && !_emailExists) 
-              Padding(
-                padding: const EdgeInsets.only(top: 8.0),
-                child: Text(
-                  'Create a new account to get started',
-                  style: TextStyle(
-                    fontSize: 16,
-                    color: Colors.blue[700],
-                  ),
-                  textAlign: TextAlign.center,
-                ),
-              ),
-            const SizedBox(height: 40),
-            if (!_showPasswordField) ...[
-              Text(
-                'Enter your email to continue',
-                style: TextStyle(
-                  fontSize: 16,
-                  color: Colors.grey[700],
-                ),
-                textAlign: TextAlign.center,
-              ),
-              const SizedBox(height: 24),
-              ClearTextField(
-                controller: _emailController,
-                hintText: 'Email',
-                onChanged: (value) {
-                  setState(() {
-                    _isValidEmail = _validateEmail(value);
-                  });
-                },
-              ),
-              const SizedBox(height: 16),
-              ElevatedButton(
-                onPressed: _isValidEmail && !_isLoading
-                    ? _handleEmailCheck
-                    : null,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFF8B5CF6),
-                  foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(vertical: 16),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                ),
-                child: _isLoading
-                    ? const SizedBox(
-                        width: 20,
-                        height: 20,
-                        child: CircularProgressIndicator(color: Colors.white),
-                      )
-                    : const Text(
-                        'Continue',
-                        style: TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-              ),
-            ],
-            if (_showPasswordField && !_showSignupFields) ...[
-              Text(
-                _emailController.text,
-                style: TextStyle(
-                  fontSize: 16,
-                  color: Colors.grey[600],
-                ),
-                textAlign: TextAlign.center,
-              ),
-              const SizedBox(height: 16),
-              TextField(
-                controller: _passwordController,
-                obscureText: true,
-                decoration: InputDecoration(
-                  hintText: 'Password',
-                  filled: true,
-                  fillColor: Colors.grey[200],
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                    borderSide: BorderSide.none,
-                  ),
-                ),
-              ),
-              const SizedBox(height: 8),
-              Align(
-                alignment: Alignment.centerRight,
-                child: TextButton(
-                  onPressed: _forgotPassword,
-                  child: const Text(
-                    'Forgot Password?',
-                    style: TextStyle(color: Color(0xFF8B5CF6)),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 16),
-              Row(
-                children: [
-                  Expanded(
-                    child: TextButton.icon(
-                      onPressed: !_isLoading 
-                        ? () {
-                            setState(() {
-                              _showPasswordField = false;
-                              _passwordController.clear();
-                              _emailExists = false;
-                            });
-                          }
-                        : null,
-                      icon: const Icon(Icons.arrow_back),
-                      label: const Text('Back'),
-                      style: TextButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(vertical: 16),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 16),
-                  Expanded(
-                    child: ElevatedButton(
-                      onPressed: _isLoading ? null : _handleSignIn,
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xFF8B5CF6),
-                        foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(vertical: 16),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                      ),
-                      child: _isLoading
-                          ? const SizedBox(
-                              width: 20,
-                              height: 20,
-                              child: CircularProgressIndicator(color: Colors.white),
-                            )
-                          : const Text('Sign In'),
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 16),
-              TextButton(
-                onPressed: !_isLoading 
-                  ? () {
-                      setState(() {
-                        _showSignupFields = true;
-                        _passwordController.clear();
-                        _confirmPasswordController.clear();
-                      });
-                    }
-                  : null,
-                child: const Text(
-                  'Create a new account instead',
-                  style: TextStyle(color: Color(0xFF8B5CF6)),
-                ),
-              ),
-            ],
-            if (_showSignupFields) ...[
-              Text(
-                _emailController.text,
-                style: TextStyle(
-                  fontSize: 16,
-                  color: Colors.grey[600],
-                ),
-                textAlign: TextAlign.center,
-              ),
-              const SizedBox(height: 16),
-              TextField(
-                controller: _passwordController,
-                obscureText: true,
-                decoration: InputDecoration(
-                  hintText: 'Create Password',
-                  filled: true,
-                  fillColor: Colors.grey[200],
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                    borderSide: BorderSide.none,
-                  ),
-                ),
-              ),
-              const SizedBox(height: 16),
-              TextField(
-                controller: _confirmPasswordController,
-                obscureText: true,
-                decoration: InputDecoration(
-                  hintText: 'Confirm Password',
-                  filled: true,
-                  fillColor: Colors.grey[200],
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                    borderSide: BorderSide.none,
-                  ),
-                ),
-              ),
-              const SizedBox(height: 16),
-              Row(
-                children: [
-                  Expanded(
-                    child: TextButton.icon(
-                      onPressed: !_isLoading 
-                        ? () {
-                            setState(() {
-                              _showPasswordField = false;
-                              _showSignupFields = false;
-                              _passwordController.clear();
-                              _confirmPasswordController.clear();
-                              _emailExists = false;
-                            });
-                          }
-                        : null,
-                      icon: const Icon(Icons.arrow_back),
-                      label: const Text('Back'),
-                      style: TextButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(vertical: 16),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 16),
-                  Expanded(
-                    child: ElevatedButton(
-                      onPressed: _isLoading ? null : _handleSignUp,
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xFF8B5CF6),
-                        foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(vertical: 16),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                      ),
-                      child: _isLoading
-                          ? const SizedBox(
-                              width: 20,
-                              height: 20,
-                              child: CircularProgressIndicator(color: Colors.white),
-                            )
-                          : const Text('Sign Up'),
-                    ),
-                  ),
-                ],
-              ),
-            ],
-            if (!_showPasswordField) ...[
-              const SizedBox(height: 24),
-              Row(
-                children: [
-                  Expanded(child: Divider(color: Colors.grey[300] ?? Colors.white)),
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 16),
-                    child: Text(
-                      'or',
-                      style: TextStyle(
-                        color: Colors.grey[600] ?? Colors.white,
-                        fontSize: 14,
-                      ),
-                    ),
-                  ),
-                  Expanded(child: Divider(color: Colors.grey[300] ?? Colors.white)),
-                ],
-              ),
-              const SizedBox(height: 24),
-              OutlinedButton.icon(
-                onPressed: () {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text('Google Sign In is not available at the moment'),
-                      duration: Duration(seconds: 2),
-                      backgroundColor: Color(0xFF8B5CF6),
-                    ),
-                  );
-                },
-                icon: Image.asset(
-                  'assets/google.png',
-                  height: 24,
-                ),
-                label: Text(
-                  'Continue with Google',
-                  style: TextStyle(
-                    color: Colors.black,
-                    fontSize: 16,
-                  ),
-                ),
-                style: OutlinedButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(vertical: 16),
-                  side: BorderSide(color: Colors.grey[300] ?? Colors.white),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                ),
-              ),
-            ],
-          ],
+
+  Future<void> _handleContinue(AuthState authState) async {
+    await _clearAuthSkipFlag();
+    final email = authState.profile?.email ?? authState.supabaseUser?.email ?? '';
+    widget.onLoginSuccess?.call(email);
+  }
+
+  Future<void> _handleSignOut(AuthState authState) async {
+    try {
+      await authState.signOut();
+      if (!mounted) return;
+      setState(() {
+        _mode = _AuthMode.signIn;
+      });
+      _showSnackBar(context, 'Signed out', success: true);
+    } catch (e) {
+      _showSnackBar(context, 'Unable to sign out: $e', success: false);
+    }
+  }
+
+  Future<void> _navigateToSurvey(AuthState authState, {String? emailOverride}) async {
+    if (_isSurveyActive) return;
+    setState(() {
+      _isSurveyActive = true;
+    });
+
+    await Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (context) => UserSurveyPage(
+          onComplete: () {
+            widget.onLoginSuccess?.call(emailOverride ?? authState.profile?.email ?? '');
+          },
         ),
       ),
     );
 
-    if (widget.showAppBar) {
-      return Scaffold(
-        backgroundColor: Colors.grey[50],
-        appBar: AppBar(
-          backgroundColor: Colors.grey[50],
-          elevation: 0,
-          title: const Text(
-            'Account',
-            style: TextStyle(
-              color: Colors.black,
-              fontSize: 32,
-              fontWeight: FontWeight.bold,
+    if (!mounted) return;
+    setState(() {
+      _isSurveyActive = false;
+    });
+  }
+
+  Widget _buildDivider() {
+    return Row(
+      children: [
+        Expanded(child: Divider(color: Colors.grey[300])),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 12),
+          child: Text('or', style: TextStyle(color: Colors.grey[600])),
+        ),
+        Expanded(child: Divider(color: Colors.grey[300])),
+      ],
+    );
+  }
+
+  Widget _buildComingSoonButtons() {
+    final buttonStyle = OutlinedButton.styleFrom(
+      padding: const EdgeInsets.symmetric(vertical: 14),
+      side: BorderSide(color: Colors.grey[300]!),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      foregroundColor: Colors.grey[500],
+    );
+
+    Widget buildButton(String label, Widget leading) {
+      return OutlinedButton(
+        onPressed: null,
+        style: buttonStyle,
+        child: Row(
+          children: [
+            leading,
+            const SizedBox(width: 12),
+            Expanded(child: Text(label, style: const TextStyle(fontSize: 16, color: Colors.black54))),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              decoration: BoxDecoration(
+                color: Colors.amber[100],
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Text(
+                'Coming Soon',
+                style: TextStyle(color: Colors.amber[800], fontSize: 12, fontWeight: FontWeight.w600),
+              ),
             ),
+          ],
+        ),
+      );
+    }
+
+    return Column(
+      children: [
+        buildButton(
+          'Continue with Google',
+          Image.asset('assets/google.png', height: 24, color: Colors.grey[500]),
+        ),
+        const SizedBox(height: 12),
+        buildButton(
+          'Continue with Apple',
+          const Icon(Icons.apple, color: Colors.grey, size: 24),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildUnavailableState() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: Colors.orange[50],
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: Colors.orange[200]!),
+          ),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Icon(Icons.info_outline, color: Colors.orange[700]),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  'Authentication is currently unavailable. Please configure Supabase credentials to enable account features.',
+                  style: TextStyle(color: Colors.orange[800]),
+                ),
+              ),
+            ],
           ),
         ),
-        body: content,
-      );
-    } else {
-      return content;
+        if (widget.allowSkip) ...[
+          const SizedBox(height: 24),
+          ElevatedButton(
+            onPressed: widget.onSkip,
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF8B5CF6),
+              foregroundColor: Colors.white,
+              padding: const EdgeInsets.symmetric(vertical: 16),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            ),
+            child: const Text('Continue without an account'),
+          ),
+        ],
+      ],
+    );
+  }
+
+  Future<void> _handleSubmit(BuildContext context) async {
+    final authState = context.read<AuthState>();
+    if (!authState.supabaseAvailable) {
+      _showSnackBar(context, 'Authentication service is currently unavailable.');
+      return;
     }
+
+    if (!(_formKey.currentState?.validate() ?? false)) {
+      return;
+    }
+
+    final email = _emailController.text.trim();
+    final password = _passwordController.text;
+
+    try {
+      if (_mode == _AuthMode.signIn) {
+        final result = await authState.signInWithEmail(email: email, password: password);
+        if (!mounted) return;
+
+        await _clearAuthSkipFlag();
+        final profile = authState.profile;
+
+        if (profile != null && !profile.surveyCompleted) {
+          final message = result.canceledDeletion
+              ? 'Account deletion cancelled. Welcome back! Please finish your profile setup.'
+              : 'Signed in successfully. Let\'s finish setting up your profile.';
+          _showSnackBar(context, message, success: true);
+          await _navigateToSurvey(authState, emailOverride: email);
+        } else {
+          widget.onLoginSuccess?.call(email);
+          if (result.canceledDeletion) {
+            _showSnackBar(context, 'Account deletion cancelled. Welcome back!', success: true);
+          } else {
+            _showSnackBar(context, 'Signed in successfully', success: true);
+          }
+        }
+      } else {
+        final result = await authState.signUpWithEmail(email: email, password: password);
+        if (!mounted) return;
+
+        if (result.emailConfirmationRequired) {
+          await _clearAuthSkipFlag();
+          _showSnackBar(
+            context,
+            'Please check your email to confirm your account before continuing.',
+            success: true,
+          );
+          widget.onLoginSuccess?.call(email);
+        } else {
+          await _clearAuthSkipFlag();
+          _showSnackBar(
+            context,
+            'Account created! Tell us a bit about yourself so we can personalise PocketLLM.',
+            success: true,
+          );
+          await _navigateToSurvey(authState, emailOverride: email);
+        }
+      }
+    } on supa.AuthException catch (e) {
+      _showSnackBar(context, e.message, success: false);
+    } on StateError catch (e) {
+      _showSnackBar(context, e.message, success: false);
+    } catch (e) {
+      _showSnackBar(context, 'Something went wrong: $e', success: false);
+    }
+  }
+
+  void _showPasswordResetInfo(BuildContext context) {
+    showDialog<void>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Password Reset'),
+        content: const Text(
+          'Password reset is coming soon. For now, contact support to regain access to your account.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Close'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showSnackBar(BuildContext context, String message, {bool success = false}) {
+    final messenger = ScaffoldMessenger.of(context);
+    messenger.hideCurrentSnackBar();
+    messenger.showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor: success ? const Color(0xFF8B5CF6) : Colors.redAccent,
+      ),
+    );
+  }
+
+  Future<void> _clearAuthSkipFlag() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove('authSkipped');
   }
 }

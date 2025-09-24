@@ -100,13 +100,25 @@ flutter run
 
 We welcome contributions! Please see our [Contributing Guidelines](CONTRIBUTING.md) for details.
 
-## 📸 Screenshots
+For AI agents and developers looking to understand the codebase structure and development workflows, see our [AGENTS.md](AGENTS.md) documentation.
 
-<div style="display: flex; justify-content: space-between;">
-    <img src="screenshots/mobile_chat.png" width="200" alt="Mobile Chat Interface">
-    <img src="screenshots/model_selection.png" width="200" alt="Model Selection">
-    <img src="screenshots/desktop_view.png" width="400" alt="Desktop Interface">
-</div>
+## 📚 Documentation
+
+For developers and contributors, we provide comprehensive documentation:
+
+- [AGENTS.md](AGENTS.md) - AI agent development guide
+- [CONTRIBUTING.md](CONTRIBUTING.md) - Contribution guidelines
+- [Flutter Setup Guide](docs/flutter-setup-guide.md) - Complete Flutter development environment setup
+- [Project Structure](docs/project-structure.md) - Detailed codebase organization
+- [API Documentation](docs/api-documentation.md) - Comprehensive API reference
+- [API Maintenance Guide](docs/api-maintenance.md) - How to keep API documentation up-to-date
+- [Backend Guide](docs/backend-guide.md) - Backend development and deployment
+
+For API testing and integration:
+- [Postman API Guide](pocketllm-backend/POSTMAN_API_GUIDE.md) - Detailed API endpoint examples
+
+## 📸 Screenshots
+`comming soon`
 
 ## 📄 License
 

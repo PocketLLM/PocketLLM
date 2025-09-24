@@ -4,7 +4,6 @@ import '../pages/config_page.dart';
 import '../pages/library_page.dart';
 import '../pages/settings_page.dart';
 import '../services/model_service.dart';
-import '../services/auth_service.dart';
 import '../services/theme_service.dart';
 import '../services/model_state.dart';
 import '../component/models.dart';
@@ -31,7 +30,6 @@ class CustomAppBar extends StatefulWidget implements PreferredSizeWidget {
 }
 
 class _CustomAppBarState extends State<CustomAppBar> {
-  final _authService = AuthService();
   final _modelState = ModelState();
 
   @override
