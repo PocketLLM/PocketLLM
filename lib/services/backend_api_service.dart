@@ -4,6 +4,8 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:http/http.dart' as http;
 
+typedef _RequestInvoker = Future<http.Response> Function(String baseUrl);
+
 class BackendApiService {
   BackendApiService._internal();
   static final BackendApiService _instance = BackendApiService._internal();
@@ -193,8 +195,6 @@ class BackendApiService {
 
     return '$baseUrl/$normalizedSuffix';
   }
-
-  typedef _RequestInvoker = Future<http.Response> Function(String baseUrl);
 
   Future<http.Response> _executeWithFallback(_RequestInvoker invoke) async {
     http.Response? lastResponse;
