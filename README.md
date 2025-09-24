@@ -1,11 +1,14 @@
 # PocketLLM
 
 PocketLLM is a powerful, cross-platform AI chat application built with Flutter that brings the power of large language models to your pocket. What makes PocketLLM unique is its ability to download and run AI models directly on your mobile device or connect to locally hosted models on your computer.
+<div align="center">
+  <img src="https://img.shields.io/badge/Status-Under_Development-orange?style=for-the-badge&logo=github" alt="Under Development">
+  <img src="https://img.shields.io/badge/Release-Coming_Soon-blue?style=for-the-badge&logo=github" alt="Coming Soon">
+</div>
 
-![PocketLLM Screenshot](![image](https://github.com/user-attachments/assets/822b955b-b042-4ef4-87aa-c3a7c48baf52))
-![PocketLLM Screenshot](![image](https://github.com/user-attachments/assets/5cd08ecb-70fc-42db-b6d3-e0eca1ac2413))
-![PocketLLM Screenshot](![image](https://github.com/user-attachments/assets/e8eda090-b476-42a8-b381-682c03c58898))
-
+<p align="center">
+  <em>PocketLLM is currently in active development. A beta version will be released soon!</em>
+</p>
 
 ## ✨ Key Features
 
