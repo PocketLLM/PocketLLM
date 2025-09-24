@@ -3,13 +3,11 @@ import { ApiTags, ApiOperation, ApiResponse, ApiBody, ApiBearerAuth } from '@nes
 import { UsersService } from './users.service';
 import { UpdateProfileDto } from './dto/update-profile.dto';
 import { ProfileDto } from './dto/profile.dto';
-
-// We'll create this guard later
-// import { AuthGuard } from '../common/guards/auth.guard';
+import { AuthGuard } from '../common/guards/auth.guard';
 
 @ApiTags('Users')
 @Controller('users')
-// @UseGuards(AuthGuard) // Will be uncommented when we create the auth guard
+@UseGuards(AuthGuard)
 @ApiBearerAuth()
 export class UsersController {
   constructor(private readonly usersService: UsersService) {}
@@ -29,7 +27,6 @@ export class UsersController {
     description: 'Profile not found',
   })
   async getProfile(@Req() request: any): Promise<ProfileDto> {
-    // For now, we'll get userId from request.user.id (will be set by auth guard)
     const userId = request.user?.id;
     return this.usersService.getProfile(userId);
   }

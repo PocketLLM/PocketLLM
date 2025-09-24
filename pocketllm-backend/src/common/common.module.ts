@@ -2,6 +2,7 @@ import { Module, Global } from '@nestjs/common';
 import { APP_FILTER, APP_INTERCEPTOR } from '@nestjs/core';
 import { EncryptionService } from './services/encryption.service';
 import { SupabaseService } from './services/supabase.service';
+import { AuthGuard } from './guards/auth.guard';
 import { ResponseInterceptor } from './interceptors/response.interceptor';
 import { HttpExceptionFilter } from './filters/http-exception.filter';
 
@@ -10,6 +11,7 @@ import { HttpExceptionFilter } from './filters/http-exception.filter';
   providers: [
     EncryptionService,
     SupabaseService,
+    AuthGuard,
     {
       provide: APP_INTERCEPTOR,
       useClass: ResponseInterceptor,
@@ -19,6 +21,6 @@ import { HttpExceptionFilter } from './filters/http-exception.filter';
       useClass: HttpExceptionFilter,
     },
   ],
-  exports: [EncryptionService, SupabaseService],
+  exports: [EncryptionService, SupabaseService, AuthGuard],
 })
 export class CommonModule {}

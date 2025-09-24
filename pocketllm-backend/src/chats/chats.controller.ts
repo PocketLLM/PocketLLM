@@ -1,21 +1,24 @@
 import { 
-  Controller, 
-  Get, 
-  Post, 
-  Put, 
-  Delete, 
-  Body, 
-  Param, 
-  Query, 
-  Req, 
-  HttpCode, 
-  HttpStatus 
+  Controller,
+  Get,
+  Post,
+  Put,
+  Delete,
+  Body,
+  Param,
+  Query,
+  Req,
+  UseGuards,
+  HttpCode,
+  HttpStatus
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse, ApiBody, ApiBearerAuth } from '@nestjs/swagger';
 import { ChatsService } from './chats.service';
+import { AuthGuard } from '../common/guards/auth.guard';
 
 @ApiTags('Chats')
 @Controller('chats')
+@UseGuards(AuthGuard)
 @ApiBearerAuth()
 export class ChatsController {
   constructor(private readonly chatsService: ChatsService) {}

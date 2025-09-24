@@ -1,6 +1,6 @@
 # PocketLLM NestJS Backend
 
-This is the **migrated NestJS backend** for PocketLLM, a chat application that integrates with multiple LLM providers (OpenAI, Anthropic, Ollama) and includes features like image generation and text embeddings.
+This is the **migrated NestJS backend** for PocketLLM, a chat application that integrates with multiple LLM providers (OpenAI, Anthropic, Ollama) and includes features like chat history management and image generation.
 
 ## 🚀 Migration Complete
 
@@ -27,9 +27,7 @@ src/
 │           ├── auth.schemas.ts
 │           ├── users.schemas.ts
 │           ├── chats.schemas.ts
-│           ├── models.schemas.ts
-│           ├── jobs.schemas.ts
-│           └── embeddings.schemas.ts
+│           └── jobs.schemas.ts
 ├── auth/                      # Authentication module
 │   ├── auth.controller.ts
 │   ├── auth.service.ts
@@ -37,9 +35,7 @@ src/
 │   └── dto/                   # Legacy DTOs (kept for reference)
 ├── users/                     # User/Profile management
 ├── chats/                     # Chat functionality
-├── models/                    # AI model configuration
 ├── jobs/                      # Background jobs (image generation)
-├── embeddings/                # Text embeddings
 ├── providers/                 # External service integrations
 │   ├── openai.service.ts
 │   ├── anthropic.service.ts
@@ -128,9 +124,7 @@ The API is fully documented with Swagger/OpenAPI. Once the server is running, vi
 - **Authentication**: `/v1/auth/signup`, `/v1/auth/signin`
 - **Users**: `/v1/users/profile`
 - **Chats**: `/v1/chats`, `/v1/chats/:id/messages`
-- **Models**: `/v1/models`, `/v1/models/user`
 - **Jobs**: `/v1/jobs`, `/v1/jobs/image-generation`
-- **Embeddings**: `/v1/embeddings/generate`, `/v1/embeddings/search`
 
 ## 🔧 Key Features
 
@@ -162,7 +156,7 @@ All API responses follow a consistent format:
 ```
 
 ### 3. **Multi-Provider AI Integration**
-- **OpenAI**: GPT models and embeddings
+- **OpenAI**: GPT models
 - **Anthropic**: Claude models
 - **Ollama**: Local/self-hosted models
 - **ImageRouter**: Image generation

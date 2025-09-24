@@ -4,65 +4,60 @@
 ```
 http://localhost:8000/v1
 ```
-I've created a comprehensive API documentation guide for Postman testing. Let me create a summary of what was accomplished:
+## 🚀 Getting Started
 
-## 📋 **Complete API Documentation Created!**
+Follow these steps to run the NestJS backend locally before testing the API in Postman:
 
-I've created a comprehensive **Postman API Testing Guide** (`POSTMAN_API_GUIDE.md`) that includes:
+1. **Install dependencies**
+   ```bash
+   cd pocketllm-backend
+   npm install
+   ```
+2. **Configure environment variables**
+   ```bash
+   cp .env.example .env
+   # Update .env with your Supabase credentials and desired PORT/CORS values
+   ```
+3. **Start the development server**
+   ```bash
+   npm run start:dev
+   ```
+4. The API will be available at `http://localhost:8000/v1` and interactive Swagger docs at `http://localhost:8000/api/docs`.
 
-### ✅ **All Endpoints Documented:**
+## 📋 Endpoint Overview
 
-1. **🔐 Authentication (2 endpoints)**
-   - `POST /v1/auth/signup` - Sign up new user
-   - `POST /v1/auth/signin` - Sign in existing user
+The backend currently exposes the following authenticated endpoint groups:
 
-2. **👤 Users (3 endpoints)**
-   - `GET /v1/users/profile` - Get user profile
-   - `PUT /v1/users/profile` - Update user profile  
-   - `DELETE /v1/users/profile` - Delete user account
+- **🔐 Authentication (2 endpoints)**
+  - `POST /v1/auth/signup` – Sign up new user
+  - `POST /v1/auth/signin` – Sign in existing user
 
-3. **💬 Chats (7 endpoints)**
-   - `GET /v1/chats` - Get user chats
-   - `POST /v1/chats` - Create new chat
-   - `GET /v1/chats/{chatId}` - Get chat by ID
-   - `PUT /v1/chats/{chatId}` - Update chat
-   - `DELETE /v1/chats/{chatId}` - Delete chat
-   - `POST /v1/chats/{chatId}/messages` - Send message
-   - `GET /v1/chats/{chatId}/messages` - Get chat messages
+- **👤 Users (3 endpoints)**
+  - `GET /v1/users/profile` – Get user profile
+  - `PUT /v1/users/profile` – Update user profile
+  - `DELETE /v1/users/profile` – Delete user account
 
-4. **🤖 Models (8 endpoints)**
-   - `GET /v1/models` - Get available models
-   - `GET /v1/models/user` - Get user model configurations
-   - `POST /v1/models/user` - Save user model configuration
-   - `PUT /v1/models/user/{configId}` - Update user model configuration
-   - `DELETE /v1/models/user/{configId}` - Delete user model configuration
-   - `POST /v1/models/test` - Test model configuration
-   - `GET /v1/models/providers` - Get supported providers
-   - `GET /v1/models/providers/{provider}/models` - Get models for provider
+- **💬 Chats (7 endpoints)**
+  - `GET /v1/chats` – Get user chats
+  - `POST /v1/chats` – Create new chat
+  - `GET /v1/chats/{chatId}` – Get chat by ID
+  - `PUT /v1/chats/{chatId}` – Update chat
+  - `DELETE /v1/chats/{chatId}` – Delete chat
+  - `POST /v1/chats/{chatId}/messages` – Send message
+  - `GET /v1/chats/{chatId}/messages` – Get chat messages
 
-5. **🎨 Jobs/Image Generation (7 endpoints)**
-   - `GET /v1/jobs` - Get user jobs
-   - `POST /v1/jobs/image-generation` - Create image generation job
-   - `GET /v1/jobs/{jobId}` - Get job by ID
-   - `DELETE /v1/jobs/{jobId}` - Cancel/Delete job
-   - `POST /v1/jobs/{jobId}/retry` - Retry failed job
-   - `GET /v1/jobs/image-generation/models` - Get available image models
-   - `POST /v1/jobs/image-generation/estimate-cost` - Estimate image generation cost
-
-6. **🔍 Embeddings (9 endpoints)**
-   - `POST /v1/embeddings/generate` - Generate embeddings
-   - `POST /v1/embeddings/search` - Search embeddings
-   - `GET /v1/embeddings/collections` - Get embedding collections
-   - `POST /v1/embeddings/collections` - Create embedding collection
-   - `GET /v1/embeddings/collections/{collectionId}` - Get collection embeddings
-   - `DELETE /v1/embeddings/collections/{collectionId}` - Delete collection
-   - `GET /v1/embeddings/{embeddingId}` - Get embedding by ID
-   - `DELETE /v1/embeddings/{embeddingId}` - Delete embedding
-   - `GET /v1/embeddings/models/available` - Get available embedding models
+- **🎨 Jobs/Image Generation (7 endpoints)**
+  - `GET /v1/jobs` – Get user jobs
+  - `POST /v1/jobs/image-generation` – Create image generation job
+  - `GET /v1/jobs/{jobId}` – Get job by ID
+  - `DELETE /v1/jobs/{jobId}` – Cancel/Delete job
+  - `POST /v1/jobs/{jobId}/retry` – Retry failed job
+  - `GET /v1/jobs/image-generation/models` – Get available image models
+  - `POST /v1/jobs/image-generation/estimate-cost` – Estimate image generation cost
 
 ### 📋 **Each Endpoint Includes:**
 
-- **Group classification** (auth, users, chats, models, jobs, embeddings)
+- **Group classification** (auth, users, chats, jobs)
 - **Complete URL** with base URL
 - **HTTP method** (GET, POST, PUT, DELETE)
 - **Required headers** (Authorization, Content-Type)
@@ -517,276 +512,6 @@ Authorization: Bearer <access_token>
 
 ---
 
-## 🤖 Models
-
-### GET /v1/models
-**Group:** models
-**URL:** `http://localhost:8000/v1/models`
-
-**Headers:**
-```
-Authorization: Bearer <access_token>
-```
-
-**Response:**
-```json
-{
-  "success": true,
-  "data": [
-    {
-      "id": "gpt-4",
-      "name": "GPT-4",
-      "description": "Most capable GPT model",
-      "requiresApiKey": true
-    },
-    {
-      "id": "claude-3-sonnet",
-      "name": "Claude 3 Sonnet",
-      "description": "Anthropic's balanced model",
-      "requiresApiKey": true
-    }
-  ]
-}
-```
-
-### GET /v1/models/user
-**Group:** models
-**URL:** `http://localhost:8000/v1/models/user`
-
-**Headers:**
-```
-Authorization: Bearer <access_token>
-```
-
-**Response:**
-```json
-{
-  "success": true,
-  "data": [
-    {
-      "id": "uuid",
-      "user_id": "uuid",
-      "name": "My GPT-4 Config",
-      "provider": "openai",
-      "model": "gpt-4",
-      "api_key": "sk-...",
-      "system_prompt": "You are a helpful assistant",
-      "temperature": 0.7,
-      "max_tokens": 1000,
-      "is_default": true,
-      "created_at": "2023-10-27T10:00:00.000Z",
-      "updated_at": "2023-10-27T10:00:00.000Z"
-    }
-  ]
-}
-```
-
-### POST /v1/models/user
-**Group:** models
-**URL:** `http://localhost:8000/v1/models/user`
-
-**Headers:**
-```
-Authorization: Bearer <access_token>
-```
-
-**Body (JSON):**
-```json
-{
-  "name": "My GPT-4 Config",
-  "provider": "openai",
-  "model": "gpt-4",
-  "apiKey": "sk-...",
-  "systemPrompt": "You are a helpful assistant",
-  "temperature": 0.7,
-  "maxTokens": 1000,
-  "isDefault": true
-}
-```
-
-**Response:**
-```json
-{
-  "success": true,
-  "data": {
-    "id": "uuid",
-    "user_id": "uuid",
-    "name": "My GPT-4 Config",
-    "provider": "openai",
-    "model": "gpt-4",
-    "api_key": "sk-...",
-    "system_prompt": "You are a helpful assistant",
-    "temperature": 0.7,
-    "max_tokens": 1000,
-    "is_default": true,
-    "created_at": "2023-10-27T10:00:00.000Z",
-    "updated_at": "2023-10-27T10:00:00.000Z"
-  }
-}
-```
-
-### PUT /v1/models/user/{configId}
-**Group:** models
-**URL:** `http://localhost:8000/v1/models/user/uuid-here`
-
-**Headers:**
-```
-Authorization: Bearer <access_token>
-```
-
-**Body (JSON):**
-```json
-{
-  "name": "Updated GPT-4 Config",
-  "temperature": 0.8,
-  "maxTokens": 1500
-}
-```
-
-**Response:**
-```json
-{
-  "success": true,
-  "data": {
-    "id": "uuid",
-    "user_id": "uuid",
-    "name": "Updated GPT-4 Config",
-    "provider": "openai",
-    "model": "gpt-4",
-    "temperature": 0.8,
-    "max_tokens": 1500,
-    "updated_at": "2023-10-27T11:00:00.000Z"
-  }
-}
-```
-
-### DELETE /v1/models/user/{configId}
-**Group:** models
-**URL:** `http://localhost:8000/v1/models/user/uuid-here`
-
-**Headers:**
-```
-Authorization: Bearer <access_token>
-```
-
-**Response:**
-```json
-{
-  "success": true,
-  "data": {
-    "message": "Model configuration deleted successfully"
-  }
-}
-```
-
-### POST /v1/models/test
-**Group:** models
-**URL:** `http://localhost:8000/v1/models/test`
-
-**Headers:**
-```
-Authorization: Bearer <access_token>
-```
-
-**Body (JSON):**
-```json
-{
-  "provider": "openai",
-  "model": "gpt-4",
-  "apiKey": "sk-...",
-  "systemPrompt": "You are a helpful assistant",
-  "testPrompt": "Say hello",
-  "temperature": 0.7,
-  "maxTokens": 100
-}
-```
-
-**Response:**
-```json
-{
-  "success": true,
-  "data": {
-    "testResult": "Hello! How can I assist you today?",
-    "responseTime": 1234,
-    "tokenCount": 8
-  }
-}
-```
-
-### GET /v1/models/providers
-**Group:** models
-**URL:** `http://localhost:8000/v1/models/providers`
-
-**Headers:**
-```
-Authorization: Bearer <access_token>
-```
-
-**Response:**
-```json
-{
-  "success": true,
-  "data": [
-    {
-      "id": "openai",
-      "name": "OpenAI",
-      "models": [
-        {
-          "id": "gpt-4",
-          "name": "GPT-4",
-          "description": "Most capable GPT model",
-          "requiresApiKey": true
-        }
-      ]
-    },
-    {
-      "id": "anthropic",
-      "name": "Anthropic",
-      "models": [
-        {
-          "id": "claude-3-sonnet",
-          "name": "Claude 3 Sonnet",
-          "description": "Balanced model for most tasks",
-          "requiresApiKey": true
-        }
-      ]
-    }
-  ]
-}
-```
-
-### GET /v1/models/providers/{provider}/models
-**Group:** models
-**URL:** `http://localhost:8000/v1/models/providers/openai/models`
-
-**Headers:**
-```
-Authorization: Bearer <access_token>
-```
-
-**Response:**
-```json
-{
-  "success": true,
-  "data": [
-    {
-      "id": "gpt-4",
-      "name": "GPT-4",
-      "description": "Most capable GPT model",
-      "requiresApiKey": true
-    },
-    {
-      "id": "gpt-3.5-turbo",
-      "name": "GPT-3.5 Turbo",
-      "description": "Fast and efficient model",
-      "requiresApiKey": true
-    }
-  ]
-}
-```
-
----
-
 ## 🎨 Jobs (Image Generation)
 
 ### GET /v1/jobs
@@ -1027,316 +752,6 @@ Authorization: Bearer <access_token>
       "unitCost": 0.08
     }
   }
-}
-```
-
----
-
-## 🔍 Embeddings
-
-### POST /v1/embeddings/generate
-**Group:** embeddings
-**URL:** `http://localhost:8000/v1/embeddings/generate`
-
-**Headers:**
-```
-Authorization: Bearer <access_token>
-```
-
-**Body (JSON):**
-```json
-{
-  "text": "This is a sample text to generate embeddings for",
-  "model": "text-embedding-3-large",
-  "collectionId": "uuid-optional",
-  "apiKey": "sk-...",
-  "metadata": {
-    "source": "user_input",
-    "category": "general"
-  }
-}
-```
-
-**Response:**
-```json
-{
-  "success": true,
-  "data": {
-    "id": "uuid",
-    "user_id": "uuid",
-    "collection_id": "uuid",
-    "text": "This is a sample text to generate embeddings for",
-    "model": "text-embedding-3-large",
-    "embedding": [0.1, 0.2, 0.3, "...1536 dimensions"],
-    "metadata": {
-      "source": "user_input",
-      "category": "general"
-    },
-    "token_count": 12,
-    "created_at": "2023-10-27T10:00:00.000Z"
-  }
-}
-```
-
-### POST /v1/embeddings/search
-**Group:** embeddings
-**URL:** `http://localhost:8000/v1/embeddings/search`
-
-**Headers:**
-```
-Authorization: Bearer <access_token>
-```
-
-**Body (JSON):**
-```json
-{
-  "query": "Find similar text about machine learning",
-  "model": "text-embedding-3-large",
-  "collectionId": "uuid-optional",
-  "apiKey": "sk-...",
-  "limit": 10,
-  "threshold": 0.8
-}
-```
-
-**Response:**
-```json
-{
-  "success": true,
-  "data": [
-    {
-      "id": "uuid",
-      "text": "Machine learning is a subset of artificial intelligence",
-      "metadata": {
-        "source": "document",
-        "category": "ai"
-      },
-      "similarity": 0.95,
-      "created_at": "2023-10-27T09:00:00.000Z"
-    },
-    {
-      "id": "uuid",
-      "text": "Deep learning algorithms are powerful tools",
-      "metadata": {
-        "source": "article",
-        "category": "tech"
-      },
-      "similarity": 0.87,
-      "created_at": "2023-10-27T08:00:00.000Z"
-    }
-  ]
-}
-```
-
-### GET /v1/embeddings/collections
-**Group:** embeddings
-**URL:** `http://localhost:8000/v1/embeddings/collections`
-
-**Headers:**
-```
-Authorization: Bearer <access_token>
-```
-
-**Response:**
-```json
-{
-  "success": true,
-  "data": [
-    {
-      "id": "uuid",
-      "user_id": "uuid",
-      "name": "My Documents",
-      "description": "Collection of my personal documents",
-      "metadata": {
-        "category": "personal"
-      },
-      "embedding_count": 25,
-      "created_at": "2023-10-27T10:00:00.000Z",
-      "updated_at": "2023-10-27T10:00:00.000Z"
-    }
-  ]
-}
-```
-
-### POST /v1/embeddings/collections
-**Group:** embeddings
-**URL:** `http://localhost:8000/v1/embeddings/collections`
-
-**Headers:**
-```
-Authorization: Bearer <access_token>
-```
-
-**Body (JSON):**
-```json
-{
-  "name": "Research Papers",
-  "description": "Collection of AI research papers",
-  "metadata": {
-    "category": "research",
-    "topic": "artificial_intelligence"
-  }
-}
-```
-
-**Response:**
-```json
-{
-  "success": true,
-  "data": {
-    "id": "uuid",
-    "user_id": "uuid",
-    "name": "Research Papers",
-    "description": "Collection of AI research papers",
-    "metadata": {
-      "category": "research",
-      "topic": "artificial_intelligence"
-    },
-    "embedding_count": 0,
-    "created_at": "2023-10-27T10:00:00.000Z",
-    "updated_at": "2023-10-27T10:00:00.000Z"
-  }
-}
-```
-
-### GET /v1/embeddings/collections/{collectionId}
-**Group:** embeddings
-**URL:** `http://localhost:8000/v1/embeddings/collections/uuid-here?limit=10&offset=0`
-
-**Headers:**
-```
-Authorization: Bearer <access_token>
-```
-
-**Query Parameters:**
-- `limit` (optional): Max 100, default 50
-- `offset` (optional): Default 0
-
-**Response:**
-```json
-{
-  "success": true,
-  "data": [
-    {
-      "id": "uuid",
-      "user_id": "uuid",
-      "collection_id": "uuid",
-      "text": "Sample text in collection",
-      "model": "text-embedding-3-large",
-      "embedding": [0.1, 0.2, 0.3, "..."],
-      "metadata": {
-        "source": "document"
-      },
-      "token_count": 5,
-      "created_at": "2023-10-27T10:00:00.000Z"
-    }
-  ]
-}
-```
-
-### DELETE /v1/embeddings/collections/{collectionId}
-**Group:** embeddings
-**URL:** `http://localhost:8000/v1/embeddings/collections/uuid-here`
-
-**Headers:**
-```
-Authorization: Bearer <access_token>
-```
-
-**Response:**
-```json
-{
-  "success": true,
-  "data": {
-    "message": "Collection and all embeddings deleted successfully"
-  }
-}
-```
-
-### GET /v1/embeddings/{embeddingId}
-**Group:** embeddings
-**URL:** `http://localhost:8000/v1/embeddings/uuid-here`
-
-**Headers:**
-```
-Authorization: Bearer <access_token>
-```
-
-**Response:**
-```json
-{
-  "success": true,
-  "data": {
-    "id": "uuid",
-    "user_id": "uuid",
-    "collection_id": "uuid",
-    "text": "Sample embedding text",
-    "model": "text-embedding-3-large",
-    "embedding": [0.1, 0.2, 0.3, "...1536 dimensions"],
-    "metadata": {
-      "source": "user_input"
-    },
-    "token_count": 4,
-    "created_at": "2023-10-27T10:00:00.000Z"
-  }
-}
-```
-
-### DELETE /v1/embeddings/{embeddingId}
-**Group:** embeddings
-**URL:** `http://localhost:8000/v1/embeddings/uuid-here`
-
-**Headers:**
-```
-Authorization: Bearer <access_token>
-```
-
-**Response:**
-```json
-{
-  "success": true,
-  "data": {
-    "message": "Embedding deleted successfully"
-  }
-}
-```
-
-### GET /v1/embeddings/models/available
-**Group:** embeddings
-**URL:** `http://localhost:8000/v1/embeddings/models/available`
-
-**Headers:**
-```
-Authorization: Bearer <access_token>
-```
-
-**Response:**
-```json
-{
-  "success": true,
-  "data": [
-    {
-      "name": "text-embedding-3-large",
-      "provider": "openai",
-      "dimensions": 3072,
-      "maxTokens": 8191,
-      "pricing": 0.00013
-    },
-    {
-      "name": "text-embedding-3-small",
-      "provider": "openai",
-      "dimensions": 1536,
-      "maxTokens": 8191,
-      "pricing": 0.00002
-    },
-    {
-      "name": "text-embedding-ada-002",
-      "provider": "openai",
-      "dimensions": 1536,
-      "maxTokens": 8191,
-      "pricing": 0.0001
-    }
-  ]
 }
 ```
 

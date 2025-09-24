@@ -3,18 +3,21 @@ import {
   Get, 
   Post, 
   Delete, 
-  Body, 
-  Param, 
-  Query, 
-  Req, 
-  HttpCode, 
-  HttpStatus 
+  Body,
+  Param,
+  Query,
+  Req,
+  UseGuards,
+  HttpCode,
+  HttpStatus
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse, ApiBody, ApiBearerAuth } from '@nestjs/swagger';
 import { JobsService } from './jobs.service';
+import { AuthGuard } from '../common/guards/auth.guard';
 
 @ApiTags('Jobs')
 @Controller('jobs')
+@UseGuards(AuthGuard)
 @ApiBearerAuth()
 export class JobsController {
   constructor(private readonly jobsService: JobsService) {}

@@ -1,4 +1,11 @@
-import { Injectable, Logger, NotFoundException, ConflictException, InternalServerErrorException } from '@nestjs/common';
+import {
+  Injectable,
+  Logger,
+  NotFoundException,
+  ConflictException,
+  InternalServerErrorException,
+  UnauthorizedException,
+} from '@nestjs/common';
 import { SupabaseService } from '../common/services/supabase.service';
 import { UpdateProfileDto } from './dto/update-profile.dto';
 import { ProfileDto } from './dto/profile.dto';
@@ -13,8 +20,12 @@ export class UsersService {
    * Get user profile by user ID
    * @param userId The user ID
    * @returns User profile data
-   */
+  */
   async getProfile(userId: string): Promise<ProfileDto> {
+    if (!userId) {
+      throw new UnauthorizedException('User not authenticated.');
+    }
+
     try {
       const { data, error } = await this.supabaseService
         .from('profiles')
@@ -44,8 +55,12 @@ export class UsersService {
    * @param userId The user ID
    * @param updateProfileDto Profile update data
    * @returns Updated profile data
-   */
+  */
   async updateProfile(userId: string, updateProfileDto: UpdateProfileDto): Promise<ProfileDto> {
+    if (!userId) {
+      throw new UnauthorizedException('User not authenticated.');
+    }
+
     try {
       const { data, error } = await this.supabaseService
         .from('profiles')
@@ -81,8 +96,12 @@ export class UsersService {
    * Delete user account and profile
    * @param userId The user ID
    * @returns Success message
-   */
+  */
   async deleteProfile(userId: string): Promise<{ message: string }> {
+    if (!userId) {
+      throw new UnauthorizedException('User not authenticated.');
+    }
+
     try {
       // Using the admin client to delete the user from auth.users.
       // The ON DELETE CASCADE in the profiles table will automatically delete the corresponding profile row.
