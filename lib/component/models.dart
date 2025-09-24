@@ -381,6 +381,7 @@ class ModelConfig {
   double? presencePenalty;
   Map<String, dynamic>? additionalParams;
   Map<String, dynamic>? metadata;
+  bool isDefault;
   bool isActive;
   DateTime createdAt;
   DateTime updatedAt;
@@ -401,6 +402,7 @@ class ModelConfig {
     this.presencePenalty = 0.0,
     this.additionalParams,
     this.metadata,
+    this.isDefault = false,
     this.isActive = true,
     required this.createdAt,
     required this.updatedAt,
@@ -423,6 +425,7 @@ class ModelConfig {
       'presencePenalty': presencePenalty,
       'additionalParams': additionalParams,
       'metadata': metadata,
+      'isDefault': isDefault,
       'isActive': isActive,
       'createdAt': createdAt.millisecondsSinceEpoch,
       'updatedAt': updatedAt.millisecondsSinceEpoch,
@@ -470,6 +473,7 @@ class ModelConfig {
       metadata: json['metadata'] != null
           ? Map<String, dynamic>.from(json['metadata'])
           : null,
+      isDefault: json['isDefault'] == true || json['is_default'] == true,
       isActive: json['isActive'] ?? true,
       createdAt: parseDate(json['createdAt']),
       updatedAt: parseDate(json['updatedAt']),
@@ -492,6 +496,7 @@ class ModelConfig {
     double? presencePenalty,
     Map<String, dynamic>? additionalParams,
     Map<String, dynamic>? metadata,
+    bool? isDefault,
     bool? isActive,
     DateTime? createdAt,
     DateTime? updatedAt,
@@ -512,6 +517,7 @@ class ModelConfig {
       presencePenalty: presencePenalty ?? this.presencePenalty,
       additionalParams: additionalParams ?? this.additionalParams,
       metadata: metadata ?? this.metadata,
+      isDefault: isDefault ?? this.isDefault,
       isActive: isActive ?? this.isActive,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,

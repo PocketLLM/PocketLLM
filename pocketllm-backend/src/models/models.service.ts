@@ -121,6 +121,48 @@ export class ModelsService {
     return { success: true };
   }
 
+  async setDefaultModel(userId: string, modelId: string) {
+    const { error: fetchError } = await this.supabase
+      .from('model_configs')
+      .select('id')
+      .eq('user_id', userId)
+      .eq('id', modelId)
+      .single();
+
+    if (fetchError) {
+      this.logger.warn(`Model ${modelId} not found for user ${userId}`, fetchError);
+      throw new NotFoundException('Model not found');
+    }
+
+    const now = new Date().toISOString();
+
+    const { error: clearError } = await this.supabase
+      .from('model_configs')
+      .update({ is_default: false, updated_at: now })
+      .eq('user_id', userId)
+      .neq('id', modelId);
+
+    if (clearError) {
+      this.logger.error('Failed to clear previous default models', clearError);
+      throw new BadRequestException('Failed to update default model');
+    }
+
+    const { data, error } = await this.supabase
+      .from('model_configs')
+      .update({ is_default: true, updated_at: now })
+      .eq('user_id', userId)
+      .eq('id', modelId)
+      .select(ModelsService.PROVIDER_SELECT)
+      .single();
+
+    if (error) {
+      this.logger.error('Failed to set default model', error);
+      throw new BadRequestException('Failed to set default model');
+    }
+
+    return this.sanitizeModel(data);
+  }
+
   private sanitizeModel(row: any) {
     if (!row) {
       return null;

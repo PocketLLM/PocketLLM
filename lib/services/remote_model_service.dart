@@ -111,6 +111,14 @@ class RemoteModelService {
     await _api.delete('models/$modelId');
   }
 
+  Future<ModelConfig> setDefaultModel(String modelId) async {
+    final data = await _api.post('models/$modelId/default');
+    if (data is Map) {
+      return _mapModel(Map<String, dynamic>.from(data));
+    }
+    throw StateError('Invalid response when setting default model');
+  }
+
   Future<List<AvailableModelOption>> getProviderModels({
     required ModelProvider provider,
     String? search,
@@ -166,6 +174,7 @@ class RemoteModelService {
       metadata: json['metadata'] != null
           ? Map<String, dynamic>.from(json['metadata'] as Map)
           : null,
+      isDefault: json['isDefault'] == true,
       isActive: json['isActive'] ?? true,
       createdAt: parseDate(json['createdAt']),
       updatedAt: parseDate(json['updatedAt']),

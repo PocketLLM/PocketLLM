@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import '../component/models.dart';
 import '../component/model_config_dialog.dart';
 import '../component/model_list_item.dart';
-import '../services/pocket_llm_service.dart';
+import '../services/model_service.dart';
 import 'auth/auth_page.dart';
 
 class ModelSettingsPage extends StatefulWidget {
@@ -20,7 +20,6 @@ class _ModelSettingsPageState extends State<ModelSettingsPage> {
   bool _isLoadingModels = true;
   bool _isLoadingProviders = true;
   String? _selectedModelId;
-  final _modelService = ModelService();
 
   @override
   void initState() {
