@@ -2,12 +2,11 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:ollama_dart/ollama_dart.dart';
 import 'pocket_llm_service.dart';
-import 'auth_service.dart';
 import '../component/models.dart';
 import 'package:flutter/foundation.dart';
 import 'package:uuid/uuid.dart';
+import 'remote_model_service.dart';
 
 // Service to manage model configurations
 class ModelService {
@@ -17,79 +16,217 @@ class ModelService {
 
   static const String _modelsKey = 'saved_models';
   static const String _defaultModelKey = 'default_model';
-  
-  // Default Ollama URL
-  static const String defaultOllamaUrl = 'http://localhost:11434';
-  
-  static const String _apiUrl = 'https://api.sree.shop/v1/models';
+
+  final RemoteModelService _remoteModelService = RemoteModelService();
   
   // Get all saved model configurations
-  Future<List<ModelConfig>> getSavedModels() async {
-    final prefs = await SharedPreferences.getInstance();
-    final savedModelsJson = prefs.getStringList(_modelsKey) ?? [];
-    
-    List<ModelConfig> models = [];
-    for (String modelJson in savedModelsJson) {
+  Future<List<ModelConfig>> getSavedModels({bool refreshRemote = true}) async {
+    if (refreshRemote) {
       try {
-        final Map<String, dynamic> modelMap = json.decode(modelJson);
-        models.add(ModelConfig.fromJson(modelMap));
+        final remoteModels = await _remoteModelService.getModels();
+        await _cacheModels(remoteModels);
+        return remoteModels;
       } catch (e) {
-        debugPrint('Error parsing model: $e');
+        debugPrint('Remote model fetch failed, falling back to cache: $e');
       }
     }
-    
-    return models;
+
+    return await _loadCachedModels();
   }
   
   // Save a new model configuration
   Future<void> saveModel(ModelConfig model) async {
+    try {
+      final sharedSettings = <String, dynamic>{};
+      if (model.systemPrompt != null && model.systemPrompt!.isNotEmpty) {
+        sharedSettings['systemPrompt'] = model.systemPrompt;
+      }
+      sharedSettings['temperature'] = model.temperature;
+      if (model.maxTokens != null) {
+        sharedSettings['maxTokens'] = model.maxTokens;
+      }
+      if (model.topP != null) {
+        sharedSettings['topP'] = model.topP;
+      }
+      if (model.presencePenalty != null) {
+        sharedSettings['presencePenalty'] = model.presencePenalty;
+      }
+      if (model.frequencyPenalty != null) {
+        sharedSettings['frequencyPenalty'] = model.frequencyPenalty;
+      }
+
+      await _remoteModelService.importModels(
+        provider: model.provider,
+        selections: [
+          AvailableModelOption(
+            id: model.model,
+            name: model.name,
+            provider: model.provider.backendId,
+            description: model.metadata?['description'] ?? model.systemPrompt,
+            metadata: model.metadata ?? model.additionalParams,
+          )
+        ],
+        providerId: model.providerId,
+        sharedSettings: sharedSettings,
+      );
+      final remoteModels = await _remoteModelService.getModels();
+      await _cacheModels(remoteModels);
+      await _setDefaultIfFirstModel(remoteModels.isNotEmpty ? remoteModels.first.id : model.id);
+    } catch (e) {
+      debugPrint('Remote saveModel failed, storing locally: $e');
+      await _saveModelLocally(model);
+    }
+  }
+
+  // Delete a model configuration
+  Future<void> deleteModel(String modelId) async {
+    try {
+      await _remoteModelService.deleteModel(modelId);
+      final remoteModels = await _remoteModelService.getModels();
+      await _cacheModels(remoteModels);
+    } catch (e) {
+      debugPrint('Remote deleteModel failed, updating cache locally: $e');
+      final prefs = await SharedPreferences.getInstance();
+      final cached = await _loadCachedModels();
+      cached.removeWhere((m) => m.id == modelId);
+      final modelJsonList = cached.map((m) => json.encode(m.toJson())).toList();
+      await prefs.setStringList(_modelsKey, modelJsonList);
+    }
+
+    final defaultId = await getDefaultModel();
+    if (defaultId == modelId) {
+      final cached = await _loadCachedModels();
+      if (cached.isNotEmpty) {
+        await setDefaultModel(cached.first.id);
+      }
+    }
+  }
+
+  Future<void> _cacheModels(List<ModelConfig> models) async {
     final prefs = await SharedPreferences.getInstance();
-    List<ModelConfig> models = await getSavedModels();
-    
-    // Check if model already exists and update it
+    final modelJsonList = models.map((m) => json.encode(m.toJson())).toList();
+    await prefs.setStringList(_modelsKey, modelJsonList);
+  }
+
+  Future<List<ModelConfig>> _loadCachedModels() async {
+    final prefs = await SharedPreferences.getInstance();
+    final savedModelsJson = prefs.getStringList(_modelsKey) ?? [];
+
+    final List<ModelConfig> models = [];
+    for (final modelJson in savedModelsJson) {
+      try {
+        final Map<String, dynamic> modelMap = json.decode(modelJson);
+        models.add(ModelConfig.fromJson(modelMap));
+      } catch (e) {
+        debugPrint('Error parsing cached model: $e');
+      }
+    }
+    return models;
+  }
+
+  Future<void> _saveModelLocally(ModelConfig model) async {
+    final prefs = await SharedPreferences.getInstance();
+    final models = await _loadCachedModels();
+
     bool modelExists = false;
     for (int i = 0; i < models.length; i++) {
       if (models[i].id == model.id) {
-        model = model.copyWith(updatedAt: DateTime.now());
-        models[i] = model;
+        models[i] = model.copyWith(updatedAt: DateTime.now());
         modelExists = true;
         break;
       }
     }
-    
-    // If model doesn't exist, add it as new
+
     if (!modelExists) {
       model = model.copyWith(
-        id: const Uuid().v4(),
+        id: model.id.isEmpty ? const Uuid().v4() : model.id,
         createdAt: DateTime.now(),
         updatedAt: DateTime.now(),
       );
       models.add(model);
     }
-    
-    // Save models to preferences
-    final modelJsonList = models.map((m) => json.encode(m.toJson())).toList();
-    await prefs.setStringList(_modelsKey, modelJsonList);
-    
-    // If this is the first model, set it as default
+
+    await _cacheModels(models);
     await _setDefaultIfFirstModel(model.id);
   }
-  
-  // Delete a model configuration
-  Future<void> deleteModel(String modelId) async {
-    final prefs = await SharedPreferences.getInstance();
-    List<ModelConfig> models = await getSavedModels();
-    
-    models.removeWhere((m) => m.id == modelId);
-    
-    final modelJsonList = models.map((m) => json.encode(m.toJson())).toList();
-    await prefs.setStringList(_modelsKey, modelJsonList);
-    
-    // If default model is deleted, set new default
-    final defaultId = await getDefaultModel();
-    if (defaultId == modelId && models.isNotEmpty) {
-      await setDefaultModel(models.first.id);
+
+  Future<List<ProviderConnection>> getProviders() async {
+    try {
+      return await _remoteModelService.getProviders();
+    } catch (e) {
+      debugPrint('Failed to load providers: $e');
+      return [];
     }
+  }
+
+  Future<ProviderConnection> activateProvider({
+    required ModelProvider provider,
+    String? apiKey,
+    String? baseUrl,
+    Map<String, dynamic>? metadata,
+  }) {
+    return _remoteModelService.activateProvider(
+      provider: provider,
+      apiKey: apiKey,
+      baseUrl: baseUrl,
+      metadata: metadata,
+    );
+  }
+
+  Future<ProviderConnection> updateProvider({
+    required ModelProvider provider,
+    String? apiKey,
+    String? baseUrl,
+    Map<String, dynamic>? metadata,
+    bool? isActive,
+    bool removeApiKey = false,
+  }) {
+    return _remoteModelService.updateProvider(
+      provider: provider,
+      apiKey: apiKey,
+      baseUrl: baseUrl,
+      metadata: metadata,
+      isActive: isActive,
+      removeApiKey: removeApiKey,
+    );
+  }
+
+  Future<void> deactivateProvider(ModelProvider provider) {
+    return _remoteModelService.deactivateProvider(provider);
+  }
+
+  Future<List<AvailableModelOption>> getProviderModels({
+    required ModelProvider provider,
+    String? search,
+  }) {
+    return _remoteModelService.getProviderModels(
+      provider: provider,
+      search: search,
+    );
+  }
+
+  Future<List<ModelConfig>> importModelsFromProvider({
+    required ModelProvider provider,
+    required List<AvailableModelOption> selections,
+    String? providerId,
+    Map<String, dynamic>? sharedSettings,
+  }) async {
+    final importedModels = await _remoteModelService.importModels(
+      provider: provider,
+      selections: selections,
+      providerId: providerId,
+      sharedSettings: sharedSettings,
+    );
+    try {
+      final remoteModels = await _remoteModelService.getModels();
+      await _cacheModels(remoteModels);
+      if (remoteModels.isNotEmpty) {
+        await _setDefaultIfFirstModel(remoteModels.first.id);
+      }
+    } catch (e) {
+      debugPrint('Failed to refresh models after import: $e');
+    }
+    return importedModels;
   }
   
   // Set the selected model

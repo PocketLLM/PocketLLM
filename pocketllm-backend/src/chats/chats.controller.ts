@@ -8,13 +8,22 @@ import {
   Param, 
   Query, 
   Req, 
-  HttpCode, 
+  HttpCode,
   HttpStatus,
   UseGuards,
+  UsePipes,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse, ApiBody, ApiBearerAuth } from '@nestjs/swagger';
 import { ChatsService } from './chats.service';
 import { SupabaseAuthGuard } from '../auth/guards/supabase-auth.guard';
+import {
+  createChatSchema,
+  updateChatSchema,
+  sendMessageSchema,
+  chatParamsSchema,
+  getMessagesQuerySchema,
+} from '../api/v1/schemas/chats.schemas';
+import { ZodValidationPipe } from '../common/pipes/zod-validation.pipe';
 
 @ApiTags('Chats')
 @Controller('chats')
@@ -47,6 +56,7 @@ export class ChatsController {
     status: 201,
     description: 'Chat created successfully',
   })
+  @UsePipes(new ZodValidationPipe(createChatSchema.body))
   async createChat(@Body() createChatDto: any, @Req() request: any) {
     const userId = request.user?.id;
     return this.chatsService.createChat(userId, createChatDto);
@@ -61,9 +71,10 @@ export class ChatsController {
     status: 200,
     description: 'Chat retrieved successfully',
   })
-  async getChat(@Param('chatId') chatId: string, @Req() request: any) {
+  @UsePipes(new ZodValidationPipe(chatParamsSchema.params))
+  async getChat(@Param() params: any, @Req() request: any) {
     const userId = request.user?.id;
-    return this.chatsService.getChat(chatId, userId);
+    return this.chatsService.getChat(params.chatId, userId);
   }
 
   @Put(':chatId')
@@ -75,13 +86,15 @@ export class ChatsController {
     status: 200,
     description: 'Chat updated successfully',
   })
+  @UsePipes(new ZodValidationPipe(chatParamsSchema.params))
+  @UsePipes(new ZodValidationPipe(updateChatSchema.body))
   async updateChat(
-    @Param('chatId') chatId: string, 
-    @Body() updateChatDto: any, 
+    @Param() params: any,
+    @Body() updateChatDto: any,
     @Req() request: any
   ) {
     const userId = request.user?.id;
-    return this.chatsService.updateChat(chatId, userId, updateChatDto);
+    return this.chatsService.updateChat(params.chatId, userId, updateChatDto);
   }
 
   @Delete(':chatId')
@@ -93,9 +106,10 @@ export class ChatsController {
     status: 200,
     description: 'Chat deleted successfully',
   })
-  async deleteChat(@Param('chatId') chatId: string, @Req() request: any) {
+  @UsePipes(new ZodValidationPipe(chatParamsSchema.params))
+  async deleteChat(@Param() params: any, @Req() request: any) {
     const userId = request.user?.id;
-    return this.chatsService.deleteChat(chatId, userId);
+    return this.chatsService.deleteChat(params.chatId, userId);
   }
 
   @Post(':chatId/messages')
@@ -108,13 +122,15 @@ export class ChatsController {
     status: 201,
     description: 'Message sent successfully',
   })
+  @UsePipes(new ZodValidationPipe(chatParamsSchema.params))
+  @UsePipes(new ZodValidationPipe(sendMessageSchema.body))
   async sendMessage(
-    @Param('chatId') chatId: string,
+    @Param() params: any,
     @Body() messageDto: any,
     @Req() request: any
   ) {
     const userId = request.user?.id;
-    return this.chatsService.sendMessage(chatId, userId, messageDto);
+    return this.chatsService.sendMessage(params.chatId, userId, messageDto);
   }
 
   @Get(':chatId/messages')
@@ -127,12 +143,11 @@ export class ChatsController {
     description: 'Messages retrieved successfully',
   })
   async getMessages(
-    @Param('chatId') chatId: string,
-    @Query('limit') limit?: number,
-    @Query('offset') offset?: number,
+    @Param(new ZodValidationPipe(chatParamsSchema.params)) params: any,
+    @Query(new ZodValidationPipe(getMessagesQuerySchema.query)) query: any,
     @Req() request?: any
   ) {
     const userId = request.user?.id;
-    return this.chatsService.getMessages(chatId, userId, { limit, offset });
+    return this.chatsService.getMessages(params.chatId, userId, { limit: query.limit, offset: query.offset });
   }
 }
