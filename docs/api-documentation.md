@@ -823,9 +823,11 @@ To exercise the NestJS backend from a physical phone or tablet:
 2. **Expose the backend on the LAN.** The NestJS server already listens on `0.0.0.0`; confirm it is reachable by visiting `http://<your-computer-ip>:8000/api/docs` from another device.
 3. **Run Flutter with the LAN URL.** When launching the app, override the backend base URL so API calls target your desktop instead of `localhost`:
    ```bash
-   flutter run --dart-define=POCKETLLM_BACKEND_URL=http://<your-computer-ip>:8000/v1
+   flutter run \
+     --dart-define=BACKEND_BASE_URL=http://<your-computer-ip>:8000 \
+     --dart-define=BACKEND_API_SUFFIX=v1
    ```
-   Replace `<your-computer-ip>` with the IPv4 address shown by `ipconfig` (Windows) or `ifconfig`/`ip addr` (macOS/Linux).
+   Add `--dart-define=FALLBACK_BACKEND_URL=<optional-backup-url>` if you want to supply a secondary server. Replace `<your-computer-ip>` with the IPv4 address shown by `ipconfig` (Windows) or `ifconfig`/`ip addr` (macOS/Linux). The legacy `POCKETLLM_BACKEND_URL` flag still works and can be used if you prefer providing the full URL (for example `http://<your-computer-ip>:8000/v1`).
 4. **Verify authentication calls.** After the app starts, the Sign In and Sign Up flows will send requests to the configured backend URL. Monitor the NestJS console logs to confirm the `/v1/auth/signup` and `/v1/auth/signin` handlers execute when you tap the respective buttons in the mobile UI.
 
 If the device cannot reach the backend, double-check VPNs or firewalls, and ensure the mobile network does not isolate clients (some public hotspots do).
