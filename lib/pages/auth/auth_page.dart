@@ -729,9 +729,12 @@ class _AuthPageState extends State<AuthPage> {
 
         if (result.emailConfirmationRequired) {
           await _clearAuthSkipFlag();
+          final message = (result.message?.isNotEmpty ?? false)
+              ? result.message!
+              : 'Please check your email to confirm your account before continuing.';
           _showSnackBar(
             context,
-            'Please check your email to confirm your account before continuing.',
+            message,
             success: true,
           );
           widget.onLoginSuccess?.call(authState.currentUserEmail ?? email);

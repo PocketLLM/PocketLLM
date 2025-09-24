@@ -170,11 +170,35 @@ class AuthStateNotifier extends ChangeNotifier {
         final data = _extractData(response);
         debugPrint('Extracted data: $data');
         final user = data['user'] as Map<String, dynamic>?;
+        final session = data['session'] as Map<String, dynamic>?;
         final message = data['message'] as String?;
+
+        if (session != null && user != null) {
+          final accessToken = session['access_token'] as String?;
+          if (accessToken == null || accessToken.isEmpty) {
+            throw const AuthException('Authentication token missing from response.');
+          }
+
+          final refreshToken = session['refresh_token'] as String?;
+          final expiresIn = session['expires_in'] as int?;
+          final userId = user['id'] as String?;
+          final userEmail = user['email'] as String? ?? email;
+
+          await _saveSession(
+            accessToken: accessToken,
+            refreshToken: refreshToken,
+            expiresIn: expiresIn,
+            userId: userId,
+            email: userEmail,
+          );
+
+          await _loadDeletionSchedule();
+          await _fetchProfile();
+        }
 
         result = SignUpResult(
           userId: user?['id'] as String?,
-          emailConfirmationRequired: false,
+          emailConfirmationRequired: session == null,
           message: message,
         );
       } catch (e) {
@@ -684,8 +708,21 @@ class AuthStateNotifier extends ChangeNotifier {
   }
 
   Map<String, dynamic> _extractData(Map<String, dynamic> response) {
-    // The response now contains the full structure, so we need to extract the data field
-    return response['data'] as Map<String, dynamic>? ?? <String, dynamic>{};
+    final data = response['data'];
+    if (data is Map<String, dynamic>) {
+      return Map<String, dynamic>.from(data);
+    }
+    if (data is List) {
+      return {
+        'items': data,
+      };
+    }
+    if (data == null) {
+      return <String, dynamic>{};
+    }
+    return {
+      'value': data,
+    };
   }
 
   bool _looksLikeWhitelistError(AuthException error) {
@@ -774,6 +811,8 @@ class AuthStateNotifier extends ChangeNotifier {
 
       _serviceAvailable = true;
       return _wrapBackendResponse(response);
+    } on AuthException {
+      rethrow;
     } on BackendApiException catch (error) {
       debugPrint('Backend API error: ${error.statusCode} - ${error.message}');
       if (error.statusCode == 401 && requiresAuth) {
@@ -791,24 +830,67 @@ class AuthStateNotifier extends ChangeNotifier {
   }
 
   Map<String, dynamic> _wrapBackendResponse(dynamic response) {
-    if (response == null) {
-      return {'data': <String, dynamic>{}};
-    }
+    Map<String, dynamic>? metadata;
+    dynamic payload = response;
+
     if (response is Map<String, dynamic>) {
-      return {'data': response};
+      final hasSuccessFlag = response.containsKey('success');
+      final success = hasSuccessFlag ? response['success'] == true : true;
+
+      if (hasSuccessFlag && !success) {
+        final message = _extractBackendErrorMessage(response['error'], response['message']);
+        throw AuthException(message);
+      }
+
+      metadata = response['metadata'] as Map<String, dynamic>?;
+      payload = response.containsKey('data') ? response['data'] : response;
     }
-    if (response is List) {
+
+    return {
+      'data': _normalizeResponseData(payload),
+      if (metadata != null) 'metadata': metadata,
+    };
+  }
+
+  Map<String, dynamic> _normalizeResponseData(dynamic data) {
+    if (data == null) {
+      return <String, dynamic>{};
+    }
+
+    if (data is Map<String, dynamic>) {
+      return Map<String, dynamic>.from(data);
+    }
+
+    if (data is List) {
       return {
-        'data': {
-          'items': response,
-        },
+        'items': data,
       };
     }
+
     return {
-      'data': {
-        'value': response,
-      },
+      'value': data,
     };
+  }
+
+  String _extractBackendErrorMessage(dynamic error, dynamic fallbackMessage) {
+    String? resolveMessage(dynamic value) {
+      if (value is String && value.trim().isNotEmpty) {
+        return value.trim();
+      }
+      if (value is Map<String, dynamic>) {
+        for (final key in ['message', 'error', 'detail', 'description']) {
+          final candidate = value[key];
+          if (candidate is String && candidate.trim().isNotEmpty) {
+            return candidate.trim();
+          }
+        }
+      }
+      return null;
+    }
+
+    return resolveMessage(error) ??
+        resolveMessage(fallbackMessage) ??
+        'Authentication request failed. Please try again.';
   }
 
   @override
