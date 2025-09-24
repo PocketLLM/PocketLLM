@@ -101,7 +101,6 @@ class _SidebarState extends State<Sidebar> {
           trailing: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              // Add new chat button
               IconButton(
                 icon: Icon(
                   Icons.add,
@@ -111,19 +110,24 @@ class _SidebarState extends State<Sidebar> {
                 onPressed: _createNewChat,
                 tooltip: 'New Chat',
               ),
-              Icon(
-                isHistoryExpanded ? Icons.expand_less : Icons.expand_more,
-                color: colorScheme.onSurface.withOpacity(0.7),
+              IconButton(
+                icon: Icon(
+                  isHistoryExpanded ? Icons.expand_less : Icons.expand_more,
+                  color: colorScheme.onSurface.withOpacity(0.7),
+                  size: 22,
+                ),
+                onPressed: () {
+                  setState(() {
+                    isHistoryExpanded = !isHistoryExpanded;
+                  });
+                },
+                tooltip: isHistoryExpanded ? 'Hide recent chats' : 'Show recent chats',
               ),
             ],
           ),
           contentPadding: EdgeInsets.symmetric(horizontal: 24),
           dense: true,
-          onTap: () {
-            setState(() {
-              isHistoryExpanded = !isHistoryExpanded;
-            });
-          },
+          onTap: _openChatHistoryPage,
         ),
         if (isHistoryExpanded)
           _isLoading
@@ -195,24 +199,31 @@ class _SidebarState extends State<Sidebar> {
                               ),
                             ),
                             dense: true,
-                            onTap: () {
-                              Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (context) => ChatHistory(
-                                    onConversationSelected: (id) {
-                                      _selectConversation(id);
-                                    },
-                                  ),
-                                ),
-                              );
-                            },
+                            onTap: _openChatHistoryPage,
                             trailing: Icon(Icons.chevron_right, color: colorScheme.primary),
                           ),
                       ],
                     ),
       ],
     );
+  }
+
+  void _openChatHistoryPage() {
+    final navigator = Navigator.of(context);
+    if (navigator.canPop()) {
+      navigator.pop();
+    }
+    Future.microtask(() {
+      navigator.push(
+        MaterialPageRoute(
+          builder: (context) => ChatHistory(
+            onConversationSelected: (id) {
+              _selectConversation(id);
+            },
+          ),
+        ),
+      );
+    });
   }
   
   void _createNewChat() async {
