@@ -40,7 +40,10 @@ src/
 │   ├── openai.service.ts
 │   ├── anthropic.service.ts
 │   ├── ollama.service.ts
+│   ├── openrouter.service.ts
 │   └── image-router.service.ts
+├── provider-configs/          # Provider credential management APIs
+├── models/                    # User-selectable model catalog APIs
 ├── common/                    # Shared utilities
 │   ├── services/              # Supabase, encryption services
 │   ├── interceptors/          # Response formatting
@@ -94,6 +97,10 @@ SUPABASE_SERVICE_ROLE_KEY=your_supabase_service_role_key
 
 # Encryption
 ENCRYPTION_KEY=a_strong_32_byte_secret_key_for_encrypting_api_keys
+
+# Third-party attribution (required by OpenRouter)
+OPENROUTER_APP_URL=https://your-app-domain.example
+OPENROUTER_APP_NAME=PocketLLM
 ```
 
 ### Running the Application
@@ -124,6 +131,8 @@ The API is fully documented with Swagger/OpenAPI. Once the server is running, vi
 - **Authentication**: `/v1/auth/signup`, `/v1/auth/signin`
 - **Users**: `/v1/users/profile`
 - **Chats**: `/v1/chats`, `/v1/chats/:id/messages`
+- **Providers**: `/v1/providers`, `/v1/providers/activate`, `/v1/providers/:provider`
+- **Models**: `/v1/models`, `/v1/models/import`, `/v1/models/:modelId`
 - **Jobs**: `/v1/jobs`, `/v1/jobs/image-generation`
 
 ### User Profile Endpoints
@@ -172,7 +181,13 @@ All API responses follow a consistent format:
 - **OpenAI**: GPT chat models
 - **Anthropic**: Claude models
 - **Ollama**: Local/self-hosted models
+- **OpenRouter**: Unified access to community-hosted models
 - **ImageRouter**: Image generation
+
+### 5. **Secure Provider Credential Vault**
+- Provider API keys are encrypted at rest and stored with salted hashes for tamper detection.
+- Users can activate/deactivate providers, rotate credentials, and fetch available models on-demand.
+- Dynamic model imports keep the application model selector in sync with active providers.
 
 ### 4. **Comprehensive Error Handling**
 Global exception filters provide consistent error responses with proper HTTP status codes.

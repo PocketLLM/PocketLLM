@@ -4,6 +4,7 @@ import { OpenAIService } from './openai.service';
 import { AnthropicService } from './anthropic.service';
 import { OllamaService } from './ollama.service';
 import { ImageRouterService } from './image-router.service';
+import { OpenRouterService } from './openrouter.service';
 
 @Module({
   imports: [HttpModule],
@@ -12,12 +13,14 @@ import { ImageRouterService } from './image-router.service';
     AnthropicService,
     OllamaService,
     ImageRouterService,
+    OpenRouterService,
   ],
   exports: [
     OpenAIService,
     AnthropicService,
     OllamaService,
     ImageRouterService,
+    OpenRouterService,
   ],
 })
 export class ProvidersModule {}

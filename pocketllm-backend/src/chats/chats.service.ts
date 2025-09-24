@@ -3,16 +3,22 @@ import { SupabaseService } from '../common/services/supabase.service';
 import { OpenAIService } from '../providers/openai.service';
 import { AnthropicService } from '../providers/anthropic.service';
 import { OllamaService } from '../providers/ollama.service';
+import { OpenRouterService } from '../providers/openrouter.service';
+import { EncryptionService } from '../common/services/encryption.service';
 
 @Injectable()
 export class ChatsService {
   private readonly logger = new Logger(ChatsService.name);
+  private static readonly MODEL_SELECT =
+    '*, provider_account:providers!model_configs_provider_id_fkey(*)';
 
   constructor(
     private readonly supabaseService: SupabaseService,
     private readonly openaiService: OpenAIService,
     private readonly anthropicService: AnthropicService,
     private readonly ollamaService: OllamaService,
+    private readonly openRouterService: OpenRouterService,
+    private readonly encryptionService: EncryptionService,
   ) {}
 
   /**
@@ -42,13 +48,21 @@ export class ChatsService {
    * Create a new chat
    */
   async createChat(userId: string, createChatDto: any) {
+    const modelConfigId = createChatDto.model_config_id;
+
+    if (!modelConfigId) {
+      throw new BadRequestException('Model configuration is required');
+    }
+
+    await this.ensureModelConfigOwnership(modelConfigId, userId);
+
     try {
       const { data, error } = await this.supabaseService
         .from('chats')
         .insert({
           user_id: userId,
           title: createChatDto.title || 'New Chat',
-          model_config: createChatDto.model_config || {},
+          model_config_id: modelConfigId,
         })
         .select()
         .single();
@@ -93,6 +107,10 @@ export class ChatsService {
    */
   async updateChat(chatId: string, userId: string, updateChatDto: any) {
     try {
+      if (updateChatDto.model_config_id) {
+        await this.ensureModelConfigOwnership(updateChatDto.model_config_id, userId);
+      }
+
       const { data, error } = await this.supabaseService
         .from('chats')
         .update(updateChatDto)
@@ -141,7 +159,15 @@ export class ChatsService {
   async sendMessage(chatId: string, userId: string, messageDto: any) {
     try {
       // Verify chat ownership
-      await this.getChat(chatId, userId);
+      const chat = await this.getChat(chatId, userId);
+
+      const modelConfigId = messageDto.model_config_id || chat.model_config_id;
+
+      if (!modelConfigId) {
+        throw new BadRequestException('Chat is not associated with a model configuration');
+      }
+
+      const modelConfig = await this.getModelConfiguration(modelConfigId, userId);
 
       // Save user message
       const { data: userMessage, error: userMessageError } = await this.supabaseService
@@ -159,7 +185,7 @@ export class ChatsService {
       }
 
       // Get AI response based on model configuration
-      const aiResponse = await this.getAIResponse(messageDto.content, messageDto.model_config);
+      const aiResponse = await this.getAIResponse(messageDto.content, modelConfig);
 
       // Save AI response
       const { data: aiMessage, error: aiMessageError } = await this.supabaseService
@@ -226,22 +252,124 @@ export class ChatsService {
    * Get AI response based on model configuration
    */
   private async getAIResponse(prompt: string, modelConfig: any): Promise<{ content: string }> {
-    const { provider, model, apiKey, systemPrompt } = modelConfig;
+    const provider = modelConfig.provider;
+    const model = modelConfig.model;
+    const systemPrompt = modelConfig.system_prompt;
+    const providerAccount = modelConfig.provider_account;
 
     try {
       switch (provider) {
         case 'openai':
-          return await this.openaiService.getCompletion(prompt, apiKey, model, systemPrompt);
+          if (!providerAccount?.api_key_encrypted) {
+            throw new BadRequestException('OpenAI API key is not configured');
+          }
+          return await this.openaiService.getCompletion(
+            prompt,
+            this.encryptionService.decrypt(providerAccount.api_key_encrypted),
+            model,
+            systemPrompt,
+          );
         case 'anthropic':
-          return await this.anthropicService.getCompletion(prompt, apiKey, model, systemPrompt);
+          if (!providerAccount?.api_key_encrypted) {
+            throw new BadRequestException('Anthropic API key is not configured');
+          }
+          return await this.anthropicService.getCompletion(
+            prompt,
+            this.encryptionService.decrypt(providerAccount.api_key_encrypted),
+            model,
+            systemPrompt,
+          );
         case 'ollama':
-          return await this.ollamaService.getCompletion(prompt, model, systemPrompt);
+          return await this.ollamaService.getCompletion(
+            prompt,
+            model,
+            systemPrompt,
+            providerAccount?.base_url || modelConfig.base_url || undefined,
+          );
+        case 'openrouter':
+          if (!providerAccount?.api_key_encrypted) {
+            throw new BadRequestException('OpenRouter API key is not configured');
+          }
+          return await this.openRouterService.getCompletion(
+            prompt,
+            this.encryptionService.decrypt(providerAccount.api_key_encrypted),
+            model,
+            systemPrompt,
+          );
         default:
           throw new BadRequestException('Unsupported AI provider');
       }
     } catch (error) {
       this.logger.error('Error getting AI response:', error);
-      throw new BadRequestException('Failed to get AI response');
+      if (error instanceof BadRequestException) {
+        throw error;
+      }
+      throw new BadRequestException(error?.message || 'Failed to get AI response');
+    }
+  }
+
+  private async getModelConfiguration(modelConfigId: string, userId: string) {
+    const { data, error } = await this.supabaseService
+      .from('model_configs')
+      .select(ChatsService.MODEL_SELECT)
+      .eq('id', modelConfigId)
+      .eq('user_id', userId)
+      .single();
+
+    if (error || !data) {
+      throw new BadRequestException('Model configuration not found');
+    }
+
+    const providerAccount = await this.ensureProviderAccount(data, userId);
+
+    if (!providerAccount.is_active) {
+      throw new BadRequestException('Provider is inactive');
+    }
+
+    return { ...data, provider_account: providerAccount };
+  }
+
+  private async ensureProviderAccount(modelConfig: any, userId: string) {
+    if (modelConfig.provider_account) {
+      return modelConfig.provider_account;
+    }
+
+    let query = this.supabaseService
+      .from('providers')
+      .select('*')
+      .eq('user_id', userId)
+      .limit(1);
+
+    if (modelConfig.provider_id) {
+      query = query.eq('id', modelConfig.provider_id);
+    } else {
+      query = query.eq('provider', modelConfig.provider);
+    }
+
+    const { data, error } = await query.maybeSingle();
+
+    if (error) {
+      this.logger.error('Failed to load provider account for model', error);
+      throw new BadRequestException('Provider configuration not available');
+    }
+
+    if (!data) {
+      throw new BadRequestException('Provider configuration not available');
+    }
+
+    return data;
+  }
+
+  private async ensureModelConfigOwnership(modelConfigId: string, userId: string) {
+    const { error, data } = await this.supabaseService
+      .from('model_configs')
+      .select('id')
+      .eq('id', modelConfigId)
+      .eq('user_id', userId)
+      .single();
+
+    if (error || !data) {
+      throw new ForbiddenException('Model configuration not found or access denied');
     }
   }
 }
