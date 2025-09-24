@@ -39,6 +39,12 @@ app.*.symbols
 # Obfuscation related
 app.*.map.json
 
+# Environment files
+pocketllm-backend/.env
+**/.env*
+
+app.*.map.json
+
 # Android Studio will place build artifacts here
 /android/app/debug
 /android/app/profile
