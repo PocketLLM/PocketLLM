@@ -1,6 +1,7 @@
 import { z } from 'zod';
 
 export const providerCodeSchema = z.enum(['openai', 'anthropic', 'ollama', 'openrouter']);
+export type ProviderCode = z.infer<typeof providerCodeSchema>;
 
 export const baseProviderSchema = z.object({
   provider: providerCodeSchema,
@@ -63,8 +64,11 @@ export const providerModelsQuerySchema = {
   }),
 };
 
-export type ProviderCode = z.infer<typeof providerCodeSchema>;
-export type ActivateProviderRequest = z.infer<typeof baseProviderSchema>;
+type BaseProviderSchema = z.infer<typeof baseProviderSchema>;
+
+export type ActivateProviderRequest = Omit<BaseProviderSchema, 'provider'> & {
+  provider: ProviderCode;
+};
 export type UpdateProviderRequest = z.infer<typeof updateProviderSchema.body>;
 export type ProviderParams = z.infer<typeof providerParamsSchema.params>;
 export type ProviderModelsQuery = z.infer<typeof providerModelsQuerySchema.query>;

@@ -4,24 +4,14 @@ import { EncryptionService } from '../common/services/encryption.service';
 import { HashService } from '../common/services/hash.service';
 import { OllamaService } from '../providers/ollama.service';
 import { OpenRouterService } from '../providers/openrouter.service';
-import { ProviderCode } from '../api/v1/schemas/providers.schemas';
+import {
+  ActivateProviderRequest,
+  ProviderCode,
+  UpdateProviderRequest,
+} from '../api/v1/schemas/providers.schemas';
 
-interface ActivateProviderInput {
-  provider: ProviderCode;
-  apiKey?: string;
-  baseUrl?: string;
-  metadata?: Record<string, any> | null;
-  displayName?: string | null;
-  isActive?: boolean;
-}
-
-interface UpdateProviderInput {
-  apiKey?: string | null;
-  baseUrl?: string | null;
-  metadata?: Record<string, any> | null;
-  displayName?: string | null;
-  isActive?: boolean;
-}
+type ActivateProviderInput = ActivateProviderRequest;
+type UpdateProviderInput = UpdateProviderRequest;
 
 @Injectable()
 export class ProviderConfigsService {
