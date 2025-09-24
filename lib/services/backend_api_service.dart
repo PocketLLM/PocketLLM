@@ -39,8 +39,20 @@ class BackendApiService {
   }
 
   Uri _resolveUri(String baseUrl, String path, [Map<String, String>? query]) {
+    // Ensure the path starts with a forward slash
     final normalizedPath = path.startsWith('/') ? path.substring(1) : path;
-    return Uri.parse('$baseUrl/$normalizedPath').replace(queryParameters: query);
+    
+    // Ensure the baseUrl ends with the API suffix (v1)
+    String finalBaseUrl = baseUrl;
+    if (!finalBaseUrl.endsWith('/v1')) {
+      if (finalBaseUrl.endsWith('/')) {
+        finalBaseUrl += 'v1';
+      } else {
+        finalBaseUrl += '/v1';
+      }
+    }
+    
+    return Uri.parse('$finalBaseUrl/$normalizedPath').replace(queryParameters: query);
   }
 
   Future<dynamic> get(String path, {Map<String, String>? query}) async {
@@ -142,6 +154,9 @@ class BackendApiService {
       addCandidate(candidate);
     }
 
+    // Debug print the resolved URLs
+    debugPrint('Resolved backend URLs: $urls');
+    
     return List.unmodifiable(urls);
   }
 
@@ -189,10 +204,12 @@ class BackendApiService {
       return baseUrl;
     }
 
+    // Check if the baseUrl already ends with the suffix
     if (baseUrl.toLowerCase().endsWith('/${normalizedSuffix.toLowerCase()}')) {
       return baseUrl;
     }
 
+    // Add the suffix to the baseUrl
     return '$baseUrl/$normalizedSuffix';
   }
 
@@ -251,7 +268,8 @@ class BackendApiService {
     try {
       final decoded = jsonDecode(response.body);
       if (response.statusCode >= 200 && response.statusCode < 300) {
-        return decoded['data'];
+        // Return the entire response data, not just the 'data' field
+        return decoded;
       }
 
       final errorMessage = decoded['error']?['message'] ?? response.reasonPhrase;

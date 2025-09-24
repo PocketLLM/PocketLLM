@@ -156,25 +156,31 @@ class AuthStateNotifier extends ChangeNotifier {
   }) async {
     SignUpResult? result;
     await _runWithLoading(() async {
-      final response = await _post(
-        '/auth/signup',
-        body: {
-          'email': email,
-          'password': password,
-        },
-      );
+      try {
+        debugPrint('Attempting to sign up user: $email');
+        final response = await _post(
+          '/auth/signup',
+          body: {
+            'email': email,
+            'password': password,
+          },
+        );
+        debugPrint('Signup response: $response');
 
-      final data = _extractData(response);
-      final user = data['user'] as Map<String, dynamic>?;
-      final message = data['message'] as String?;
+        final data = _extractData(response);
+        debugPrint('Extracted data: $data');
+        final user = data['user'] as Map<String, dynamic>?;
+        final message = data['message'] as String?;
 
-      await _authenticate(email: email, password: password);
-
-      result = SignUpResult(
-        userId: user?['id'] as String?,
-        emailConfirmationRequired: false,
-        message: message,
-      );
+        result = SignUpResult(
+          userId: user?['id'] as String?,
+          emailConfirmationRequired: false,
+          message: message,
+        );
+      } catch (e) {
+        debugPrint('Sign up error: $e');
+        rethrow;
+      }
     });
 
     return result ?? const SignUpResult(userId: null);
@@ -409,46 +415,54 @@ class AuthStateNotifier extends ChangeNotifier {
     required String email,
     required String password,
   }) async {
-    final response = await _post(
-      '/auth/signin',
-      body: {
-        'email': email,
-        'password': password,
-      },
-    );
+    try {
+      debugPrint('Attempting to authenticate user: $email');
+      final response = await _post(
+        '/auth/signin',
+        body: {
+          'email': email,
+          'password': password,
+        },
+      );
+      debugPrint('Authentication response: $response');
 
-    final data = _extractData(response);
-    final user = data['user'] as Map<String, dynamic>?;
-    final session = data['session'] as Map<String, dynamic>?;
+      final data = _extractData(response);
+      debugPrint('Extracted data: $data');
+      final user = data['user'] as Map<String, dynamic>?;
+      final session = data['session'] as Map<String, dynamic>?;
 
-    if (session == null || user == null) {
-      throw const AuthException('Invalid authentication response from server.');
+      if (session == null || user == null) {
+        throw const AuthException('Invalid authentication response from server.');
+      }
+
+      final accessToken = session['access_token'] as String?;
+      if (accessToken == null || accessToken.isEmpty) {
+        throw const AuthException('Authentication token missing from response.');
+      }
+
+      final refreshToken = session['refresh_token'] as String?;
+      final expiresIn = session['expires_in'] as int?;
+      final userId = user['id'] as String?;
+      final userEmail = user['email'] as String? ?? email;
+
+      await _saveSession(
+        accessToken: accessToken,
+        refreshToken: refreshToken,
+        expiresIn: expiresIn,
+        userId: userId,
+        email: userEmail,
+      );
+
+      await _loadDeletionSchedule();
+      await _fetchProfile();
+      final canceledDeletion = await _handlePendingDeletionOnLogin();
+      notifyListeners();
+
+      return SignInResult(canceledDeletion: canceledDeletion);
+    } catch (e) {
+      debugPrint('Authentication error: $e');
+      rethrow;
     }
-
-    final accessToken = session['access_token'] as String?;
-    if (accessToken == null || accessToken.isEmpty) {
-      throw const AuthException('Authentication token missing from response.');
-    }
-
-    final refreshToken = session['refresh_token'] as String?;
-    final expiresIn = session['expires_in'] as int?;
-    final userId = user['id'] as String?;
-    final userEmail = user['email'] as String? ?? email;
-
-    await _saveSession(
-      accessToken: accessToken,
-      refreshToken: refreshToken,
-      expiresIn: expiresIn,
-      userId: userId,
-      email: userEmail,
-    );
-
-    await _loadDeletionSchedule();
-    await _fetchProfile();
-    final canceledDeletion = await _handlePendingDeletionOnLogin();
-    notifyListeners();
-
-    return SignInResult(canceledDeletion: canceledDeletion);
   }
 
   Future<void> _saveSession({
@@ -670,6 +684,7 @@ class AuthStateNotifier extends ChangeNotifier {
   }
 
   Map<String, dynamic> _extractData(Map<String, dynamic> response) {
+    // The response now contains the full structure, so we need to extract the data field
     return response['data'] as Map<String, dynamic>? ?? <String, dynamic>{};
   }
 
@@ -760,6 +775,7 @@ class AuthStateNotifier extends ChangeNotifier {
       _serviceAvailable = true;
       return _wrapBackendResponse(response);
     } on BackendApiException catch (error) {
+      debugPrint('Backend API error: ${error.statusCode} - ${error.message}');
       if (error.statusCode == 401 && requiresAuth) {
         await _clearSession();
       }
@@ -769,6 +785,7 @@ class AuthStateNotifier extends ChangeNotifier {
       notifyListeners();
       throw const AuthException('Unable to reach the PocketLLM service. Check your internet connection.');
     } catch (error) {
+      debugPrint('Request error: $error');
       throw AuthException(error.toString());
     }
   }
