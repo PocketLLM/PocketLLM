@@ -1,10 +1,23 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
-import 'package:supabase_flutter/supabase_flutter.dart' as supa;
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:http/http.dart' as http;
 
 import '../models/user_profile.dart';
+import 'api_config.dart';
+
+class AuthException implements Exception {
+  final String message;
+  final int? statusCode;
+
+  const AuthException(this.message, {this.statusCode});
+
+  @override
+  String toString() => message;
+}
 
 class SignInResult {
   final bool canceledDeletion;
@@ -14,146 +27,178 @@ class SignInResult {
 class SignUpResult {
   final String? userId;
   final bool emailConfirmationRequired;
-  const SignUpResult({required this.userId, this.emailConfirmationRequired = false});
+  final String? message;
+
+  const SignUpResult({
+    required this.userId,
+    this.emailConfirmationRequired = false,
+    this.message,
+  });
+}
+
+class DeletionSchedule {
+  final DateTime requestedAt;
+  final DateTime scheduledFor;
+
+  const DeletionSchedule({
+    required this.requestedAt,
+    required this.scheduledFor,
+  });
+
+  bool get isExpired => DateTime.now().toUtc().isAfter(scheduledFor);
+
+  Map<String, dynamic> toJson() => {
+        'requestedAt': requestedAt.toIso8601String(),
+        'scheduledFor': scheduledFor.toIso8601String(),
+      };
+
+  factory DeletionSchedule.fromJson(Map<String, dynamic> json) {
+    return DeletionSchedule(
+      requestedAt: DateTime.parse(json['requestedAt'] as String),
+      scheduledFor: DateTime.parse(json['scheduledFor'] as String),
+    );
+  }
 }
 
 class AuthStateNotifier extends ChangeNotifier {
-  AuthStateNotifier() {
+  AuthStateNotifier({http.Client? httpClient, FlutterSecureStorage? secureStorage})
+      : _httpClient = httpClient ?? http.Client(),
+        _secureStorage = secureStorage ?? const FlutterSecureStorage() {
     _initialize();
   }
 
-  static const String _profilesTable = 'profiles';
-  static const String _storageBucket = 'user_assets';
+  static const String _accessTokenKey = 'auth.accessToken';
+  static const String _refreshTokenKey = 'auth.refreshToken';
+  static const String _tokenExpiryKey = 'auth.accessTokenExpiry';
+  static const String _userIdKey = 'auth.userId';
+  static const String _userEmailKey = 'auth.userEmail';
+  static const String _deletionInfoPrefix = 'auth.deletionInfo.';
 
+  static const Set<String> _allowedProfileFields = {
+    'full_name',
+    'username',
+    'bio',
+    'date_of_birth',
+    'profession',
+    'avatar_url',
+    'survey_completed',
+    'heard_from',
+  };
+
+  final http.Client _httpClient;
+  final FlutterSecureStorage _secureStorage;
   final Completer<void> _readyCompleter = Completer<void>();
 
-  supa.SupabaseClient? _client;
-  supa.User? _supabaseUser;
+  String? _accessToken;
+  String? _refreshToken;
+  DateTime? _accessTokenExpiresAt;
+  String? _userId;
+  String? _userEmail;
   UserProfile? _profile;
-  bool _supabaseAvailable = true;
-  StreamSubscription<supa.AuthState>? _authSubscription;
-  StreamSubscription<List<Map<String, dynamic>>>? _profileSubscription;
-
+  bool _serviceAvailable = true;
   bool _isPerformingRequest = false;
+  DeletionSchedule? _deletionSchedule;
 
   Future<void> get ready => _readyCompleter.future;
 
-  supa.SupabaseClient? get client => _client;
-  supa.User? get supabaseUser => _supabaseUser;
   UserProfile? get profile => _profile;
-  bool get isAuthenticated => _supabaseUser != null;
-  bool get supabaseAvailable => _supabaseAvailable;
+  bool get isAuthenticated => _accessToken != null;
+  bool get isServiceAvailable => _serviceAvailable;
   bool get isPerformingRequest => _isPerformingRequest;
+  String? get currentUserEmail => _userEmail ?? _profile?.email;
+  DeletionSchedule? get deletionSchedule => _deletionSchedule;
 
   Future<void> _initialize() async {
     try {
-      _client = supa.Supabase.instance.client;
-    } catch (_) {
-      _supabaseAvailable = false;
+      _serviceAvailable = apiBaseUrl.trim().isNotEmpty;
+      if (!_serviceAvailable) {
+        return;
+      }
+
+      _accessToken = await _secureStorage.read(key: _accessTokenKey);
+      _refreshToken = await _secureStorage.read(key: _refreshTokenKey);
+      final expiryIso = await _secureStorage.read(key: _tokenExpiryKey);
+      if (expiryIso != null) {
+        _accessTokenExpiresAt = DateTime.tryParse(expiryIso);
+      }
+      _userId = await _secureStorage.read(key: _userIdKey);
+      _userEmail = await _secureStorage.read(key: _userEmailKey);
+
+      if (_accessToken != null && _userId != null) {
+        if (_accessTokenExpiresAt != null && _accessTokenExpiresAt!.isBefore(DateTime.now().toUtc())) {
+          await _clearSession();
+        } else {
+          await _loadDeletionSchedule();
+          await _fetchProfile();
+          await _handlePendingDeletionOnLogin();
+        }
+      }
+    } on AuthException catch (e) {
+      if (e.statusCode == 401) {
+        await _clearSession();
+      }
+    } on SocketException {
+      _serviceAvailable = false;
+    } catch (error, stackTrace) {
+      debugPrint('Auth initialization failed: $error');
+      debugPrint(stackTrace.toString());
+    } finally {
       if (!_readyCompleter.isCompleted) {
         _readyCompleter.complete();
       }
       notifyListeners();
-      return;
     }
-
-    _authSubscription = _client!.auth.onAuthStateChange.listen((event) async {
-      _supabaseUser = event.session?.user;
-      if (_supabaseUser != null) {
-        await _ensureProfileRow();
-        await _loadProfile();
-        await _handlePendingDeletionOnLogin();
-        _subscribeToProfileChanges();
-      } else {
-        _unsubscribeFromProfileChanges();
-        _profile = null;
-      }
-      notifyListeners();
-    });
-
-    final session = _client!.auth.currentSession;
-    _supabaseUser = session?.user;
-    if (_supabaseUser != null) {
-      await _ensureProfileRow();
-      await _loadProfile();
-      await _handlePendingDeletionOnLogin();
-      _subscribeToProfileChanges();
-    }
-
-    if (!_readyCompleter.isCompleted) {
-      _readyCompleter.complete();
-    }
-    notifyListeners();
   }
 
   Future<SignUpResult> signUpWithEmail({
     required String email,
     required String password,
   }) async {
-    _ensureClient();
+    SignUpResult? result;
     await _runWithLoading(() async {
-      final response = await _client!.auth.signUp(
-        email: email,
-        password: password,
+      final response = await _post(
+        '/auth/signup',
+        body: {
+          'email': email,
+          'password': password,
+        },
       );
 
-      final user = response.user;
-      if (user != null) {
-        _supabaseUser = user;
-        await _ensureProfileRow(emailOverride: email);
-        await _loadProfile();
-        _subscribeToProfileChanges();
-      }
+      final data = _extractData(response);
+      final user = data['user'] as Map<String, dynamic>?;
+      final message = data['message'] as String?;
 
-      notifyListeners();
+      await _authenticate(email: email, password: password);
+
+      result = SignUpResult(
+        userId: user?['id'] as String?,
+        emailConfirmationRequired: false,
+        message: message,
+      );
     });
 
-    final requiresConfirmation = _client!.auth.currentUser == null;
-    final currentUserId = _client!.auth.currentUser?.id ?? _supabaseUser?.id;
-    return SignUpResult(
-      userId: currentUserId,
-      emailConfirmationRequired: requiresConfirmation,
-    );
+    return result ?? const SignUpResult(userId: null);
   }
 
   Future<SignInResult> signInWithEmail({
     required String email,
     required String password,
   }) async {
-    _ensureClient();
-    bool canceledDeletion = false;
-
+    SignInResult result = const SignInResult();
     await _runWithLoading(() async {
-      final response = await _client!.auth.signInWithPassword(
-        email: email,
-        password: password,
-      );
-
-      _supabaseUser = response.user;
-      if (_supabaseUser != null) {
-        await _ensureProfileRow();
-        await _loadProfile();
-        canceledDeletion = await _handlePendingDeletionOnLogin();
-        _subscribeToProfileChanges();
-      }
-      notifyListeners();
+      result = await _authenticate(email: email, password: password);
     });
-
-    return SignInResult(canceledDeletion: canceledDeletion);
+    return result;
   }
 
   Future<void> signOut() async {
-    if (_client == null) return;
-    await _client!.auth.signOut();
-    _supabaseUser = null;
-    _profile = null;
-    _unsubscribeFromProfileChanges();
+    await _clearSession();
     notifyListeners();
   }
 
   Future<void> refreshProfile() async {
-    if (_client == null || _supabaseUser == null) return;
-    await _loadProfile();
+    if (!isAuthenticated) return;
+    await _fetchProfile();
     notifyListeners();
   }
 
@@ -167,173 +212,237 @@ class AuthStateNotifier extends ChangeNotifier {
     String? avatarUrl,
   }) async {
     _ensureAuthenticated();
-    final userId = _supabaseUser!.id;
     final update = {
-      'id': userId,
       'full_name': fullName,
       'username': username,
       'bio': bio,
-      'date_of_birth': dateOfBirth?.toIso8601String(),
+      'date_of_birth': _formatDate(dateOfBirth),
       'profession': profession,
       'heard_from': heardFrom,
       'avatar_url': avatarUrl,
       'survey_completed': true,
-      'updated_at': DateTime.now().toUtc().toIso8601String(),
-    };
+    }..removeWhere((key, value) => value == null || (value is String && value.isEmpty));
 
-    await _client!
-        .from(_profilesTable)
-        .upsert(update, onConflict: 'id')
-        .eq('id', userId);
-
-    await _loadProfile();
+    await _updateProfile(update);
     notifyListeners();
   }
 
   Future<void> updateProfileFields(Map<String, dynamic> fields) async {
     _ensureAuthenticated();
     if (fields.isEmpty) return;
-    final update = {
-      ...fields,
-      'updated_at': DateTime.now().toUtc().toIso8601String(),
-    };
-    await _client!
-        .from(_profilesTable)
-        .update(update)
-        .eq('id', _supabaseUser!.id);
-    await _loadProfile();
+
+    final sanitized = Map<String, dynamic>.from(fields);
+    if (sanitized.containsKey('date_of_birth')) {
+      sanitized['date_of_birth'] = _formatDate(sanitized['date_of_birth']);
+    }
+
+    sanitized.removeWhere((key, value) => value == null || (value is String && value.isEmpty));
+
+    if (sanitized.isEmpty) return;
+
+    await _updateProfile(sanitized);
     notifyListeners();
   }
 
   Future<void> updatePassword(String newPassword) async {
-    _ensureAuthenticated();
-    await _client!.auth.updateUser(supa.UserAttributes(password: newPassword));
+    throw const AuthException('Password updates are not supported yet.');
   }
 
   Future<String?> uploadProfileImage(File imageFile) async {
-    _ensureAuthenticated();
-    try {
-      final fileBytes = await imageFile.readAsBytes();
-      final path = 'public/avatars/${_supabaseUser!.id}-${DateTime.now().millisecondsSinceEpoch}.jpg';
-      await _client!.storage.from(_storageBucket).uploadBinary(
-            path,
-            fileBytes,
-            fileOptions: const supa.FileOptions(contentType: 'image/jpeg', upsert: true),
-          );
-      return _client!.storage.from(_storageBucket).getPublicUrl(path);
-    } catch (e) {
-      debugPrint('Error uploading profile image: $e');
-      rethrow;
-    }
+    throw const AuthException('Profile image uploads require a storage integration.');
   }
 
   Future<void> requestAccountDeletion() async {
     _ensureAuthenticated();
     final now = DateTime.now().toUtc();
     final scheduled = now.add(const Duration(days: 30));
-    final update = {
-      'deletion_status': 'pending',
-      'deletion_requested_at': now.toIso8601String(),
-      'deletion_scheduled_for': scheduled.toIso8601String(),
-      'updated_at': now.toIso8601String(),
-    };
-    await _client!
-        .from(_profilesTable)
-        .update(update)
-        .eq('id', _supabaseUser!.id);
-    await _loadProfile();
+    _deletionSchedule = DeletionSchedule(requestedAt: now, scheduledFor: scheduled);
+    await _persistDeletionSchedule();
+    _applyDeletionScheduleToProfile();
     notifyListeners();
   }
 
   Future<void> cancelAccountDeletion() async {
     _ensureAuthenticated();
-    final update = {
-      'deletion_status': 'active',
-      'deletion_requested_at': null,
-      'deletion_scheduled_for': null,
-      'updated_at': DateTime.now().toUtc().toIso8601String(),
-    };
-    await _client!
-        .from(_profilesTable)
-        .update(update)
-        .eq('id', _supabaseUser!.id);
-    await _loadProfile();
+    await _clearDeletionSchedule();
     notifyListeners();
   }
 
   Future<bool> _handlePendingDeletionOnLogin() async {
-    if (_profile == null) return false;
-    final scheduled = _profile!.deletionScheduledFor;
-    if (scheduled == null) return false;
-
-    final now = DateTime.now();
-    if (scheduled.isBefore(now) || scheduled.isAtSameMomentAs(now)) {
-      await signOut();
-      throw supa.AuthException('Account pending deletion');
+    if (_deletionSchedule == null) {
+      return false;
     }
 
-    await cancelAccountDeletion();
+    if (_deletionSchedule!.isExpired) {
+      await _performRemoteDeletion();
+      return false;
+    }
+
+    await _clearDeletionSchedule();
     return true;
   }
 
-  Future<void> _ensureProfileRow({String? emailOverride}) async {
-    _ensureAuthenticated();
+  Future<void> _performRemoteDeletion() async {
     try {
-      final existing = await _client!
-          .from(_profilesTable)
-          .select()
-          .eq('id', _supabaseUser!.id)
-          .maybeSingle();
-      if (existing == null) {
-        await _client!.from(_profilesTable).insert({
-          'id': _supabaseUser!.id,
-          'email': emailOverride ?? _supabaseUser!.email,
-          'survey_completed': false,
-          'created_at': DateTime.now().toUtc().toIso8601String(),
-          'updated_at': DateTime.now().toUtc().toIso8601String(),
-          'deletion_status': 'active',
-        });
-      }
+      await _delete('/users/profile', requiresAuth: true);
     } catch (e) {
-      debugPrint('Error ensuring profile row: $e');
-      rethrow;
-    }
-  }
-
-  Future<void> _loadProfile() async {
-    _ensureAuthenticated();
-    try {
-      final data = await _client!
-          .from(_profilesTable)
-          .select()
-          .eq('id', _supabaseUser!.id)
-          .maybeSingle();
-      if (data != null) {
-        _profile = UserProfile.fromMap(data);
-      }
-    } catch (e) {
-      debugPrint('Error loading profile: $e');
-    }
-  }
-
-  void _subscribeToProfileChanges() {
-    _unsubscribeFromProfileChanges();
-    if (_client == null || _supabaseUser == null) return;
-
-    _profileSubscription = _client!
-        .from(_profilesTable)
-        .stream(primaryKey: ['id'])
-        .eq('id', _supabaseUser!.id)
-        .listen((rows) {
-      if (rows.isEmpty) return;
-      _profile = UserProfile.fromMap(rows.first);
+      debugPrint('Failed to delete account after grace period: $e');
+    } finally {
+      await _clearSession();
       notifyListeners();
-    });
+    }
   }
 
-  void _unsubscribeFromProfileChanges() {
-    _profileSubscription?.cancel();
-    _profileSubscription = null;
+  Future<void> _fetchProfile() async {
+    final response = await _get('/users/profile', requiresAuth: true);
+    final data = _extractData(response);
+    if (data is Map<String, dynamic>) {
+      _profile = UserProfile.fromMap(_mergeProfileWithDeletion(data));
+    }
+  }
+
+  Future<void> _updateProfile(Map<String, dynamic> fields) async {
+    Map<String, dynamic> payload = Map<String, dynamic>.from(fields);
+
+    Future<void> sendUpdate(Map<String, dynamic> body) async {
+      final response = await _put('/users/profile', body: body, requiresAuth: true);
+      final data = _extractData(response);
+      if (data is Map<String, dynamic>) {
+        _profile = UserProfile.fromMap(_mergeProfileWithDeletion(data));
+      }
+    }
+
+    try {
+      await sendUpdate(payload);
+    } on AuthException catch (error) {
+      if (_looksLikeWhitelistError(error)) {
+        payload = Map<String, dynamic>.fromEntries(
+          payload.entries.where((entry) => _allowedProfileFields.contains(entry.key)),
+        );
+        if (payload.isEmpty) {
+          rethrow;
+        }
+        await sendUpdate(payload);
+      } else {
+        rethrow;
+      }
+    }
+  }
+
+  Map<String, dynamic> _mergeProfileWithDeletion(Map<String, dynamic> data) {
+    final merged = Map<String, dynamic>.from(data);
+    if (_deletionSchedule != null) {
+      merged['deletion_status'] = 'pending';
+      merged['deletion_requested_at'] = _deletionSchedule!.requestedAt.toIso8601String();
+      merged['deletion_scheduled_for'] = _deletionSchedule!.scheduledFor.toIso8601String();
+    } else {
+      merged['deletion_status'] = 'active';
+      merged['deletion_requested_at'] = null;
+      merged['deletion_scheduled_for'] = null;
+    }
+    return merged;
+  }
+
+  Future<SignInResult> _authenticate({
+    required String email,
+    required String password,
+  }) async {
+    final response = await _post(
+      '/auth/signin',
+      body: {
+        'email': email,
+        'password': password,
+      },
+    );
+
+    final data = _extractData(response);
+    final user = data['user'] as Map<String, dynamic>?;
+    final session = data['session'] as Map<String, dynamic>?;
+
+    if (session == null || user == null) {
+      throw const AuthException('Invalid authentication response from server.');
+    }
+
+    final accessToken = session['access_token'] as String?;
+    if (accessToken == null || accessToken.isEmpty) {
+      throw const AuthException('Authentication token missing from response.');
+    }
+
+    final refreshToken = session['refresh_token'] as String?;
+    final expiresIn = session['expires_in'] as int?;
+    final userId = user['id'] as String?;
+    final userEmail = user['email'] as String? ?? email;
+
+    await _saveSession(
+      accessToken: accessToken,
+      refreshToken: refreshToken,
+      expiresIn: expiresIn,
+      userId: userId,
+      email: userEmail,
+    );
+
+    await _loadDeletionSchedule();
+    await _fetchProfile();
+    final canceledDeletion = await _handlePendingDeletionOnLogin();
+    notifyListeners();
+
+    return SignInResult(canceledDeletion: canceledDeletion);
+  }
+
+  Future<void> _saveSession({
+    required String accessToken,
+    String? refreshToken,
+    int? expiresIn,
+    String? userId,
+    required String email,
+  }) async {
+    _accessToken = accessToken;
+    _refreshToken = refreshToken;
+    _userId = userId;
+    _userEmail = email;
+
+    if (expiresIn != null) {
+      _accessTokenExpiresAt = DateTime.now().toUtc().add(Duration(seconds: expiresIn));
+    } else {
+      _accessTokenExpiresAt = null;
+    }
+
+    await _secureStorage.write(key: _accessTokenKey, value: _accessToken);
+    if (_refreshToken != null) {
+      await _secureStorage.write(key: _refreshTokenKey, value: _refreshToken);
+    } else {
+      await _secureStorage.delete(key: _refreshTokenKey);
+    }
+
+    if (_accessTokenExpiresAt != null) {
+      await _secureStorage.write(key: _tokenExpiryKey, value: _accessTokenExpiresAt!.toIso8601String());
+    } else {
+      await _secureStorage.delete(key: _tokenExpiryKey);
+    }
+
+    if (_userId != null) {
+      await _secureStorage.write(key: _userIdKey, value: _userId);
+    }
+    await _secureStorage.write(key: _userEmailKey, value: _userEmail);
+  }
+
+  Future<void> _clearSession() async {
+    if (_userId != null) {
+      await _secureStorage.delete(key: _deletionStorageKey(_userId!));
+    }
+    _accessToken = null;
+    _refreshToken = null;
+    _accessTokenExpiresAt = null;
+    _userId = null;
+    _userEmail = null;
+    _profile = null;
+    _deletionSchedule = null;
+
+    await _secureStorage.delete(key: _accessTokenKey);
+    await _secureStorage.delete(key: _refreshTokenKey);
+    await _secureStorage.delete(key: _tokenExpiryKey);
+    await _secureStorage.delete(key: _userIdKey);
+    await _secureStorage.delete(key: _userEmailKey);
   }
 
   Future<void> _runWithLoading(Future<void> Function() action) async {
@@ -348,22 +457,202 @@ class AuthStateNotifier extends ChangeNotifier {
     }
   }
 
-  void _ensureAuthenticated() {
-    if (_client == null || _supabaseUser == null) {
-      throw StateError('No authenticated user');
+  Future<void> _loadDeletionSchedule() async {
+    if (_userId == null) {
+      _deletionSchedule = null;
+      return;
+    }
+
+    final raw = await _secureStorage.read(key: _deletionStorageKey(_userId!));
+    if (raw == null || raw.isEmpty) {
+      _deletionSchedule = null;
+      return;
+    }
+
+    try {
+      final decoded = jsonDecode(raw) as Map<String, dynamic>;
+      _deletionSchedule = DeletionSchedule.fromJson(decoded);
+      _applyDeletionScheduleToProfile();
+    } catch (e) {
+      debugPrint('Failed to load deletion schedule: $e');
+      _deletionSchedule = null;
     }
   }
 
-  void _ensureClient() {
-    if (_client == null) {
-      throw StateError('Supabase is not configured');
+  Future<void> _persistDeletionSchedule() async {
+    if (_userId == null || _deletionSchedule == null) {
+      return;
     }
+    await _secureStorage.write(
+      key: _deletionStorageKey(_userId!),
+      value: jsonEncode(_deletionSchedule!.toJson()),
+    );
+  }
+
+  Future<void> _clearDeletionSchedule() async {
+    _deletionSchedule = null;
+    if (_userId != null) {
+      await _secureStorage.delete(key: _deletionStorageKey(_userId!));
+    }
+    _applyDeletionScheduleToProfile();
+  }
+
+  void _applyDeletionScheduleToProfile() {
+    if (_profile == null) return;
+    if (_deletionSchedule == null) {
+      _profile = _profile!.copyWith(
+        deletionStatus: 'active',
+        deletionRequestedAt: null,
+        deletionScheduledFor: null,
+      );
+    } else {
+      _profile = _profile!.copyWith(
+        deletionStatus: 'pending',
+        deletionRequestedAt: _deletionSchedule!.requestedAt,
+        deletionScheduledFor: _deletionSchedule!.scheduledFor,
+      );
+    }
+  }
+
+  String _deletionStorageKey(String userId) => '$_deletionInfoPrefix$userId';
+
+  void _ensureAuthenticated() {
+    if (_accessToken == null) {
+      throw const AuthException('You need to be signed in to continue.');
+    }
+  }
+
+  Map<String, dynamic> _extractData(Map<String, dynamic> response) {
+    return response['data'] as Map<String, dynamic>? ?? <String, dynamic>{};
+  }
+
+  bool _looksLikeWhitelistError(AuthException error) {
+    final message = error.message.toLowerCase();
+    return message.contains('non-whitelisted') || message.contains('should not exist');
+  }
+
+  String? _formatDate(dynamic value) {
+    if (value == null) return null;
+    if (value is DateTime) {
+      return value.toUtc().toIso8601String().split('T').first;
+    }
+    if (value is String && value.isNotEmpty) {
+      if (value.length >= 10) {
+        return value.substring(0, 10);
+      }
+      return value;
+    }
+    return null;
+  }
+
+  Future<Map<String, dynamic>> _get(
+    String path, {
+    bool requiresAuth = false,
+  }) async {
+    return _request('GET', path, requiresAuth: requiresAuth);
+  }
+
+  Future<Map<String, dynamic>> _post(
+    String path, {
+    Map<String, dynamic>? body,
+    bool requiresAuth = false,
+  }) async {
+    return _request('POST', path, body: body, requiresAuth: requiresAuth);
+  }
+
+  Future<Map<String, dynamic>> _put(
+    String path, {
+    Map<String, dynamic>? body,
+    bool requiresAuth = false,
+  }) async {
+    return _request('PUT', path, body: body, requiresAuth: requiresAuth);
+  }
+
+  Future<Map<String, dynamic>> _delete(
+    String path, {
+    Map<String, dynamic>? body,
+    bool requiresAuth = false,
+  }) async {
+    return _request('DELETE', path, body: body, requiresAuth: requiresAuth);
+  }
+
+  Future<Map<String, dynamic>> _request(
+    String method,
+    String path, {
+    Map<String, dynamic>? body,
+    bool requiresAuth = false,
+  }) async {
+    if (apiBaseUrl.trim().isEmpty) {
+      _serviceAvailable = false;
+      throw const AuthException('Authentication service is not configured.');
+    }
+
+    final uri = Uri.parse('${apiBaseUrl.trim()}$path');
+    final headers = <String, String>{
+      HttpHeaders.contentTypeHeader: 'application/json',
+    };
+
+    if (requiresAuth) {
+      if (_accessToken == null) {
+        throw const AuthException('You need to be signed in to continue.', statusCode: 401);
+      }
+      headers[HttpHeaders.authorizationHeader] = 'Bearer $_accessToken';
+    }
+
+    http.Response response;
+
+    try {
+      switch (method) {
+        case 'GET':
+          response = await _httpClient.get(uri, headers: headers);
+          break;
+        case 'POST':
+          response = await _httpClient.post(uri, headers: headers, body: jsonEncode(body ?? {}));
+          break;
+        case 'PUT':
+          response = await _httpClient.put(uri, headers: headers, body: jsonEncode(body ?? {}));
+          break;
+        case 'DELETE':
+          response = await _httpClient.delete(uri, headers: headers, body: jsonEncode(body ?? {}));
+          break;
+        default:
+          throw AuthException('Unsupported HTTP method: $method');
+      }
+    } on SocketException {
+      _serviceAvailable = false;
+      notifyListeners();
+      throw const AuthException('Unable to reach the PocketLLM service. Check your internet connection.');
+    }
+
+    _serviceAvailable = true;
+
+    Map<String, dynamic> payload;
+    try {
+      payload = response.body.isNotEmpty
+          ? jsonDecode(response.body) as Map<String, dynamic>
+          : <String, dynamic>{'success': response.statusCode >= 200 && response.statusCode < 300};
+    } catch (_) {
+      throw AuthException('Unexpected response from the server.', statusCode: response.statusCode);
+    }
+
+    final success = payload['success'] as bool? ?? (response.statusCode >= 200 && response.statusCode < 300);
+    if (!success || response.statusCode >= 400) {
+      String message = response.reasonPhrase ?? 'Request failed with status ${response.statusCode}';
+      final error = payload['error'];
+      if (error is Map<String, dynamic>) {
+        message = error['message']?.toString() ?? message;
+      } else if (payload['message'] != null) {
+        message = payload['message'].toString();
+      }
+      throw AuthException(message, statusCode: response.statusCode);
+    }
+
+    return payload;
   }
 
   @override
   void dispose() {
-    _authSubscription?.cancel();
-    _unsubscribeFromProfileChanges();
+    _httpClient.close();
     super.dispose();
   }
 }

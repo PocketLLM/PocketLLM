@@ -14,13 +14,19 @@ import 'services/auth_state.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:async';
 import 'package:provider/provider.dart';
+<<<<<<< HEAD
 import 'package:supabase_flutter/supabase_flutter.dart' as supa;
+=======
+>>>>>>> ba8863400ee62088e78eac9f1c8ba6c67a919ae6
 
 // Initialize core services that need to be available before lifecycle service
 Future<void> _initializeCoreServices() async {
   try {
+<<<<<<< HEAD
     await _initializeSupabase();
 
+=======
+>>>>>>> ba8863400ee62088e78eac9f1c8ba6c67a919ae6
     // Initialize API key
     await PocketLLMService.initializeApiKey();
 
@@ -38,6 +44,7 @@ Future<void> _initializeCoreServices() async {
   }
 }
 
+<<<<<<< HEAD
 Future<void> _initializeSupabase() async {
   const supabaseUrl = String.fromEnvironment('SUPABASE_URL');
   const supabaseAnonKey = String.fromEnvironment('SUPABASE_ANON_KEY');
@@ -63,6 +70,8 @@ Future<void> _initializeSupabase() async {
   }
 }
 
+=======
+>>>>>>> ba8863400ee62088e78eac9f1c8ba6c67a919ae6
 Widget _buildApp(AppLifecycleService appLifecycleService, {String? initializationError}) {
   return MultiProvider(
     providers: [
@@ -449,7 +458,11 @@ class _SplashLoaderState extends State<SplashLoader> {
       Widget destination;
       if (!showHome) {
         destination = const OnboardingScreen();
+<<<<<<< HEAD
       } else if (!authState.supabaseAvailable) {
+=======
+      } else if (!authState.isServiceAvailable) {
+>>>>>>> ba8863400ee62088e78eac9f1c8ba6c67a919ae6
         destination = const HomeScreen();
       } else if (authState.isAuthenticated) {
         destination = const HomeScreen();

@@ -38,7 +38,7 @@ class _AuthFlowScreenState extends State<AuthFlowScreen> {
   }
 
   void _handleExistingSession(AuthState authState) {
-    if (!authState.supabaseAvailable || !authState.isAuthenticated) {
+    if (!authState.isServiceAvailable || !authState.isAuthenticated) {
       _handledExistingSession = false;
       return;
     }

@@ -1,11 +1,14 @@
 import 'dart:convert';
+
 import 'package:flutter/material.dart';
-import 'package:http/http.dart' as http;
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:http/http.dart' as http;
+
 import '../component/models.dart';
+import 'api_config.dart';
 
 class PocketLLMService {
-  static const String baseUrl = 'https://api.sree.shop/v1';
+  static const String baseUrl = apiBaseUrl;
   static const _secureStorage = FlutterSecureStorage();
   static const String _apiKeyKey = 'pocketllm_api_key';
 

@@ -20,6 +20,10 @@ class _ModelSettingsPageState extends State<ModelSettingsPage> {
   bool _isLoadingModels = true;
   bool _isLoadingProviders = true;
   String? _selectedModelId;
+<<<<<<< HEAD
+=======
+  final _modelService = ModelService();
+>>>>>>> ba8863400ee62088e78eac9f1c8ba6c67a919ae6
 
   @override
   void initState() {

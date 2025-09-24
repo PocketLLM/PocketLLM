@@ -1,8 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:supabase_flutter/supabase_flutter.dart' as supa;
-
 import '../../models/user_profile.dart';
 import '../../services/auth_state.dart';
 import '../../widgets/clear_text_field.dart';
@@ -66,7 +64,7 @@ class _AuthPageState extends State<AuthPage> {
                 const SizedBox(height: 16),
                 _buildHeader(authState),
                 const SizedBox(height: 32),
-                if (authState.supabaseAvailable)
+                if (authState.isServiceAvailable)
                   _buildAuthForm(context, authState)
                 else
                   _buildUnavailableState(),
@@ -146,7 +144,7 @@ class _AuthPageState extends State<AuthPage> {
           ),
         ),
         const SizedBox(height: 24),
-        if (authState.supabaseAvailable)
+        if (authState.isServiceAvailable)
           Container(
             padding: const EdgeInsets.all(4),
             decoration: BoxDecoration(
@@ -347,6 +345,9 @@ class _AuthPageState extends State<AuthPage> {
           const SizedBox(height: 32),
           TextButton(
             onPressed: widget.onSkip,
+            style: TextButton.styleFrom(
+              foregroundColor: const Color(0xFF8B5CF6),
+            ),
             child: const Text('Skip for now'),
           ),
         ],
@@ -543,7 +544,7 @@ class _AuthPageState extends State<AuthPage> {
 
   Future<void> _handleContinue(AuthState authState) async {
     await _clearAuthSkipFlag();
-    final email = authState.profile?.email ?? authState.supabaseUser?.email ?? '';
+    final email = authState.currentUserEmail ?? '';
     widget.onLoginSuccess?.call(email);
   }
 
@@ -661,7 +662,7 @@ class _AuthPageState extends State<AuthPage> {
               const SizedBox(width: 12),
               Expanded(
                 child: Text(
-                  'Authentication is currently unavailable. Please configure Supabase credentials to enable account features.',
+                  'Authentication is currently unavailable. Please try again later or reach out to support if the issue persists.',
                   style: TextStyle(color: Colors.orange[800]),
                 ),
               ),
@@ -670,15 +671,15 @@ class _AuthPageState extends State<AuthPage> {
         ),
         if (widget.allowSkip) ...[
           const SizedBox(height: 24),
-          ElevatedButton(
-            onPressed: widget.onSkip,
-            style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFF8B5CF6),
-              foregroundColor: Colors.white,
-              padding: const EdgeInsets.symmetric(vertical: 16),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          Align(
+            alignment: Alignment.centerLeft,
+            child: TextButton(
+              onPressed: widget.onSkip,
+              style: TextButton.styleFrom(
+                foregroundColor: const Color(0xFF8B5CF6),
+              ),
+              child: const Text('Continue without an account'),
             ),
-            child: const Text('Continue without an account'),
           ),
         ],
       ],
@@ -687,8 +688,8 @@ class _AuthPageState extends State<AuthPage> {
 
   Future<void> _handleSubmit(BuildContext context) async {
     final authState = context.read<AuthState>();
-    if (!authState.supabaseAvailable) {
-      _showSnackBar(context, 'Authentication service is currently unavailable.');
+    if (!authState.isServiceAvailable) {
+      _showSnackBar(context, 'Authentication service is currently unavailable. Please try again soon.');
       return;
     }
 
@@ -706,15 +707,16 @@ class _AuthPageState extends State<AuthPage> {
 
         await _clearAuthSkipFlag();
         final profile = authState.profile;
+        final resolvedEmail = authState.currentUserEmail ?? email;
 
         if (profile != null && !profile.surveyCompleted) {
           final message = result.canceledDeletion
               ? 'Account deletion cancelled. Welcome back! Please finish your profile setup.'
               : 'Signed in successfully. Let\'s finish setting up your profile.';
           _showSnackBar(context, message, success: true);
-          await _navigateToSurvey(authState, emailOverride: email);
+          await _navigateToSurvey(authState, emailOverride: resolvedEmail);
         } else {
-          widget.onLoginSuccess?.call(email);
+          widget.onLoginSuccess?.call(resolvedEmail);
           if (result.canceledDeletion) {
             _showSnackBar(context, 'Account deletion cancelled. Welcome back!', success: true);
           } else {
@@ -732,18 +734,18 @@ class _AuthPageState extends State<AuthPage> {
             'Please check your email to confirm your account before continuing.',
             success: true,
           );
-          widget.onLoginSuccess?.call(email);
+          widget.onLoginSuccess?.call(authState.currentUserEmail ?? email);
         } else {
           await _clearAuthSkipFlag();
           _showSnackBar(
             context,
-            'Account created! Tell us a bit about yourself so we can personalise PocketLLM.',
+            result.message ?? 'Account created! Tell us a bit about yourself so we can personalise PocketLLM.',
             success: true,
           );
-          await _navigateToSurvey(authState, emailOverride: email);
+          await _navigateToSurvey(authState, emailOverride: authState.currentUserEmail ?? email);
         }
       }
-    } on supa.AuthException catch (e) {
+    } on AuthException catch (e) {
       _showSnackBar(context, e.message, success: false);
     } on StateError catch (e) {
       _showSnackBar(context, e.message, success: false);

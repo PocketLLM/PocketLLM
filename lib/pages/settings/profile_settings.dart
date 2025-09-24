@@ -477,7 +477,7 @@ class _ProfileSettingsPageState extends State<ProfileSettingsPage> {
   Widget build(BuildContext context) {
     return Consumer<AuthState>(
       builder: (context, authState, _) {
-        if (!authState.supabaseAvailable) {
+        if (!authState.isServiceAvailable) {
           return Scaffold(
             appBar: AppBar(
               backgroundColor: Colors.grey[50],
@@ -492,7 +492,7 @@ class _ProfileSettingsPageState extends State<ProfileSettingsPage> {
               child: Padding(
                 padding: EdgeInsets.all(24.0),
                 child: Text(
-                  'Authentication is disabled. Configure Supabase credentials to enable profile features.',
+                  'Authentication services are currently unavailable. Please try again later.',
                   textAlign: TextAlign.center,
                 ),
               ),
