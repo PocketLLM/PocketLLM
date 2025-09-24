@@ -1,5 +1,4 @@
-import Fastify from 'fastify'
-import { ZodTypeProvider, withZod } from 'fastify-zod'
+import Fastify, { FastifyRequest, FastifyReply } from 'fastify'
 import { supabaseAdmin } from '../shared/supabaseClient.ts'
 import { addRequestHooks } from '../shared/utils/responseHandler.ts'
 
@@ -16,17 +15,20 @@ declare module 'fastify' {
   interface FastifyRequest {
     user: { id: string }
   }
+  
+  interface FastifyInstance {
+    authenticate: (request: FastifyRequest, reply: FastifyReply) => Promise<void>
+  }
 }
 
 // Initialize Fastify with Zod support
-const fastify = Fastify().withTypeProvider<ZodTypeProvider>()
-withZod(fastify)
+const fastify = Fastify()
 
 // Register hooks for request metadata (requestId, startTime)
 addRequestHooks(fastify)
 
 // Decorate the Fastify instance with an authentication handler
-fastify.decorate('authenticate', async function(request, reply) {
+fastify.decorate('authenticate', async function(request: FastifyRequest, reply: FastifyReply) {
   try {
     const token = request.headers.authorization?.replace('Bearer ', '')
     if (!token) {
@@ -59,7 +61,8 @@ fastify.register(async (instance) => {
 })
 
 // Main handler for the Supabase Edge Function
-Deno.serve(async (req) => {
+// @ts-ignore: Deno global
+Deno.serve({ port: 8000 }, async (req) => {
   try {
     const url = new URL(req.url)
     const response = await fastify.inject({
@@ -70,9 +73,17 @@ Deno.serve(async (req) => {
       body: req.body ? await req.text() : undefined
     });
 
+    // Convert headers to a Record<string, string>
+    const headers: Record<string, string> = {};
+    for (const [key, value] of Object.entries(response.headers)) {
+      if (value !== undefined) {
+        headers[key] = String(value);
+      }
+    }
+
     return new Response(response.rawPayload, {
       status: response.statusCode,
-      headers: response.headers,
+      headers: headers,
     });
   } catch (err) {
     console.error('Error in Deno.serve handler:', err);

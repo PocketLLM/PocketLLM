@@ -1,4 +1,3 @@
-import { asConst } from 'fastify-zod'
 import { z } from 'zod'
 
 const userCore = {
@@ -20,7 +19,7 @@ const sessionObject = z.object({
   })
 }).nullable()
 
-export const signUpSchema = asConst({
+export const signUpSchema = {
   body: z.object({
     ...userCore
   }),
@@ -37,11 +36,11 @@ export const signUpSchema = asConst({
       error: z.any().nullable(),
     })
   }
-})
+}
 
-export const signInSchema = asConst({
+export const signInSchema = {
   body: z.object({
     ...userCore
   }),
   response: signUpSchema.response // Sign-in and sign-up return the same session object
-})
+}

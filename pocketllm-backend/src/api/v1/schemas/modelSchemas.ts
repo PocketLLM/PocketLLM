@@ -1,4 +1,3 @@
-import { asConst } from 'fastify-zod'
 import { z } from 'zod'
 
 // Core properties for a model configuration.
@@ -31,24 +30,24 @@ const modelConfigResponseObject = z.object({
 });
 
 
-export const createModelConfigSchema = asConst({
+export const createModelConfigSchema = {
   body: z.object({
     ...modelConfigCore,
     api_key: z.string().min(1, 'API Key is required.'),
   }),
   response: { 201: modelConfigResponseObject }
-});
+};
 
-export const listModelConfigsSchema = asConst({
+export const listModelConfigsSchema = {
   response: { 200: z.array(modelConfigResponseObject) }
-});
+};
 
-export const getModelConfigSchema = asConst({
+export const getModelConfigSchema = {
   params: z.object({ id: z.string().uuid() }),
   response: { 200: modelConfigResponseObject }
-});
+};
 
-export const updateModelConfigSchema = asConst({
+export const updateModelConfigSchema = {
   params: z.object({ id: z.string().uuid() }),
   // For update, all fields are optional, including the api_key.
   body: z.object({
@@ -56,12 +55,12 @@ export const updateModelConfigSchema = asConst({
     api_key: z.string().optional(),
   }).partial(),
   response: { 200: modelConfigResponseObject }
-});
+};
 
-export const deleteModelConfigSchema = asConst({
+export const deleteModelConfigSchema = {
   params: z.object({ id: z.string().uuid() }),
   response: { 204: z.null() } // Use z.null() for empty response body
-});
+};
 
 // =================================================================
 // Schemas for interacting with the Ollama API

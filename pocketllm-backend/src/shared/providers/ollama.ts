@@ -1,5 +1,4 @@
 import fetch from 'node-fetch';
-import { Readable } from 'stream';
 
 interface OllamaCompletionOptions {
   baseUrl: string;
@@ -18,7 +17,7 @@ export async function getOllamaCompletionStream(
   prompt: string,
   history: any[], // Define a proper type for this later
   options: OllamaCompletionOptions
-): Promise<Readable> {
+) {
   const { baseUrl, model } = options;
 
   const messages = [
@@ -43,6 +42,6 @@ export async function getOllamaCompletionStream(
     throw new Error(`Ollama API error: ${response.statusText} - ${errorBody}`);
   }
 
-  // The body of a node-fetch response is a Readable stream
+  // The body of a node-fetch response is a ReadableStream
   return response.body;
 }

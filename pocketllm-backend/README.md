@@ -54,7 +54,7 @@ The server is designed to be run as a Supabase Edge Function, but you can run it
 
 From within the `pocketllm-backend` directory, run:
 ```bash
-deno run --allow-net --allow-env --allow-read src/api/index.ts
+deno run --allow-net --allow-env --allow-read --env-file=.env src/api/index.ts
 ```
 This command starts the server, allowing it to access the network (for Supabase/Ollama), read environment variables (from your `.env` file), and read files from the filesystem.
 

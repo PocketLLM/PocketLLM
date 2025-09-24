@@ -1,7 +1,6 @@
-import { asConst } from 'fastify-zod'
 import { z } from 'zod'
 
-export const createMessageSchema = asConst({
+export const createMessageSchema = {
   body: z.object({
     prompt: z.string().min(1, 'Prompt cannot be empty.'),
   }),
@@ -17,5 +16,5 @@ export const createMessageSchema = asConst({
       metadata: z.record(z.any()).nullable(),
       created_at: z.string().datetime(),
     }),
-  },
-})
+  }
+}

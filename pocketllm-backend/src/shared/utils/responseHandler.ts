@@ -1,5 +1,4 @@
 import { FastifyReply, FastifyRequest, FastifyInstance } from 'fastify'
-import crypto from 'crypto'
 
 // Augment FastifyRequest to include our custom properties for metadata.
 declare module 'fastify' {

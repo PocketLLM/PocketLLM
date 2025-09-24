@@ -1,7 +1,6 @@
-import { asConst } from 'fastify-zod'
 import { z } from 'zod'
 
-export const createImageJobSchema = asConst({
+export const createImageJobSchema = {
   body: z.object({
     prompt: z.string().min(1, 'Prompt cannot be empty.'),
     model: z.string().min(1, 'Model cannot be empty.'),
@@ -13,9 +12,9 @@ export const createImageJobSchema = asConst({
       jobId: z.string().uuid(),
     }),
   },
-})
+}
 
-export const getJobStatusSchema = asConst({
+export const getJobStatusSchema = {
   params: z.object({
     jobId: z.string().uuid('Invalid job ID format.'),
   }),
@@ -27,4 +26,4 @@ export const getJobStatusSchema = asConst({
       error_log: z.string().nullable(),
     }),
   },
-})
+}
