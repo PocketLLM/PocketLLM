@@ -128,9 +128,20 @@ The API is fully documented with Swagger/OpenAPI. Once the server is running, vi
 - **Authentication**: `/v1/auth/signup`, `/v1/auth/signin`
 - **Users**: `/v1/users/profile`
 - **Chats**: `/v1/chats`, `/v1/chats/:id/messages`
-- **Models**: `/v1/models`, `/v1/models/user`
 - **Jobs**: `/v1/jobs`, `/v1/jobs/image-generation`
-- **Embeddings**: `/v1/embeddings/generate`, `/v1/embeddings/search`
+
+### User Profile Endpoints
+
+The profile routes are backed by the `UsersController` and `UsersService`, which read the authenticated Supabase user from
+`request.user`. Ensure your Supabase JWT authentication middleware/guard populates this property before invoking the
+endpoints:
+
+- `GET /v1/users/profile` – Fetches the current user's profile row from the `profiles` table.
+- `PUT /v1/users/profile` – Updates the authenticated user's profile data while handling duplicate usernames.
+- `DELETE /v1/users/profile` – Permanently removes the Supabase user and cascades the related profile record.
+
+If `request.user` is absent, the service will not know which profile to operate on. Configure Supabase's auth webhook or a
+NestJS guard to validate incoming tokens and attach the `id` field to the request before routing reaches the controller.
 
 ## 🔧 Key Features
 
