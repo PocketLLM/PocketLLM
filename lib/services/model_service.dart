@@ -5,7 +5,6 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'pocket_llm_service.dart';
 import '../component/models.dart';
 import 'package:flutter/foundation.dart';
-import 'package:uuid/uuid.dart';
 import 'remote_model_service.dart';
 
 // Service to manage model configurations
@@ -14,47 +13,48 @@ class ModelService {
   factory ModelService() => _instance;
   ModelService._internal();
 
-  static const String _modelsKey = 'saved_models';
   static const String _defaultModelKey = 'default_model';
 
   final RemoteModelService _remoteModelService = RemoteModelService();
-  
+  List<ModelConfig> _cachedModels = [];
+
   // Get all saved model configurations
   Future<List<ModelConfig>> getSavedModels({bool refreshRemote = true}) async {
-    if (refreshRemote) {
-      try {
-        final remoteModels = await _remoteModelService.getModels();
-        await _cacheModels(remoteModels);
-        return remoteModels;
-      } catch (e) {
-        debugPrint('Remote model fetch failed, falling back to cache: $e');
-      }
+    if (!refreshRemote && _cachedModels.isNotEmpty) {
+      return _cachedModels;
     }
 
-    return await _loadCachedModels();
+    try {
+      final remoteModels = await _remoteModelService.getModels();
+      await _ensureDefaultModel(remoteModels);
+      return _cachedModels;
+    } catch (e) {
+      debugPrint('Remote model fetch failed: $e');
+      return _cachedModels;
+    }
   }
   
   // Save a new model configuration
   Future<void> saveModel(ModelConfig model) async {
-    try {
-      final sharedSettings = <String, dynamic>{};
-      if (model.systemPrompt != null && model.systemPrompt!.isNotEmpty) {
-        sharedSettings['systemPrompt'] = model.systemPrompt;
-      }
-      sharedSettings['temperature'] = model.temperature;
-      if (model.maxTokens != null) {
-        sharedSettings['maxTokens'] = model.maxTokens;
-      }
-      if (model.topP != null) {
-        sharedSettings['topP'] = model.topP;
-      }
-      if (model.presencePenalty != null) {
-        sharedSettings['presencePenalty'] = model.presencePenalty;
-      }
-      if (model.frequencyPenalty != null) {
-        sharedSettings['frequencyPenalty'] = model.frequencyPenalty;
-      }
+    final sharedSettings = <String, dynamic>{};
+    if (model.systemPrompt != null && model.systemPrompt!.isNotEmpty) {
+      sharedSettings['systemPrompt'] = model.systemPrompt;
+    }
+    sharedSettings['temperature'] = model.temperature;
+    if (model.maxTokens != null) {
+      sharedSettings['maxTokens'] = model.maxTokens;
+    }
+    if (model.topP != null) {
+      sharedSettings['topP'] = model.topP;
+    }
+    if (model.presencePenalty != null) {
+      sharedSettings['presencePenalty'] = model.presencePenalty;
+    }
+    if (model.frequencyPenalty != null) {
+      sharedSettings['frequencyPenalty'] = model.frequencyPenalty;
+    }
 
+    try {
       await _remoteModelService.importModels(
         provider: model.provider,
         selections: [
@@ -70,11 +70,10 @@ class ModelService {
         sharedSettings: sharedSettings,
       );
       final remoteModels = await _remoteModelService.getModels();
-      await _cacheModels(remoteModels);
-      await _setDefaultIfFirstModel(remoteModels.isNotEmpty ? remoteModels.first.id : model.id);
+      await _ensureDefaultModel(remoteModels);
     } catch (e) {
-      debugPrint('Remote saveModel failed, storing locally: $e');
-      await _saveModelLocally(model);
+      debugPrint('Remote saveModel failed: $e');
+      rethrow;
     }
   }
 
@@ -82,72 +81,12 @@ class ModelService {
   Future<void> deleteModel(String modelId) async {
     try {
       await _remoteModelService.deleteModel(modelId);
-      final remoteModels = await _remoteModelService.getModels();
-      await _cacheModels(remoteModels);
+      final remainingModels = await _remoteModelService.getModels();
+      await _ensureDefaultModel(remainingModels);
     } catch (e) {
-      debugPrint('Remote deleteModel failed, updating cache locally: $e');
-      final prefs = await SharedPreferences.getInstance();
-      final cached = await _loadCachedModels();
-      cached.removeWhere((m) => m.id == modelId);
-      final modelJsonList = cached.map((m) => json.encode(m.toJson())).toList();
-      await prefs.setStringList(_modelsKey, modelJsonList);
+      debugPrint('Failed to delete model: $e');
+      rethrow;
     }
-
-    final defaultId = await getDefaultModel();
-    if (defaultId == modelId) {
-      final cached = await _loadCachedModels();
-      if (cached.isNotEmpty) {
-        await setDefaultModel(cached.first.id);
-      }
-    }
-  }
-
-  Future<void> _cacheModels(List<ModelConfig> models) async {
-    final prefs = await SharedPreferences.getInstance();
-    final modelJsonList = models.map((m) => json.encode(m.toJson())).toList();
-    await prefs.setStringList(_modelsKey, modelJsonList);
-  }
-
-  Future<List<ModelConfig>> _loadCachedModels() async {
-    final prefs = await SharedPreferences.getInstance();
-    final savedModelsJson = prefs.getStringList(_modelsKey) ?? [];
-
-    final List<ModelConfig> models = [];
-    for (final modelJson in savedModelsJson) {
-      try {
-        final Map<String, dynamic> modelMap = json.decode(modelJson);
-        models.add(ModelConfig.fromJson(modelMap));
-      } catch (e) {
-        debugPrint('Error parsing cached model: $e');
-      }
-    }
-    return models;
-  }
-
-  Future<void> _saveModelLocally(ModelConfig model) async {
-    final prefs = await SharedPreferences.getInstance();
-    final models = await _loadCachedModels();
-
-    bool modelExists = false;
-    for (int i = 0; i < models.length; i++) {
-      if (models[i].id == model.id) {
-        models[i] = model.copyWith(updatedAt: DateTime.now());
-        modelExists = true;
-        break;
-      }
-    }
-
-    if (!modelExists) {
-      model = model.copyWith(
-        id: model.id.isEmpty ? const Uuid().v4() : model.id,
-        createdAt: DateTime.now(),
-        updatedAt: DateTime.now(),
-      );
-      models.add(model);
-    }
-
-    await _cacheModels(models);
-    await _setDefaultIfFirstModel(model.id);
   }
 
   Future<List<ProviderConnection>> getProviders() async {
@@ -219,10 +158,7 @@ class ModelService {
     );
     try {
       final remoteModels = await _remoteModelService.getModels();
-      await _cacheModels(remoteModels);
-      if (remoteModels.isNotEmpty) {
-        await _setDefaultIfFirstModel(remoteModels.first.id);
-      }
+      await _ensureDefaultModel(remoteModels);
     } catch (e) {
       debugPrint('Failed to refresh models after import: $e');
     }
@@ -232,7 +168,23 @@ class ModelService {
   // Set the selected model
   Future<void> setDefaultModel(String modelId) async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_defaultModelKey, modelId);
+    if (modelId.isEmpty) {
+      await prefs.remove(_defaultModelKey);
+    } else {
+      await prefs.setString(_defaultModelKey, modelId);
+    }
+
+    if (_cachedModels.isEmpty) {
+      return;
+    }
+
+    _cachedModels = _cachedModels
+        .map(
+          (model) => model.copyWith(
+            isDefault: modelId.isNotEmpty && model.id == modelId,
+          ),
+        )
+        .toList();
   }
   
   // Get the selected model
@@ -310,7 +262,7 @@ class ModelService {
       switch (config.provider) {
         case ModelProvider.pocketLLM:
           return await PocketLLMService.testConnection(config);
-        
+
         case ModelProvider.ollama:
           // Use direct HTTP request instead of the client
           final response = await http.get(
@@ -354,7 +306,31 @@ class ModelService {
             },
           );
           return response.statusCode == 200;
-        
+
+        case ModelProvider.openRouter:
+          final baseUri = Uri.parse(config.baseUrl);
+          final response = await http.get(
+            baseUri.resolve('models'),
+            headers: {
+              'Authorization': 'Bearer ${config.apiKey}',
+              'Content-Type': 'application/json',
+            },
+          );
+
+          if (response.statusCode == 200) {
+            return true;
+          }
+
+          final fallbackResponse = await http.get(
+            baseUri.resolve('v1/models'),
+            headers: {
+              'Authorization': 'Bearer ${config.apiKey}',
+              'Content-Type': 'application/json',
+            },
+          );
+
+          return fallbackResponse.statusCode == 200;
+
         case ModelProvider.mistral:
           final response = await http.get(
             Uri.parse('${config.baseUrl}/models'),
@@ -478,14 +454,47 @@ class ModelService {
     return model;
   }
 
-  // Private helper method to set default model if it's the first one
-  Future<void> _setDefaultIfFirstModel(String modelId) async {
-    final models = await getSavedModels();
-    final defaultId = await getDefaultModel();
-    
-    if (models.length == 1 || defaultId == null) {
-      await setDefaultModel(modelId);
+  Future<void> _ensureDefaultModel(List<ModelConfig> models) async {
+    final prefs = await SharedPreferences.getInstance();
+
+    if (models.isEmpty) {
+      await prefs.remove(_defaultModelKey);
+      _cachedModels = [];
+      return;
     }
+
+    final storedDefaultId = prefs.getString(_defaultModelKey);
+
+    String? resolvedDefaultId;
+    for (final model in models) {
+      if (model.isDefault) {
+        resolvedDefaultId = model.id;
+        break;
+      }
+    }
+
+    if (resolvedDefaultId == null && storedDefaultId != null) {
+      for (final model in models) {
+        if (model.id == storedDefaultId) {
+          resolvedDefaultId = model.id;
+          break;
+        }
+      }
+    }
+
+    resolvedDefaultId ??= models.first.id;
+
+    if (storedDefaultId != resolvedDefaultId) {
+      await prefs.setString(_defaultModelKey, resolvedDefaultId);
+    }
+
+    _cachedModels = models
+        .map(
+          (model) => model.copyWith(
+            isDefault: model.id == resolvedDefaultId,
+          ),
+        )
+        .toList();
   }
 
   Future<ModelConfig?> getModelById(String modelId) async {

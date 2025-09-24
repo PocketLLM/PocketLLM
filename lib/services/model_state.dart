@@ -354,6 +354,8 @@ class ModelState extends ChangeNotifier {
         return await _checkOpenAIHealth(model);
       case ModelProvider.anthropic:
         return await _checkAnthropicHealth(model);
+      case ModelProvider.openRouter:
+        return await _checkOpenRouterHealth(model);
       case ModelProvider.lmStudio:
         return await _checkLMStudioHealth(model);
       case ModelProvider.pocketLLM:
@@ -391,8 +393,41 @@ class ModelState extends ChangeNotifier {
           'Content-Type': 'application/json',
         },
       ).timeout(_healthCheckTimeout);
-      
+
       return response.statusCode == 200;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  Future<bool> _checkOpenRouterHealth(ModelConfig model) async {
+    try {
+      final baseUri = Uri.parse(model.baseUrl);
+      final response = await http
+          .get(
+            baseUri.resolve('models'),
+            headers: {
+              'Authorization': 'Bearer ${model.apiKey ?? ''}',
+              'Content-Type': 'application/json',
+            },
+          )
+          .timeout(_healthCheckTimeout);
+
+      if (response.statusCode == 200) {
+        return true;
+      }
+
+      final fallbackResponse = await http
+          .get(
+            baseUri.resolve('v1/models'),
+            headers: {
+              'Authorization': 'Bearer ${model.apiKey ?? ''}',
+              'Content-Type': 'application/json',
+            },
+          )
+          .timeout(_healthCheckTimeout);
+
+      return fallbackResponse.statusCode == 200;
     } catch (e) {
       return false;
     }

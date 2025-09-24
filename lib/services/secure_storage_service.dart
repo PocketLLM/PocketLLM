@@ -429,7 +429,12 @@ class SecureStorageService {
         return apiKey.startsWith('sk-') && apiKey.length >= 20
             ? ApiKeyValidationResult.valid
             : ApiKeyValidationResult.invalid;
-            
+
+      case ModelProvider.openRouter:
+        return apiKey.length >= 20 && !apiKey.contains(' ')
+            ? ApiKeyValidationResult.valid
+            : ApiKeyValidationResult.invalid;
+
       case ModelProvider.pocketLLM:
         return apiKey.length >= 10
             ? ApiKeyValidationResult.valid

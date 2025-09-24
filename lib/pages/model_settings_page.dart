@@ -2,8 +2,7 @@ import 'package:flutter/material.dart';
 import '../component/models.dart';
 import '../component/model_config_dialog.dart';
 import '../component/model_list_item.dart';
-import '../services/pocket_llm_service.dart';
-import 'auth/auth_page.dart';
+import '../services/model_service.dart';
 
 class ModelSettingsPage extends StatefulWidget {
   const ModelSettingsPage({Key? key}) : super(key: key);
@@ -20,7 +19,6 @@ class _ModelSettingsPageState extends State<ModelSettingsPage> {
   bool _isLoadingModels = true;
   bool _isLoadingProviders = true;
   String? _selectedModelId;
-  final _modelService = ModelService();
 
   @override
   void initState() {
@@ -66,7 +64,14 @@ class _ModelSettingsPageState extends State<ModelSettingsPage> {
 
     try {
       final models = await _modelService.getSavedModels(refreshRemote: refreshRemote);
-      final defaultId = await _modelService.getDefaultModel();
+      String? defaultId;
+      for (final model in models) {
+        if (model.isDefault) {
+          defaultId = model.id;
+          break;
+        }
+      }
+      defaultId ??= await _modelService.getDefaultModel();
       if (!mounted) return;
       setState(() {
         _modelConfigs = models;
@@ -172,6 +177,13 @@ class _ModelSettingsPageState extends State<ModelSettingsPage> {
     if (!mounted) return;
     setState(() {
       _selectedModelId = id;
+      _modelConfigs = _modelConfigs
+          .map(
+            (model) => model.copyWith(
+              isDefault: model.id == id,
+            ),
+          )
+          .toList();
     });
   }
 

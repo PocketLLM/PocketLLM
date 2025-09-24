@@ -166,6 +166,7 @@ class RemoteModelService {
       metadata: json['metadata'] != null
           ? Map<String, dynamic>.from(json['metadata'] as Map)
           : null,
+      isDefault: json['isDefault'] ?? json['is_default'] ?? false,
       isActive: json['isActive'] ?? true,
       createdAt: parseDate(json['createdAt']),
       updatedAt: parseDate(json['updatedAt']),
