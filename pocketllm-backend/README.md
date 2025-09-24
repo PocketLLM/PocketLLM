@@ -121,6 +121,41 @@ The server will start on `http://localhost:8000` with:
 - 📚 API Documentation: `http://localhost:8000/api/docs`
 - 🔗 API Base URL: `http://localhost:8000/v1`
 
+## ☁️ Deploying to Vercel
+
+The backend can be deployed as a Vercel Serverless Function. Use the following settings when creating a new project from GitHub:
+
+1. **Framework preset:** `Other`
+2. **Root Directory:** `pocketllm-backend`
+3. **Build Command:** `npm run vercel-build`
+4. **Install Command:** `npm install`
+5. **Output Directory:** _Leave empty_. The serverless function defined in `api/index.ts` handles all routing, so you do not serve a static build artifact.
+
+> ✅ **Tip:** The provided `vercel.json` already rewrites every request to the serverless handler so hitting the root of your Vercel deployment will execute the NestJS application.
+
+### Required Environment Variables on Vercel
+
+Configure the following variables in the Vercel dashboard (Project Settings → Environment Variables):
+
+| Variable | Description |
+| --- | --- |
+| `SUPABASE_URL` | Supabase project URL |
+| `SUPABASE_SERVICE_ROLE_KEY` | Supabase service role key |
+| `ENCRYPTION_KEY` | 32-byte secret for encrypting provider credentials |
+| `OPENROUTER_APP_URL` | (Optional) URL of the client application for OpenRouter attribution |
+| `OPENROUTER_APP_NAME` | (Optional) Application name for OpenRouter attribution |
+| `CORS_ORIGIN` | The frontend origin allowed to call the API. Use your Flutter web domain when targeting Flutter Web. For mobile/desktop Flutter builds (which do not use CORS), you can keep the default `*`. |
+
+### Verifying the Deployment
+
+After Vercel finishes building:
+
+1. Visit `https://<your-vercel-domain>/` – you should see a JSON payload confirming that the API is running and that all endpoints live under `/v1`.
+2. Visit `https://<your-vercel-domain>/health` to perform a lightweight health check that Vercel can use for monitoring.
+3. Call one of the actual API routes such as `https://<your-vercel-domain>/v1/auth/signin` to confirm that routing (and the `/v1` prefix) works as expected.
+
+If you encounter a 404, double-check that the project root is set to `pocketllm-backend` and that the output directory is left blank. Setting an output directory forces Vercel to treat the build as a static site and bypass the serverless handler, which results in the `404: NOT_FOUND` error.
+
 ## 📖 API Documentation
 
 The API is fully documented with Swagger/OpenAPI. Once the server is running, visit:

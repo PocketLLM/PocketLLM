@@ -7,6 +7,7 @@ import { UsersModule } from './users/users.module';
 import { ChatsModule } from './chats/chats.module';
 import { JobsModule } from './jobs/jobs.module';
 import { ApiModule } from './api/api.module';
+import { AppController } from './app.controller';
 
 @Module({
   imports: [
@@ -19,5 +20,6 @@ import { ApiModule } from './api/api.module';
     JobsModule,
     ApiModule,
   ],
+  controllers: [AppController],
 })
 export class AppModule {}
