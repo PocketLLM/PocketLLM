@@ -7,6 +7,10 @@ class ClearTextField extends StatefulWidget {
   final Function(String)? onChanged;
   final TextInputType? keyboardType;
   final String? Function(String?)? validator;
+  final FocusNode? focusNode;
+  final TextInputAction? textInputAction;
+  final ValueChanged<String>? onSubmitted;
+  final AutovalidateMode? autovalidateMode;
 
   const ClearTextField({
     Key? key,
@@ -16,6 +20,10 @@ class ClearTextField extends StatefulWidget {
     this.onChanged,
     this.keyboardType,
     this.validator,
+    this.focusNode,
+    this.textInputAction,
+    this.onSubmitted,
+    this.autovalidateMode,
   }) : super(key: key);
 
   @override
@@ -45,10 +53,15 @@ class _ClearTextFieldState extends State<ClearTextField> {
 
   @override
   Widget build(BuildContext context) {
-    return TextField(
+    return TextFormField(
       controller: widget.controller,
       obscureText: widget.obscureText,
       keyboardType: widget.keyboardType,
+      focusNode: widget.focusNode,
+      textInputAction: widget.textInputAction,
+      autovalidateMode: widget.autovalidateMode,
+      validator: widget.validator,
+      onFieldSubmitted: widget.onSubmitted,
       onChanged: (value) {
         if (widget.onChanged != null) {
           widget.onChanged!(value);
