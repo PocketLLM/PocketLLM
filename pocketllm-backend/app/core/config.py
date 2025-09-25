@@ -12,7 +12,11 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 class Settings(BaseSettings):
     """Centralised application settings loaded from environment variables."""
 
-    model_config = SettingsConfigDict(env_file=(".env", ".env.local"), env_file_encoding="utf-8")
+    model_config = SettingsConfigDict(
+        env_file=(".env", ".env.local"), 
+        env_file_encoding="utf-8",
+        extra="ignore"  # Ignore extra environment variables
+    )
 
     app_name: str = "PocketLLM API"
     environment: str = Field(default="development", alias="ENVIRONMENT")
@@ -20,13 +24,22 @@ class Settings(BaseSettings):
     version: str = "0.1.0"
     api_v1_prefix: str = "/v1"
 
+    # Server configuration
+    port: int = 8000
+    node_env: str = "development"
+    
     # CORS configuration
     backend_cors_origins: List[AnyHttpUrl] | List[str] = Field(
         default_factory=lambda: ["http://localhost", "http://localhost:3000"],
     )
+    cors_origin: str = "*"
+
+    # URLs
+    backend_base_url: str = "https://pocket-llm-lemon.vercel.app/"
+    fallback_backend_url: str = "https://pocketllm.onrender.com"
 
     # Supabase configuration
-    supabase_url: AnyHttpUrl = Field(default="https://example.supabase.co")
+    supabase_url: AnyHttpUrl = Field(default="https://example.supabase.co")  # type: ignore
     supabase_service_role_key: str = Field(default="service-role-placeholder")
     supabase_anon_key: str = Field(default="anon-key-placeholder")
     supabase_jwt_secret: str | None = None
@@ -48,6 +61,7 @@ class Settings(BaseSettings):
     access_token_expire_minutes: int = 60 * 24
     refresh_token_expire_minutes: int = 60 * 24 * 14
     token_algorithm: str = "HS256"
+    encryption_key: str = ""
 
     # Logging configuration
     log_level: str = Field(default="INFO", validation_alias="LOG_LEVEL")
@@ -56,6 +70,7 @@ class Settings(BaseSettings):
     # Storage configuration
     storage_bucket_models: str = "model-artifacts"
     storage_bucket_jobs: str = "job-results"
+    user_asset_bucket_name: str = "user-assets"
 
 
 @lru_cache

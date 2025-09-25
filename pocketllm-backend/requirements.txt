@@ -13,3 +13,4 @@ python-multipart
 redis
 tenacity
 uuid6
+pydantic[email]

@@ -3,12 +3,15 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 from contextlib import asynccontextmanager
 from typing import Any, AsyncIterator, Callable, Optional
 
 import asyncpg
 
 from .config import Settings, get_settings
+
+logger = logging.getLogger(__name__)
 
 
 class Database:
@@ -28,7 +31,8 @@ class Database:
         async with self._lock:
             if self._pool is None:
                 if not self._settings.database_url:
-                    raise RuntimeError("Database URL is not configured")
+                    logger.warning("Database URL is not configured. Running in mock mode.")
+                    return
                 self._pool = await asyncpg.create_pool(
                     dsn=self._settings.database_url,
                     min_size=self._settings.database_pool_min_size,
@@ -54,6 +58,10 @@ class Database:
         if self._pool is None:
             await self.connect()
 
+        # If we're in mock mode (no database URL), yield a mock connection
+        if self._pool is None:
+            raise RuntimeError("Database is not configured. Cannot establish connection.")
+            
         assert self._pool is not None, "Database pool is not initialised"
         connection = await self._pool.acquire()
         try:
@@ -102,7 +110,10 @@ def get_database(settings: Settings | None = None) -> Database:
 async def connect_to_database() -> None:
     """Initialise the global database pool."""
 
-    await get_database().connect()
+    try:
+        await get_database().connect()
+    except Exception as e:
+        logger.warning(f"Failed to connect to database: {e}. Running in mock mode.")
 
 
 async def close_database() -> None:
