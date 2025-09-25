@@ -557,9 +557,22 @@ class AuthStateNotifier extends ChangeNotifier {
         email: userEmail,
       );
 
-      await _loadDeletionSchedule();
+      final accountStatus = _parseAccountStatusPayload(data['account_status']);
+      final serverCanceledDeletion = await _applyAccountStatus(accountStatus);
+
+      if (!serverCanceledDeletion && accountStatus == null) {
+        await _loadDeletionSchedule();
+      }
+
       await _fetchProfile();
-      final canceledDeletion = await _handlePendingDeletionOnLogin();
+
+      bool canceledDeletion = serverCanceledDeletion;
+      if (!serverCanceledDeletion && _deletionSchedule != null) {
+        canceledDeletion = await _handlePendingDeletionOnLogin();
+      } else if (serverCanceledDeletion) {
+        await _removeDeletionSchedule();
+      }
+
       notifyListeners();
 
       return SignInResult(canceledDeletion: canceledDeletion);
@@ -685,6 +698,52 @@ class AuthStateNotifier extends ChangeNotifier {
         deletionScheduledFor: _deletionSchedule!.scheduledFor,
       );
     }
+  }
+
+  Map<String, dynamic>? _parseAccountStatusPayload(dynamic payload) {
+    if (payload is Map<String, dynamic>) {
+      return Map<String, dynamic>.from(payload);
+    }
+    return null;
+  }
+
+  Future<bool> _applyAccountStatus(Map<String, dynamic>? payload) async {
+    if (payload == null) {
+      return false;
+    }
+
+    final deletionCanceled = _asBool(payload['deletion_canceled']);
+    if (deletionCanceled) {
+      await _removeDeletionSchedule(updateProfile: false);
+      return true;
+    }
+
+    final deletionScheduled = _asBool(payload['deletion_scheduled']);
+    final scheduledFor = _parseDateTime(payload['deletion_scheduled_for']);
+    final requestedAt = _parseDateTime(payload['deletion_requested_at']) ??
+        _parseDateTime(payload['previous_deletion_requested_at']) ??
+        (scheduledFor != null ? scheduledFor.subtract(_deletionGracePeriod) : null);
+
+    if (deletionScheduled && scheduledFor != null && requestedAt != null) {
+      await _saveDeletionSchedule(
+        DeletionSchedule(requestedAt: requestedAt.toUtc(), scheduledFor: scheduledFor.toUtc()),
+        updateProfile: false,
+      );
+    } else if (_deletionSchedule != null) {
+      await _removeDeletionSchedule(updateProfile: false);
+    }
+
+    return false;
+  }
+
+  bool _asBool(dynamic value) {
+    if (value is bool) return value;
+    if (value is num) return value != 0;
+    if (value is String) {
+      final normalized = value.toLowerCase();
+      return normalized == 'true' || normalized == '1' || normalized == 'yes';
+    }
+    return false;
   }
 
   String _deletionStorageKey(String userId) => '$_deletionInfoPrefix$userId';

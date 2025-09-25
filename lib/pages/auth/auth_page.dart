@@ -235,91 +235,107 @@ class _AuthPageState extends State<AuthPage> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Form(
-          key: _formKey,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              ClearTextField(
-                controller: _emailController,
-                focusNode: _emailFocus,
-                hintText: 'Email',
-                keyboardType: TextInputType.emailAddress,
-                textInputAction: TextInputAction.next,
-                autovalidateMode: AutovalidateMode.onUserInteraction,
-                onSubmitted: (_) =>
-                    FocusScope.of(context).requestFocus(_passwordFocus),
-                validator: (value) {
-                  if (value == null || value.isEmpty) {
-                    return 'Please enter your email address';
-                  }
-                  final normalizedValue = value.trim();
-                  if (!_emailRegex.hasMatch(normalizedValue)) {
-                    return 'Enter a valid email address';
-                  }
-                  return null;
-                },
-              ),
-              const SizedBox(height: 16),
-              TextFormField(
-                controller: _passwordController,
-                focusNode: _passwordFocus,
-                obscureText: _obscurePassword,
-                decoration: InputDecoration(
-                  labelText: isSignUp ? 'Create Password' : 'Password',
-                  suffixIcon: IconButton(
-                    icon: Icon(_obscurePassword ? Icons.visibility_off : Icons.visibility),
-                    onPressed: () {
-                      setState(() {
-                        _obscurePassword = !_obscurePassword;
-                      });
+        AnimatedSwitcher(
+          duration: const Duration(milliseconds: 320),
+          transitionBuilder: (child, animation) {
+            final slideAnimation = Tween<Offset>(
+              begin: const Offset(0, 0.08),
+              end: Offset.zero,
+            ).animate(CurvedAnimation(parent: animation, curve: Curves.easeOutCubic));
+            return FadeTransition(
+              opacity: animation,
+              child: SlideTransition(position: slideAnimation, child: child),
+            );
+          },
+          child: KeyedSubtree(
+            key: ValueKey(_mode),
+            child: Form(
+              key: _formKey,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  ClearTextField(
+                    controller: _emailController,
+                    focusNode: _emailFocus,
+                    hintText: 'Email',
+                    keyboardType: TextInputType.emailAddress,
+                    textInputAction: TextInputAction.next,
+                    autovalidateMode: AutovalidateMode.onUserInteraction,
+                    onSubmitted: (_) =>
+                        FocusScope.of(context).requestFocus(_passwordFocus),
+                    validator: (value) {
+                      if (value == null || value.isEmpty) {
+                        return 'Please enter your email address';
+                      }
+                      final normalizedValue = value.trim();
+                      if (!_emailRegex.hasMatch(normalizedValue)) {
+                        return 'Enter a valid email address';
+                      }
+                      return null;
                     },
                   ),
-                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                  filled: true,
-                  fillColor: Colors.grey[100],
-                ),
-                validator: (value) {
-                  if (value == null || value.isEmpty) {
-                    return 'Enter your password';
-                  }
-                  if (value.length < 8) {
-                    return 'Password must be at least 8 characters';
-                  }
-                  return null;
-                },
-              ),
-              if (isSignUp) ...[
-                const SizedBox(height: 16),
-                TextFormField(
-                  controller: _confirmPasswordController,
-                  obscureText: _obscureConfirmPassword,
-                  decoration: InputDecoration(
-                    labelText: 'Confirm Password',
-                    suffixIcon: IconButton(
-                      icon: Icon(_obscureConfirmPassword ? Icons.visibility_off : Icons.visibility),
-                      onPressed: () {
-                        setState(() {
-                          _obscureConfirmPassword = !_obscureConfirmPassword;
-                        });
+                  const SizedBox(height: 16),
+                  TextFormField(
+                    controller: _passwordController,
+                    focusNode: _passwordFocus,
+                    obscureText: _obscurePassword,
+                    decoration: InputDecoration(
+                      labelText: isSignUp ? 'Create Password' : 'Password',
+                      suffixIcon: IconButton(
+                        icon: Icon(_obscurePassword ? Icons.visibility_off : Icons.visibility),
+                        onPressed: () {
+                          setState(() {
+                            _obscurePassword = !_obscurePassword;
+                          });
+                        },
+                      ),
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                      filled: true,
+                      fillColor: Colors.grey[100],
+                    ),
+                    validator: (value) {
+                      if (value == null || value.isEmpty) {
+                        return 'Enter your password';
+                      }
+                      if (value.length < 8) {
+                        return 'Password must be at least 8 characters';
+                      }
+                      return null;
+                    },
+                  ),
+                  if (isSignUp) ...[
+                    const SizedBox(height: 16),
+                    TextFormField(
+                      controller: _confirmPasswordController,
+                      obscureText: _obscureConfirmPassword,
+                      decoration: InputDecoration(
+                        labelText: 'Confirm Password',
+                        suffixIcon: IconButton(
+                          icon: Icon(_obscureConfirmPassword ? Icons.visibility_off : Icons.visibility),
+                          onPressed: () {
+                            setState(() {
+                              _obscureConfirmPassword = !_obscureConfirmPassword;
+                            });
+                          },
+                        ),
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                        filled: true,
+                        fillColor: Colors.grey[100],
+                      ),
+                      validator: (value) {
+                        if (value == null || value.isEmpty) {
+                          return 'Confirm your password';
+                        }
+                        if (value != _passwordController.text) {
+                          return 'Passwords do not match';
+                        }
+                        return null;
                       },
                     ),
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                    filled: true,
-                    fillColor: Colors.grey[100],
-                  ),
-                  validator: (value) {
-                    if (value == null || value.isEmpty) {
-                      return 'Confirm your password';
-                    }
-                    if (value != _passwordController.text) {
-                      return 'Passwords do not match';
-                    }
-                    return null;
-                  },
-                ),
-              ],
-            ],
+                  ],
+                ],
+              ),
+            ),
           ),
         ),
         if (_mode == _AuthMode.signIn)
@@ -611,7 +627,8 @@ class _AuthPageState extends State<AuthPage> {
       padding: const EdgeInsets.symmetric(vertical: 14),
       side: BorderSide(color: Colors.grey[300]!),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      foregroundColor: Colors.grey[500],
+      foregroundColor: Colors.grey[600],
+      backgroundColor: Colors.white,
     );
 
     Widget buildButton(String label, Widget leading) {
@@ -622,16 +639,25 @@ class _AuthPageState extends State<AuthPage> {
           children: [
             leading,
             const SizedBox(width: 12),
-            Expanded(child: Text(label, style: const TextStyle(fontSize: 16, color: Colors.black54))),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-              decoration: BoxDecoration(
-                color: Colors.amber[100],
-                borderRadius: BorderRadius.circular(12),
-              ),
+            Expanded(
               child: Text(
-                'Coming Soon',
-                style: TextStyle(color: Colors.amber[800], fontSize: 12, fontWeight: FontWeight.w600),
+                label,
+                style: const TextStyle(fontSize: 16, color: Colors.black87, fontWeight: FontWeight.w500),
+              ),
+            ),
+            AnimatedOpacity(
+              opacity: 1,
+              duration: const Duration(milliseconds: 300),
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFFFF3CD),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: const Text(
+                  'Coming Soon',
+                  style: TextStyle(color: Color(0xFF946200), fontSize: 12, fontWeight: FontWeight.w700),
+                ),
               ),
             ),
           ],
@@ -639,17 +665,49 @@ class _AuthPageState extends State<AuthPage> {
       );
     }
 
+    final options = <Widget>[
+      buildButton(
+        'Continue with Google',
+        Image.asset('assets/google.png', height: 24, color: Colors.grey[600]),
+      ),
+      buildButton(
+        'Continue with Apple',
+        const Icon(Icons.apple, color: Colors.black87, size: 24),
+      ),
+      buildButton(
+        'Use magic link',
+        const Icon(Icons.mail_outline, color: Color(0xFF6D28D9), size: 22),
+      ),
+      buildButton(
+        'Use SMS one-time passcode',
+        const Icon(Icons.sms_outlined, color: Color(0xFF6D28D9), size: 22),
+      ),
+      buildButton(
+        'Continue with GitHub',
+        const Icon(Icons.code, color: Color(0xFF0F172A), size: 22),
+      ),
+    ];
+
     return Column(
       children: [
-        buildButton(
-          'Continue with Google',
-          Image.asset('assets/google.png', height: 24, color: Colors.grey[500]),
-        ),
-        const SizedBox(height: 12),
-        buildButton(
-          'Continue with Apple',
-          const Icon(Icons.apple, color: Colors.grey, size: 24),
-        ),
+        for (int index = 0; index < options.length; index++)
+          Padding(
+            padding: EdgeInsets.only(top: index == 0 ? 0 : 12),
+            child: TweenAnimationBuilder<double>(
+              tween: Tween(begin: 0, end: 1),
+              duration: const Duration(milliseconds: 320),
+              curve: Curves.easeOutCubic,
+              delay: Duration(milliseconds: index * 70),
+              builder: (context, value, child) => Opacity(
+                opacity: value,
+                child: Transform.translate(
+                  offset: Offset(0, 12 * (1 - value)),
+                  child: child,
+                ),
+              ),
+              child: options[index],
+            ),
+          ),
       ],
     );
   }

@@ -1,0 +1,15 @@
+fastapi
+uvicorn[standard]
+pydantic
+pydantic-settings
+httpx
+asyncpg
+supabase
+passlib[bcrypt]
+pyjwt[crypto]
+structlog
+python-dotenv
+python-multipart
+redis
+tenacity
+uuid6
