@@ -134,8 +134,6 @@ class _UserSurveyPageState extends State<UserSurveyPage> {
     _nameController.dispose();
     _usernameController.dispose();
     _bioController.dispose();
-    _primaryGoalController.dispose();
-    _otherNotesController.dispose();
     super.dispose();
   }
 
