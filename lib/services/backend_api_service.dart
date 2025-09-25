@@ -163,6 +163,8 @@ class BackendApiService {
     ];
 
     const builtInPrimaryCandidates = [
+      'http://localhost:8000',
+      'http://127.0.0.1:8000',
       'https://pocket-llm-lemon.vercel.app',
       'https://pocketllm.onrender.com',
     ];
@@ -190,7 +192,11 @@ class BackendApiService {
 
     urls.sort((a, b) {
       int weight(String url) {
-        if (url.contains('pocket-llm-lemon.vercel.app')) {
+        final lower = url.toLowerCase();
+        if (lower.contains('localhost') || lower.contains('127.0.0.1')) {
+          return -1;
+        }
+        if (lower.contains('pocket-llm-lemon.vercel.app')) {
           return 0;
         }
         if (url.startsWith('https://')) {

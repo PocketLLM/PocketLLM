@@ -91,7 +91,12 @@ When updating the comprehensive API guide ([api-documentation.md](api-documentat
 
 The backend automatically generates Swagger documentation available at:
 ```
-http://localhost:8000/api/docs
+http://localhost:8000/api/docs (or http://localhost:8000/docs)
+```
+
+Production demo:
+```
+https://pocket-llm-lemon.vercel.app/docs (legacy path https://pocket-llm-lemon.vercel.app/api/docs)
 ```
 
 To view the latest documentation:

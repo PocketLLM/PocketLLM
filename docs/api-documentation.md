@@ -20,6 +20,16 @@ http://localhost:8000/v1
 
 For production deployments, replace `localhost:8000` with your server address.
 
+Production demo:
+
+```
+https://pocket-llm-lemon.vercel.app/v1
+```
+
+Swagger UI is available locally at `http://localhost:8000/api/docs` (also aliased at `http://localhost:8000/docs`) and in the hosted demo at
+`https://pocket-llm-lemon.vercel.app/docs` (legacy path `https://pocket-llm-lemon.vercel.app/api/docs`) unless disabled via `ENABLE_SWAGGER_DOCS`. The root endpoint (`GET /`) echoes
+the active docs path for quick verification.
+
 ## 🔐 Authentication
 
 All protected endpoints require a valid JWT token in the `Authorization` header:
@@ -157,6 +167,62 @@ Update the authenticated user's profile information.
     "survey_completed": true,
     "created_at": "2023-10-27T10:00:00.000Z",
     "updated_at": "2023-10-27T11:00:00.000Z"
+  }
+}
+```
+
+### Complete Onboarding Survey
+
+**POST** `/users/profile/onboarding`
+
+Capture the user's onboarding answers, mark their profile as complete, and persist structured survey data.
+
+**Request Body:**
+```json
+{
+  "full_name": "Ada Lovelace",
+  "username": "adalovelace",
+  "bio": "Working on AI productivity workflows",
+  "date_of_birth": "1995-06-15",
+  "profession": "Software Engineer",
+  "heard_from": "Friend recommendation",
+  "avatar_url": "https://example.com/avatar.png",
+  "age": 28,
+  "onboarding": {
+    "primary_goal": "Improve daily productivity with AI assistance",
+    "interests": ["Productivity", "Coding"],
+    "experience_level": "Intermediate",
+    "usage_frequency": "Daily",
+    "other_notes": "Prefers concise answers and actionable steps."
+  }
+}
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "data": {
+    "id": "uuid",
+    "email": "adalovelace@example.com",
+    "full_name": "Ada Lovelace",
+    "username": "adalovelace",
+    "bio": "Working on AI productivity workflows",
+    "date_of_birth": "1995-06-15",
+    "profession": "Software Engineer",
+    "heard_from": "Friend recommendation",
+    "avatar_url": "https://example.com/avatar.png",
+    "survey_completed": true,
+    "age": 28,
+    "onboarding": {
+      "primary_goal": "Improve daily productivity with AI assistance",
+      "interests": ["Productivity", "Coding"],
+      "experience_level": "Intermediate",
+      "usage_frequency": "Daily",
+      "other_notes": "Prefers concise answers and actionable steps."
+    },
+    "created_at": "2023-10-27T10:00:00.000Z",
+    "updated_at": "2023-10-27T10:00:00.000Z"
   }
 }
 ```
