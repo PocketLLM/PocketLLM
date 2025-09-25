@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../theme/app_colors.dart';
+
 enum AppThemeMode {
   light,
   dark,
@@ -13,68 +15,6 @@ enum ColorSchemeType {
   standard,
   highContrast,
   custom,
-}
-
-class AppColorScheme {
-  final Color primary;
-  final Color primaryVariant;
-  final Color secondary;
-  final Color secondaryVariant;
-  final Color surface;
-  final Color background;
-  final Color error;
-  final Color onPrimary;
-  final Color onSecondary;
-  final Color onSurface;
-  final Color onBackground;
-  final Color onError;
-  
-  // Chat-specific colors
-  final Color userMessageBackground;
-  final Color assistantMessageBackground;
-  final Color messageText;
-  final Color messageBorder;
-  final Color inputBackground;
-  final Color inputBorder;
-  final Color inputText;
-  
-  // UI-specific colors
-  final Color cardBackground;
-  final Color cardBorder;
-  final Color divider;
-  final Color shadow;
-  final Color overlay;
-  final Color disabled;
-  final Color hint;
-  
-  const AppColorScheme({
-    required this.primary,
-    required this.primaryVariant,
-    required this.secondary,
-    required this.secondaryVariant,
-    required this.surface,
-    required this.background,
-    required this.error,
-    required this.onPrimary,
-    required this.onSecondary,
-    required this.onSurface,
-    required this.onBackground,
-    required this.onError,
-    required this.userMessageBackground,
-    required this.assistantMessageBackground,
-    required this.messageText,
-    required this.messageBorder,
-    required this.inputBackground,
-    required this.inputBorder,
-    required this.inputText,
-    required this.cardBackground,
-    required this.cardBorder,
-    required this.divider,
-    required this.shadow,
-    required this.overlay,
-    required this.disabled,
-    required this.hint,
-  });
 }
 
 class ThemeService extends ChangeNotifier {
@@ -173,17 +113,33 @@ class ThemeService extends ChangeNotifier {
     );
   }
 
-  AppColorScheme _getColorSchemeForBrightness(Brightness brightness) => _lightColorScheme;
-
-  AppColorScheme _getCurrentColorScheme() => _lightColorScheme;
-
-  ThemeData get currentTheme {
-    return _buildThemeData(Brightness.light, _lightColorScheme);
+  AppColorScheme _getColorSchemeForBrightness(Brightness brightness) {
+    switch (_colorSchemeType) {
+      case ColorSchemeType.highContrast:
+        return brightness == Brightness.dark
+            ? AppThemeColors.darkHighContrast
+            : AppThemeColors.lightHighContrast;
+      case ColorSchemeType.custom:
+      case ColorSchemeType.standard:
+        return brightness == Brightness.dark
+            ? AppThemeColors.dark
+            : AppThemeColors.light;
+    }
   }
 
-  ThemeData get lightTheme => _buildThemeData(Brightness.light, _lightColorScheme);
+  AppColorScheme _getCurrentColorScheme() =>
+      _getColorSchemeForBrightness(_getEffectiveBrightness());
 
-  ThemeData get darkTheme => _buildThemeData(Brightness.light, _lightColorScheme);
+  ThemeData get currentTheme {
+    final brightness = _getEffectiveBrightness();
+    return _buildThemeData(brightness, _getColorSchemeForBrightness(brightness));
+  }
+
+  ThemeData get lightTheme =>
+      _buildThemeData(Brightness.light, AppThemeColors.light);
+
+  ThemeData get darkTheme =>
+      _buildThemeData(Brightness.dark, AppThemeColors.dark);
   
   ThemeData _buildThemeData(Brightness brightness, AppColorScheme colorScheme) {
     final isDark = brightness == Brightness.dark;
@@ -336,7 +292,7 @@ class ThemeService extends ChangeNotifier {
       // Snack bar
       snackBarTheme: SnackBarThemeData(
         backgroundColor: isDark ? Colors.grey[800] : Colors.grey[900],
-        contentTextStyle: TextStyle(color: Colors.white),
+        contentTextStyle: const TextStyle(color: Colors.white),
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(8),
         ),
@@ -344,124 +300,4 @@ class ThemeService extends ChangeNotifier {
       ),
     );
   }
-  
-  // Light color scheme
-  static const AppColorScheme _lightColorScheme = AppColorScheme(
-    primary: Color(0xFF6750A4),
-    primaryVariant: Color(0xFF4F378B),
-    secondary: Color(0xFF625B71),
-    secondaryVariant: Color(0xFF4A4458),
-    surface: Color(0xFFFFFBFE),
-    background: Color(0xFFFFFBFE),
-    error: Color(0xFFBA1A1A),
-    onPrimary: Color(0xFFFFFFFF),
-    onSecondary: Color(0xFFFFFFFF),
-    onSurface: Color(0xFF1C1B1F),
-    onBackground: Color(0xFF1C1B1F),
-    onError: Color(0xFFFFFFFF),
-    userMessageBackground: Color(0xFF6750A4),
-    assistantMessageBackground: Color(0xFFF3F0FF),
-    messageText: Color(0xFF1C1B1F),
-    messageBorder: Color(0xFFE7E0EC),
-    inputBackground: Color(0xFFF7F2FA),
-    inputBorder: Color(0xFFCAC4D0),
-    inputText: Color(0xFF1C1B1F),
-    cardBackground: Color(0xFFFFFBFE),
-    cardBorder: Color(0xFFE7E0EC),
-    divider: Color(0xFFE7E0EC),
-    shadow: Color(0x1F000000),
-    overlay: Color(0x66000000),
-    disabled: Color(0x61000000),
-    hint: Color(0x99000000),
-  );
-  
-  // Dark color scheme
-  static const AppColorScheme _darkColorScheme = AppColorScheme(
-    primary: Color(0xFFD0BCFF),
-    primaryVariant: Color(0xFF6750A4),
-    secondary: Color(0xFFCCC2DC),
-    secondaryVariant: Color(0xFF625B71),
-    surface: Color(0xFF1C1B1F),
-    background: Color(0xFF141218),
-    error: Color(0xFFFFB4AB),
-    onPrimary: Color(0xFF371E73),
-    onSecondary: Color(0xFF332D41),
-    onSurface: Color(0xFFE6E1E5),
-    onBackground: Color(0xFFE6E1E5),
-    onError: Color(0xFF690005),
-    userMessageBackground: Color(0xFF6750A4),
-    assistantMessageBackground: Color(0xFF2B2930),
-    messageText: Color(0xFFE6E1E5),
-    messageBorder: Color(0xFF49454F),
-    inputBackground: Color(0xFF2B2930),
-    inputBorder: Color(0xFF79747E),
-    inputText: Color(0xFFE6E1E5),
-    cardBackground: Color(0xFF1C1B1F),
-    cardBorder: Color(0xFF49454F),
-    divider: Color(0xFF49454F),
-    shadow: Color(0x3F000000),
-    overlay: Color(0x66000000),
-    disabled: Color(0x61FFFFFF),
-    hint: Color(0x99FFFFFF),
-  );
-  
-  // Light high contrast color scheme
-  static const AppColorScheme _lightHighContrastColorScheme = AppColorScheme(
-    primary: Color(0xFF000000),
-    primaryVariant: Color(0xFF000000),
-    secondary: Color(0xFF2E2E2E),
-    secondaryVariant: Color(0xFF1A1A1A),
-    surface: Color(0xFFFFFFFF),
-    background: Color(0xFFFFFFFF),
-    error: Color(0xFFD32F2F),
-    onPrimary: Color(0xFFFFFFFF),
-    onSecondary: Color(0xFFFFFFFF),
-    onSurface: Color(0xFF000000),
-    onBackground: Color(0xFF000000),
-    onError: Color(0xFFFFFFFF),
-    userMessageBackground: Color(0xFF000000),
-    assistantMessageBackground: Color(0xFFF5F5F5),
-    messageText: Color(0xFF000000),
-    messageBorder: Color(0xFF000000),
-    inputBackground: Color(0xFFFFFFFF),
-    inputBorder: Color(0xFF000000),
-    inputText: Color(0xFF000000),
-    cardBackground: Color(0xFFFFFFFF),
-    cardBorder: Color(0xFF000000),
-    divider: Color(0xFF000000),
-    shadow: Color(0x3F000000),
-    overlay: Color(0x80000000),
-    disabled: Color(0x80000000),
-    hint: Color(0x80000000),
-  );
-  
-  // Dark high contrast color scheme
-  static const AppColorScheme _darkHighContrastColorScheme = AppColorScheme(
-    primary: Color(0xFFFFFFFF),
-    primaryVariant: Color(0xFFFFFFFF),
-    secondary: Color(0xFFE0E0E0),
-    secondaryVariant: Color(0xFFCCCCCC),
-    surface: Color(0xFF000000),
-    background: Color(0xFF000000),
-    error: Color(0xFFFF5252),
-    onPrimary: Color(0xFF000000),
-    onSecondary: Color(0xFF000000),
-    onSurface: Color(0xFFFFFFFF),
-    onBackground: Color(0xFFFFFFFF),
-    onError: Color(0xFF000000),
-    userMessageBackground: Color(0xFFFFFFFF),
-    assistantMessageBackground: Color(0xFF1A1A1A),
-    messageText: Color(0xFFFFFFFF),
-    messageBorder: Color(0xFFFFFFFF),
-    inputBackground: Color(0xFF000000),
-    inputBorder: Color(0xFFFFFFFF),
-    inputText: Color(0xFFFFFFFF),
-    cardBackground: Color(0xFF000000),
-    cardBorder: Color(0xFFFFFFFF),
-    divider: Color(0xFFFFFFFF),
-    shadow: Color(0x3FFFFFFF),
-    overlay: Color(0x80FFFFFF),
-    disabled: Color(0x80FFFFFF),
-    hint: Color(0x80FFFFFF),
-  );
 }
