@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
@@ -31,7 +32,8 @@ class BackendApiService {
       (value) => value != null && value.isNotEmpty,
       orElse: () => null,
     );
-    if (token != null && token.isNotEmpty) {
+
+    if (token != null) {
       headers['Authorization'] = 'Bearer $token';
     }
 
@@ -39,20 +41,19 @@ class BackendApiService {
   }
 
   Uri _resolveUri(String baseUrl, String path, [Map<String, String>? query]) {
-    // Ensure the path starts with a forward slash
     final normalizedPath = path.startsWith('/') ? path.substring(1) : path;
-    
-    // Ensure the baseUrl ends with the API suffix (v1)
-    String finalBaseUrl = baseUrl;
-    if (!finalBaseUrl.endsWith('/v1')) {
-      if (finalBaseUrl.endsWith('/')) {
-        finalBaseUrl += 'v1';
-      } else {
-        finalBaseUrl += '/v1';
-      }
+
+    final suffix = _resolveApiSuffix();
+    final cleanedBase = baseUrl.replaceFirst(RegExp(r'/+$'), '');
+    final cleanedSuffix = suffix.trim().replaceFirst(RegExp(r'^/+'), '');
+
+    String finalBase = cleanedBase;
+    if (cleanedSuffix.isNotEmpty &&
+        !finalBase.toLowerCase().endsWith('/${cleanedSuffix.toLowerCase()}')) {
+      finalBase = '$finalBase/$cleanedSuffix';
     }
-    
-    return Uri.parse('$finalBaseUrl/$normalizedPath').replace(queryParameters: query);
+
+    return Uri.parse('$finalBase/$normalizedPath').replace(queryParameters: query);
   }
 
   Future<dynamic> get(String path, {Map<String, String>? query}) async {
@@ -223,25 +224,24 @@ class BackendApiService {
       final isLastAttempt = index == _baseUrls.length - 1;
 
       try {
-        final response = await invoke(baseUrl);
+        final response = await invoke(baseUrl).timeout(const Duration(seconds: 12));
+        final statusCode = response.statusCode;
+        final retryable =
+            statusCode >= 500 || statusCode == 404 || statusCode == 405 || statusCode == 409 || statusCode == 0;
 
-        if (response.statusCode >= 500 && !isLastAttempt) {
+        if (retryable && !isLastAttempt) {
           lastResponse = response;
-          debugPrint(
-            'BackendApiService: Received status ${response.statusCode} from $baseUrl. Trying fallback backend.',
-          );
+          debugPrint('Fallback: status $statusCode from $baseUrl; trying next.');
           continue;
         }
 
         return response;
-      } catch (error, stackTrace) {
+      } on Exception catch (error, stackTrace) {
         lastError = error;
         lastStackTrace = stackTrace;
 
         if (!isLastAttempt) {
-          debugPrint(
-            'BackendApiService: Request to $baseUrl failed ($error). Trying fallback backend.',
-          );
+          debugPrint('Fallback: $baseUrl failed ($error); trying next.');
           continue;
         }
 
@@ -280,6 +280,28 @@ class BackendApiService {
       }
       debugPrint('BackendApiService error: $e');
       throw BackendApiException(response.statusCode, 'Failed to parse backend response');
+    }
+  }
+
+  Future<bool> checkHealth() async {
+    if (_baseUrls.isEmpty) {
+      return false;
+    }
+
+    try {
+      final response = await _executeWithFallback(
+        (baseUrl) => http.get(
+          _resolveUri(baseUrl, '/health'),
+          headers: const {
+            'Accept': 'application/json',
+          },
+        ),
+      );
+
+      return response.statusCode >= 200 && response.statusCode < 300;
+    } catch (error) {
+      debugPrint('BackendApiService: health check failed - $error');
+      return false;
     }
   }
 }

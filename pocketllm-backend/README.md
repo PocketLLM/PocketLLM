@@ -120,6 +120,7 @@ npm run start:debug
 The server will start on `http://localhost:8000` with:
 - 📚 API Documentation: `http://localhost:8000/docs` (legacy: `http://localhost:8000/api/docs`)
 - 🔗 API Base URL: `http://localhost:8000/v1`
+- ❤️ Health Check: `http://localhost:8000/v1/health`
 
 ## ☁️ Deploying to Vercel
 
@@ -151,7 +152,7 @@ Configure the following variables in the Vercel dashboard (Project Settings → 
 After Vercel finishes building:
 
 1. Visit `https://<your-vercel-domain>/` – you should see a JSON payload confirming that the API is running and that all endpoints live under `/v1`.
-2. Visit `https://<your-vercel-domain>/health` to perform a lightweight health check that Vercel can use for monitoring.
+2. Visit `https://<your-vercel-domain>/v1/health` to perform a lightweight health check that Vercel can use for monitoring.
 3. Browse the live Swagger UI at `https://<your-vercel-domain>/docs` (or the legacy path `https://<your-vercel-domain>/api/docs`).
 4. Call one of the actual API routes such as `https://<your-vercel-domain>/v1/auth/signin` to confirm that routing (and the `/v1` prefix) works as expected.
 

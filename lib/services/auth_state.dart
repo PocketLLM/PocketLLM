@@ -88,6 +88,7 @@ class AuthStateNotifier extends ChangeNotifier {
   final Completer<void> _readyCompleter = Completer<void>();
 
   static const Duration _deletionGracePeriod = Duration(days: 30);
+  static const Duration _serviceHealthInterval = Duration(seconds: 30);
 
   String? _accessToken;
   String? _refreshToken;
@@ -98,6 +99,8 @@ class AuthStateNotifier extends ChangeNotifier {
   bool _serviceAvailable = true;
   bool _isPerformingRequest = false;
   DeletionSchedule? _deletionSchedule;
+  Timer? _serviceHealthTimer;
+  bool _isHealthProbeInProgress = false;
 
   Future<void> get ready => _readyCompleter.future;
 
@@ -110,10 +113,13 @@ class AuthStateNotifier extends ChangeNotifier {
 
   Future<void> _initialize() async {
     try {
-      _serviceAvailable = BackendApiService.baseUrls.isNotEmpty;
-      if (!_serviceAvailable) {
+      if (BackendApiService.baseUrls.isEmpty) {
+        _setServiceAvailability(false, forceNotify: true);
         return;
       }
+
+      await _probeServiceAvailability(forceNotify: true);
+      _startServiceHealthPolling();
 
       _accessToken = await _secureStorage.read(key: _accessTokenKey);
       _refreshToken = await _secureStorage.read(key: _refreshTokenKey);
@@ -138,7 +144,7 @@ class AuthStateNotifier extends ChangeNotifier {
         await _clearSession();
       }
     } on SocketException {
-      _serviceAvailable = false;
+      _setServiceAvailability(false, forceNotify: true);
     } catch (error, stackTrace) {
       debugPrint('Auth initialization failed: $error');
       debugPrint(stackTrace.toString());
@@ -148,6 +154,51 @@ class AuthStateNotifier extends ChangeNotifier {
       }
       notifyListeners();
     }
+  }
+
+  void _setServiceAvailability(bool available, {bool forceNotify = false}) {
+    if (!forceNotify && _serviceAvailable == available) {
+      return;
+    }
+
+    _serviceAvailable = available;
+    notifyListeners();
+  }
+
+  void _startServiceHealthPolling() {
+    _serviceHealthTimer?.cancel();
+    _serviceHealthTimer = Timer.periodic(
+      _serviceHealthInterval,
+      (_) {
+        _probeServiceAvailability();
+      },
+    );
+  }
+
+  Future<void> _probeServiceAvailability({bool forceNotify = false}) async {
+    if (_isHealthProbeInProgress) {
+      return;
+    }
+
+    if (BackendApiService.baseUrls.isEmpty) {
+      _setServiceAvailability(false, forceNotify: forceNotify);
+      return;
+    }
+
+    _isHealthProbeInProgress = true;
+    try {
+      final healthy = await _backendApi.checkHealth();
+      _setServiceAvailability(healthy, forceNotify: forceNotify);
+    } catch (_) {
+      _setServiceAvailability(false, forceNotify: forceNotify);
+    } finally {
+      _isHealthProbeInProgress = false;
+    }
+  }
+
+  Future<void> refreshServiceAvailability() async {
+    await _probeServiceAvailability(forceNotify: true);
+    _startServiceHealthPolling();
   }
 
   Future<SignUpResult> signUpWithEmail({
@@ -745,7 +796,7 @@ class AuthStateNotifier extends ChangeNotifier {
     bool requiresAuth = false,
   }) async {
     if (BackendApiService.baseUrls.isEmpty) {
-      _serviceAvailable = false;
+      _setServiceAvailability(false, forceNotify: true);
       throw const AuthException('Authentication service is not configured.');
     }
 
@@ -772,7 +823,7 @@ class AuthStateNotifier extends ChangeNotifier {
           throw AuthException('Unsupported HTTP method: $method');
       }
 
-      _serviceAvailable = true;
+      _setServiceAvailability(true);
       return _wrapBackendResponse(response);
     } on BackendApiException catch (error) {
       debugPrint('Backend API error: ${error.statusCode} - ${error.message}');
@@ -781,8 +832,7 @@ class AuthStateNotifier extends ChangeNotifier {
       }
       throw AuthException(error.message, statusCode: error.statusCode);
     } on SocketException {
-      _serviceAvailable = false;
-      notifyListeners();
+      _setServiceAvailability(false, forceNotify: true);
       throw const AuthException('Unable to reach the PocketLLM service. Check your internet connection.');
     } catch (error) {
       debugPrint('Request error: $error');
@@ -813,6 +863,7 @@ class AuthStateNotifier extends ChangeNotifier {
 
   @override
   void dispose() {
+    _serviceHealthTimer?.cancel();
     super.dispose();
   }
 }

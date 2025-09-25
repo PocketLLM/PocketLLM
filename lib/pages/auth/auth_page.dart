@@ -64,10 +64,11 @@ class _AuthPageState extends State<AuthPage> {
                 const SizedBox(height: 16),
                 _buildHeader(authState),
                 const SizedBox(height: 32),
-                if (authState.isServiceAvailable)
-                  _buildAuthForm(context, authState)
-                else
-                  _buildUnavailableState(),
+                if (!authState.isServiceAvailable) ...[
+                  _buildServiceWarning(authState),
+                  const SizedBox(height: 24),
+                ],
+                _buildAuthForm(context, authState),
               ],
             ),
           ),
@@ -144,40 +145,39 @@ class _AuthPageState extends State<AuthPage> {
           ),
         ),
         const SizedBox(height: 24),
-        if (authState.isServiceAvailable)
-          Container(
-            padding: const EdgeInsets.all(4),
-            decoration: BoxDecoration(
-              color: Colors.grey[200],
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: Row(
-              children: [
-                Expanded(
-                  child: _buildModeButton(
-                    label: 'Sign In',
-                    selected: _mode == _AuthMode.signIn,
-                    onTap: () {
-                      setState(() {
-                        _mode = _AuthMode.signIn;
-                      });
-                    },
-                  ),
-                ),
-                Expanded(
-                  child: _buildModeButton(
-                    label: 'Sign Up',
-                    selected: _mode == _AuthMode.signUp,
-                    onTap: () {
-                      setState(() {
-                        _mode = _AuthMode.signUp;
-                      });
-                    },
-                  ),
-                ),
-              ],
-            ),
+        Container(
+          padding: const EdgeInsets.all(4),
+          decoration: BoxDecoration(
+            color: Colors.grey[200],
+            borderRadius: BorderRadius.circular(12),
           ),
+          child: Row(
+            children: [
+              Expanded(
+                child: _buildModeButton(
+                  label: 'Sign In',
+                  selected: _mode == _AuthMode.signIn,
+                  onTap: () {
+                    setState(() {
+                      _mode = _AuthMode.signIn;
+                    });
+                  },
+                ),
+              ),
+              Expanded(
+                child: _buildModeButton(
+                  label: 'Sign Up',
+                  selected: _mode == _AuthMode.signUp,
+                  onTap: () {
+                    setState(() {
+                      _mode = _AuthMode.signUp;
+                    });
+                  },
+                ),
+              ),
+            ],
+          ),
+        ),
       ],
     );
   }
@@ -644,7 +644,7 @@ class _AuthPageState extends State<AuthPage> {
     );
   }
 
-  Widget _buildUnavailableState() {
+  Widget _buildServiceWarning(AuthState authState) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -655,22 +655,42 @@ class _AuthPageState extends State<AuthPage> {
             borderRadius: BorderRadius.circular(12),
             border: Border.all(color: Colors.orange[200]!),
           ),
-          child: Row(
+          child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Icon(Icons.info_outline, color: Colors.orange[700]),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Text(
-                  'Authentication is currently unavailable. Please try again later or reach out to support if the issue persists.',
-                  style: TextStyle(color: Colors.orange[800]),
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Icon(Icons.info_outline, color: Colors.orange[700]),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      'We\'re having trouble reaching the PocketLLM service. '
+                      'You can still try to sign in or sign up, and we\'ll keep checking the connection in the background.',
+                      style: TextStyle(color: Colors.orange[800]),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              Align(
+                alignment: Alignment.centerLeft,
+                child: TextButton.icon(
+                  onPressed: () async {
+                    await authState.refreshServiceAvailability();
+                  },
+                  icon: const Icon(Icons.refresh),
+                  label: const Text('Retry connection'),
+                  style: TextButton.styleFrom(
+                    foregroundColor: Colors.orange[800],
+                  ),
                 ),
               ),
             ],
           ),
         ),
         if (widget.allowSkip) ...[
-          const SizedBox(height: 24),
+          const SizedBox(height: 16),
           Align(
             alignment: Alignment.centerLeft,
             child: TextButton(
@@ -689,8 +709,10 @@ class _AuthPageState extends State<AuthPage> {
   Future<void> _handleSubmit(BuildContext context) async {
     final authState = context.read<AuthState>();
     if (!authState.isServiceAvailable) {
-      _showSnackBar(context, 'Authentication service is currently unavailable. Please try again soon.');
-      return;
+      _showSnackBar(
+        context,
+        'Connection looks unstable. We\'ll keep retrying while attempting your request.',
+      );
     }
 
     if (!(_formKey.currentState?.validate() ?? false)) {

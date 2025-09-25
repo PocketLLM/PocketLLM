@@ -23,10 +23,7 @@ export async function createApp() {
 
   // Set global prefix for all routes
   app.setGlobalPrefix(apiPrefix, {
-    exclude: [
-      { path: '/', method: RequestMethod.GET },
-      { path: '/health', method: RequestMethod.GET },
-    ],
+    exclude: [{ path: '/', method: RequestMethod.GET }],
   });
 
   // Global validation pipe
@@ -120,7 +117,8 @@ async function bootstrap() {
       }
     }
   }
-  console.log(`🔗 API Base URL: http://localhost:${port}/v1`);
+  console.log(`🔗 API Base URL: http://localhost:${port}/${apiPrefix}`);
+  console.log(`❤️ Health Check: http://localhost:${port}/${apiPrefix}/health`);
 }
 
 // For Vercel deployment

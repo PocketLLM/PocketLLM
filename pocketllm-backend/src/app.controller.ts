@@ -30,7 +30,7 @@ export class AppController {
       message: 'PocketLLM backend is running. All REST endpoints are available under the /v1 prefix.',
       docs: primaryDoc ?? null,
       alternateDocs,
-      health: '/health',
+      health: '/v1/health',
     };
   }
 
