@@ -1,0 +1,46 @@
+{
+  "version": "1.0",
+  "routes": [
+    {"method": "POST", "path": "/v1/auth/signup", "summary": "Sign up a new user"},
+    {"method": "POST", "path": "/v1/auth/signin", "summary": "Sign in an existing user"},
+    {"method": "POST", "path": "/v1/auth/signout", "summary": "Sign out current user"},
+
+    {"method": "GET", "path": "/v1/users/profile", "summary": "Get user profile"},
+    {"method": "PUT", "path": "/v1/users/profile", "summary": "Update user profile"},
+    {"method": "DELETE", "path": "/v1/users/profile", "summary": "Delete user account"},
+    {"method": "POST", "path": "/v1/users/profile/onboarding", "summary": "Complete onboarding survey"},
+
+    {"method": "GET", "path": "/v1/chats", "summary": "Get user chats"},
+    {"method": "POST", "path": "/v1/chats", "summary": "Create a new chat"},
+    {"method": "GET", "path": "/v1/chats/{chatId}", "summary": "Get chat by ID"},
+    {"method": "PUT", "path": "/v1/chats/{chatId}", "summary": "Update chat"},
+    {"method": "DELETE", "path": "/v1/chats/{chatId}", "summary": "Delete chat"},
+    {"method": "POST", "path": "/v1/chats/{chatId}/messages", "summary": "Send message"},
+    {"method": "GET", "path": "/v1/chats/{chatId}/messages", "summary": "Get chat messages"},
+
+    {"method": "GET", "path": "/v1/jobs", "summary": "Get user jobs"},
+    {"method": "POST", "path": "/v1/jobs/image-generation", "summary": "Create image generation job"},
+    {"method": "GET", "path": "/v1/jobs/{jobId}", "summary": "Get job by ID"},
+    {"method": "DELETE", "path": "/v1/jobs/{jobId}", "summary": "Cancel/Delete job"},
+    {"method": "POST", "path": "/v1/jobs/{jobId}/retry", "summary": "Retry failed job"},
+    {"method": "GET", "path": "/v1/jobs/image-generation/models", "summary": "Get available image models"},
+    {"method": "POST", "path": "/v1/jobs/image-generation/estimate-cost", "summary": "Estimate image generation cost"},
+
+    {"method": "GET", "path": "/v1/providers", "summary": "List configured providers"},
+    {"method": "POST", "path": "/v1/providers/activate", "summary": "Activate provider"},
+    {"method": "PATCH", "path": "/v1/providers/{provider}", "summary": "Update provider configuration"},
+    {"method": "DELETE", "path": "/v1/providers/{provider}", "summary": "Deactivate provider"},
+    {"method": "GET", "path": "/v1/providers/{provider}/models", "summary": "List available provider models"},
+
+    {"method": "GET", "path": "/v1/models", "summary": "List saved models"},
+    {"method": "POST", "path": "/v1/models", "summary": "Create model configuration"},
+    {"method": "POST", "path": "/v1/models/import", "summary": "Import models from provider"},
+    {"method": "GET", "path": "/v1/models/{modelId}", "summary": "Get model details"},
+    {"method": "PUT", "path": "/v1/models/{modelId}", "summary": "Update model"},
+    {"method": "DELETE", "path": "/v1/models/{modelId}", "summary": "Delete model"},
+    {"method": "POST", "path": "/v1/models/{modelId}/default", "summary": "Set default model"},
+
+    {"method": "GET", "path": "/", "summary": "Root"},
+    {"method": "GET", "path": "/health", "summary": "Health"}
+  ]
+}
