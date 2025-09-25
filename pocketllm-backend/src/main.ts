@@ -12,6 +12,7 @@ export async function createApp() {
   const port = configService.get<number>('app.port', 8000);
   const apiPrefix = configService.get<string>('app.api.prefix', 'v1');
   const corsOrigin = configService.get<string>('app.cors.origin', '*');
+  const docsConfig = configService.get<{ enabled?: boolean; path?: string }>('app.docs');
 
   // Enable CORS
   app.enableCors({
@@ -41,8 +42,8 @@ export async function createApp() {
     }),
   );
 
-  // Swagger documentation setup (only in development)
-  if (process.env.NODE_ENV !== 'production') {
+  // Swagger documentation setup (configurable for all environments)
+  if (docsConfig?.enabled !== false) {
     const config = new DocumentBuilder()
       .setTitle('PocketLLM API')
       .setDescription('Backend API for PocketLLM - AI Chat Application')
@@ -55,7 +56,8 @@ export async function createApp() {
       .build();
 
     const document = SwaggerModule.createDocument(app, config);
-    SwaggerModule.setup('api/docs', app, document, {
+    const docsPath = docsConfig?.path || 'api/docs';
+    SwaggerModule.setup(docsPath, app, document, {
       swaggerOptions: {
         persistAuthorization: true,
       },
@@ -69,12 +71,16 @@ export async function createApp() {
 async function bootstrap() {
   const app = await createApp();
   const configService = app.get(ConfigService);
+  const docsConfig = configService.get<{ enabled?: boolean; path?: string }>('app.docs');
   const port = configService.get<number>('app.port', 8000);
   
   await app.listen(port);
   
   console.log(`🚀 PocketLLM Backend is running on: http://localhost:${port}`);
-  console.log(`📚 API Documentation: http://localhost:${port}/api/docs`);
+  if (docsConfig?.enabled !== false) {
+    const docsPath = docsConfig?.path || 'api/docs';
+    console.log(`📚 API Documentation: http://localhost:${port}/${docsPath}`);
+  }
   console.log(`🔗 API Base URL: http://localhost:${port}/v1`);
 }
 

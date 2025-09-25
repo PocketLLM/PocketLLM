@@ -98,6 +98,10 @@ SUPABASE_SERVICE_ROLE_KEY=your_supabase_service_role_key
 # Encryption
 ENCRYPTION_KEY=a_strong_32_byte_secret_key_for_encrypting_api_keys
 
+# API Documentation
+ENABLE_SWAGGER_DOCS=true
+SWAGGER_DOCS_PATH=api/docs
+
 # Third-party attribution (required by OpenRouter)
 OPENROUTER_APP_URL=https://your-app-domain.example
 OPENROUTER_APP_NAME=PocketLLM
@@ -118,7 +122,7 @@ npm run start:debug
 ```
 
 The server will start on `http://localhost:8000` with:
-- 📚 API Documentation: `http://localhost:8000/api/docs`
+- 📚 API Documentation: `http://localhost:8000/api/docs` (configurable via `ENABLE_SWAGGER_DOCS` / `SWAGGER_DOCS_PATH`)
 - 🔗 API Base URL: `http://localhost:8000/v1`
 
 ## ☁️ Deploying to Vercel
@@ -164,7 +168,7 @@ The API is fully documented with Swagger/OpenAPI. Once the server is running, vi
 ### Key Endpoints
 
 - **Authentication**: `/v1/auth/signup`, `/v1/auth/signin`
-- **Users**: `/v1/users/profile`
+- **Users**: `/v1/users/profile`, `/v1/users/profile/onboarding`
 - **Chats**: `/v1/chats`, `/v1/chats/:id/messages`
 - **Providers**: `/v1/providers`, `/v1/providers/activate`, `/v1/providers/:provider`
 - **Models**: `/v1/models`, `/v1/models/import`, `/v1/models/:modelId`
@@ -178,6 +182,7 @@ by the Chats and Jobs controllers so every user-scoped route enforces authentica
 
 - `GET /v1/users/profile` – Fetches the current user's profile row from the `profiles` table.
 - `PUT /v1/users/profile` – Updates the authenticated user's profile data while handling duplicate usernames.
+- `POST /v1/users/profile/onboarding` – Captures onboarding responses (age, goals, interests) and marks the profile as survey complete.
 - `DELETE /v1/users/profile` – Permanently removes the Supabase user and cascades the related profile record.
 
 The `UsersService` performs an additional user ID check and returns a `401 Unauthorized` response when the guard is bypassed or

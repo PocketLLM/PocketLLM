@@ -1,44 +1,34 @@
+import { ApiProperty } from '@nestjs/swagger';
 import {
-  IsString,
-  IsOptional,
-  IsUrl,
   IsBoolean,
-  MinLength,
-  MaxLength,
-  Matches,
+  IsDateString,
   IsInt,
+  IsOptional,
+  IsString,
+  IsUrl,
+  MaxLength,
   Min,
   Max,
+  MinLength,
   ValidateNested,
 } from 'class-validator';
-import { ApiProperty } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 import { OnboardingDetailsDto } from './onboarding-details.dto';
 
-export class UpdateProfileDto {
-  @ApiProperty({
-    description: 'User full name',
-    example: 'John Doe',
-    required: false,
-  })
-  @IsOptional()
+export class CompleteOnboardingDto {
+  @ApiProperty({ description: 'User full name', example: 'Ada Lovelace' })
   @IsString()
   @MinLength(1, { message: 'Full name cannot be empty.' })
-  full_name?: string | null;
+  full_name!: string;
 
-  @ApiProperty({
-    description: 'Username (minimum 3 characters)',
-    example: 'johndoe',
-    required: false,
-  })
-  @IsOptional()
+  @ApiProperty({ description: 'Unique username', example: 'adalovelace' })
   @IsString()
   @MinLength(3, { message: 'Username must be at least 3 characters.' })
-  username?: string | null;
+  username!: string;
 
   @ApiProperty({
-    description: 'User bio (maximum 500 characters)',
-    example: 'Software developer passionate about AI',
+    description: 'Short biography',
+    example: 'Working on AI productivity workflows',
     required: false,
   })
   @IsOptional()
@@ -47,20 +37,15 @@ export class UpdateProfileDto {
   bio?: string | null;
 
   @ApiProperty({
-    description: 'Date of birth in YYYY-MM-DD format',
-    example: '1990-01-15',
+    description: 'Date of birth in ISO 8601 format',
+    example: '1995-06-15',
     required: false,
   })
   @IsOptional()
-  @IsString()
-  @Matches(/^\d{4}-\d{2}-\d{2}$/, { message: 'Date of birth must be in YYYY-MM-DD format.' })
+  @IsDateString({}, { message: 'Date of birth must be a valid ISO date string.' })
   date_of_birth?: string | null;
 
-  @ApiProperty({
-    description: 'User profession',
-    example: 'Software Engineer',
-    required: false,
-  })
+  @ApiProperty({ description: 'Profession', example: 'Software Engineer', required: false })
   @IsOptional()
   @IsString()
   profession?: string | null;
@@ -75,8 +60,8 @@ export class UpdateProfileDto {
   heard_from?: string | null;
 
   @ApiProperty({
-    description: 'Avatar URL',
-    example: 'https://example.com/avatar.jpg',
+    description: 'Avatar URL or selected asset path',
+    example: 'https://example.com/avatar.png',
     required: false,
   })
   @IsOptional()
@@ -84,21 +69,11 @@ export class UpdateProfileDto {
   avatar_url?: string | null;
 
   @ApiProperty({
-    description: 'Whether user has completed the survey',
-    example: true,
-    required: false,
-  })
-  @IsOptional()
-  @IsBoolean()
-  survey_completed?: boolean;
-
-  @ApiProperty({
     description: 'User age',
-    example: 27,
+    example: 28,
     required: false,
     minimum: 13,
     maximum: 120,
-    nullable: true,
   })
   @IsOptional()
   @IsInt()
@@ -107,10 +82,18 @@ export class UpdateProfileDto {
   age?: number | null;
 
   @ApiProperty({
-    description: 'Structured onboarding responses captured during signup',
+    description: 'Whether onboarding survey is completed',
+    example: true,
+    required: false,
+  })
+  @IsOptional()
+  @IsBoolean()
+  survey_completed?: boolean;
+
+  @ApiProperty({
+    description: 'Structured onboarding answers',
     required: false,
     type: () => OnboardingDetailsDto,
-    nullable: true,
   })
   @IsOptional()
   @ValidateNested()

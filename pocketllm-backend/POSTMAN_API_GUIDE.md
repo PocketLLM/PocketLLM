@@ -39,9 +39,10 @@ I've created a comprehensive **Postman API Testing Guide** (`POSTMAN_API_GUIDE.m
    - `POST /v1/auth/signup` - Sign up new user
    - `POST /v1/auth/signin` - Sign in existing user
 
-2. **👤 Users (3 endpoints)**
+2. **👤 Users (4 endpoints)**
    - `GET /v1/users/profile` - Get user profile
-   - `PUT /v1/users/profile` - Update user profile  
+   - `PUT /v1/users/profile` - Update user profile
+   - `POST /v1/users/profile/onboarding` - Complete onboarding survey and store responses
    - `DELETE /v1/users/profile` - Delete user account
 
 3. **💬 Chats (7 endpoints)**
@@ -209,15 +210,27 @@ Authorization: Bearer <access_token>
   "success": true,
   "data": {
     "id": "uuid",
+    "email": "user@example.com",
     "full_name": "John Doe",
     "username": "johndoe",
     "bio": "Software developer",
     "date_of_birth": "1990-01-01",
     "profession": "Developer",
+    "heard_from": "Friend recommendation",
     "avatar_url": "https://example.com/avatar.jpg",
     "survey_completed": true,
+    "age": 34,
+    "onboarding": {
+      "primary_goal": "Build faster workflows",
+      "interests": ["Productivity", "Automation"],
+      "experience_level": "Intermediate",
+      "usage_frequency": "Daily"
+    },
     "created_at": "2023-10-27T10:00:00.000Z",
-    "updated_at": "2023-10-27T10:00:00.000Z"
+    "updated_at": "2023-10-27T10:00:00.000Z",
+    "deletion_status": "active",
+    "deletion_requested_at": null,
+    "deletion_scheduled_for": null
   }
 }
 ```
@@ -239,8 +252,17 @@ Authorization: Bearer <access_token>
   "bio": "Senior Software Developer",
   "date_of_birth": "1990-01-01",
   "profession": "Senior Developer",
+  "heard_from": "Conference booth",
   "avatar_url": "https://example.com/new_avatar.jpg",
-  "survey_completed": true
+  "survey_completed": true,
+  "age": 35,
+  "onboarding": {
+    "primary_goal": "Draft better reports",
+    "interests": ["Writing", "Productivity"],
+    "experience_level": "Advanced",
+    "usage_frequency": "Weekly",
+    "other_notes": "Prefers concise prompts"
+  }
 }
 ```
 
@@ -250,15 +272,88 @@ Authorization: Bearer <access_token>
   "success": true,
   "data": {
     "id": "uuid",
+    "email": "user@example.com",
     "full_name": "John Doe Updated",
     "username": "johndoe_new",
     "bio": "Senior Software Developer",
     "date_of_birth": "1990-01-01",
     "profession": "Senior Developer",
+    "heard_from": "Conference booth",
     "avatar_url": "https://example.com/new_avatar.jpg",
     "survey_completed": true,
+    "age": 35,
+    "onboarding": {
+      "primary_goal": "Draft better reports",
+      "interests": ["Writing", "Productivity"],
+      "experience_level": "Advanced",
+      "usage_frequency": "Weekly",
+      "other_notes": "Prefers concise prompts"
+    },
     "created_at": "2023-10-27T10:00:00.000Z",
-    "updated_at": "2023-10-27T11:00:00.000Z"
+    "updated_at": "2023-10-27T11:00:00.000Z",
+    "deletion_status": "active",
+    "deletion_requested_at": null,
+    "deletion_scheduled_for": null
+  }
+}
+```
+
+### POST /v1/users/profile/onboarding
+**Group:** users
+**URL:** `http://localhost:8000/v1/users/profile/onboarding`
+
+**Headers:**
+```
+Authorization: Bearer <access_token>
+```
+
+**Body (JSON):**
+```json
+{
+  "full_name": "John Doe",
+  "username": "johndoe",
+  "bio": "Software developer",
+  "date_of_birth": "1990-01-01",
+  "profession": "Developer",
+  "heard_from": "Friend recommendation",
+  "avatar_url": "https://example.com/avatar.jpg",
+  "age": 34,
+  "onboarding": {
+    "primary_goal": "Build faster workflows",
+    "interests": ["Productivity", "Automation"],
+    "experience_level": "Intermediate",
+    "usage_frequency": "Daily"
+  }
+}
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "data": {
+    "id": "uuid",
+    "email": "user@example.com",
+    "full_name": "John Doe",
+    "username": "johndoe",
+    "bio": "Software developer",
+    "date_of_birth": "1990-01-01",
+    "profession": "Developer",
+    "heard_from": "Friend recommendation",
+    "avatar_url": "https://example.com/avatar.jpg",
+    "survey_completed": true,
+    "age": 34,
+    "onboarding": {
+      "primary_goal": "Build faster workflows",
+      "interests": ["Productivity", "Automation"],
+      "experience_level": "Intermediate",
+      "usage_frequency": "Daily"
+    },
+    "created_at": "2023-10-27T10:00:00.000Z",
+    "updated_at": "2023-10-27T10:05:00.000Z",
+    "deletion_status": "active",
+    "deletion_requested_at": null,
+    "deletion_scheduled_for": null
   }
 }
 ```

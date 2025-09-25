@@ -22,7 +22,11 @@ export class AuthController {
   })
   @ApiResponse({
     status: 400,
-    description: 'Bad request - invalid input or user already exists',
+    description: 'Bad request - invalid input',
+  })
+  @ApiResponse({
+    status: 409,
+    description: 'Conflict - user already exists',
   })
   async signUp(@Body() signUpDto: SignUpRequest): Promise<AuthResponse> {
     return this.authService.signUp(signUpDto);
