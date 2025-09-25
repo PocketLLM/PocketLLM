@@ -122,8 +122,9 @@ npm run start:debug
 ```
 
 The server will start on `http://localhost:8000` with:
-- 📚 API Documentation: `http://localhost:8000/api/docs` (configurable via `ENABLE_SWAGGER_DOCS` / `SWAGGER_DOCS_PATH`)
+- 📚 API Documentation: `http://localhost:8000/api/docs` (also available at `http://localhost:8000/docs`; configurable via `ENABLE_SWAGGER_DOCS` / `SWAGGER_DOCS_PATH`)
 - 🔗 API Base URL: `http://localhost:8000/v1`
+- 🌐 Production docs (Vercel demo): `https://pocket-llm-lemon.vercel.app/docs` (legacy path `https://pocket-llm-lemon.vercel.app/api/docs` continues to work)
 
 ## ☁️ Deploying to Vercel
 
@@ -156,14 +157,19 @@ After Vercel finishes building:
 
 1. Visit `https://<your-vercel-domain>/` – you should see a JSON payload confirming that the API is running and that all endpoints live under `/v1`.
 2. Visit `https://<your-vercel-domain>/health` to perform a lightweight health check that Vercel can use for monitoring.
-3. Call one of the actual API routes such as `https://<your-vercel-domain>/v1/auth/signin` to confirm that routing (and the `/v1` prefix) works as expected.
+3. Visit `https://<your-vercel-domain>/docs` (or the legacy `https://<your-vercel-domain>/api/docs`) to confirm that Swagger UI is available (unless you explicitly disabled it via `ENABLE_SWAGGER_DOCS=false`).
+4. Call one of the actual API routes such as `https://<your-vercel-domain>/v1/auth/signin` to confirm that routing (and the `/v1` prefix) works as expected.
 
 If you encounter a 404, double-check that the project root is set to `pocketllm-backend` and that the output directory is left blank. Setting an output directory forces Vercel to treat the build as a static site and bypass the serverless handler, which results in the `404: NOT_FOUND` error.
 
 ## 📖 API Documentation
 
 The API is fully documented with Swagger/OpenAPI. Once the server is running, visit:
-`http://localhost:8000/api/docs`
+
+- Local: `http://localhost:8000/api/docs` (also `http://localhost:8000/docs`)
+- Production demo: `https://pocket-llm-lemon.vercel.app/docs` (legacy path `https://pocket-llm-lemon.vercel.app/api/docs`)
+
+The root endpoint (`GET /`) echoes the active documentation path so you can verify the configuration quickly.
 
 ### Key Endpoints
 
@@ -182,7 +188,7 @@ by the Chats and Jobs controllers so every user-scoped route enforces authentica
 
 - `GET /v1/users/profile` – Fetches the current user's profile row from the `profiles` table.
 - `PUT /v1/users/profile` – Updates the authenticated user's profile data while handling duplicate usernames.
-- `POST /v1/users/profile/onboarding` – Captures onboarding responses (age, goals, interests) and marks the profile as survey complete.
+- `POST /v1/users/profile/onboarding` – Captures onboarding responses (age, goals, interests, experience level, usage frequency, additional notes) and marks the profile as survey complete.
 - `DELETE /v1/users/profile` – Permanently removes the Supabase user and cascades the related profile record.
 
 The `UsersService` performs an additional user ID check and returns a `401 Unauthorized` response when the guard is bypassed or

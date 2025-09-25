@@ -276,6 +276,7 @@ class AuthStateNotifier extends ChangeNotifier {
     String? profession,
     String? heardFrom,
     String? avatarUrl,
+    Map<String, dynamic>? onboarding,
   }) async {
     _ensureAuthenticated();
     final payload = {
@@ -289,6 +290,11 @@ class AuthStateNotifier extends ChangeNotifier {
       'survey_completed': true,
       'age': _calculateAge(dateOfBirth),
     }..removeWhere((key, value) => value == null || (value is String && value.isEmpty));
+
+    final onboardingPayload = _sanitizeOnboarding(onboarding);
+    if (onboardingPayload != null) {
+      payload['onboarding'] = onboardingPayload;
+    }
 
     final response = await _post(
       '/users/profile/onboarding',
@@ -818,6 +824,38 @@ class AuthStateNotifier extends ChangeNotifier {
     }
 
     return age;
+  }
+
+  Map<String, dynamic>? _sanitizeOnboarding(Map<String, dynamic>? onboarding) {
+    if (onboarding == null || onboarding.isEmpty) {
+      return null;
+    }
+
+    final sanitized = Map<String, dynamic>.from(onboarding);
+
+    if (sanitized['interests'] is Iterable) {
+      final interests = (sanitized['interests'] as Iterable)
+          .whereType<String>()
+          .map((value) => value.trim())
+          .where((value) => value.isNotEmpty)
+          .toList();
+      sanitized['interests'] = interests;
+    }
+
+    sanitized.removeWhere((key, value) {
+      if (value == null) {
+        return true;
+      }
+      if (value is String) {
+        return value.trim().isEmpty;
+      }
+      if (value is Iterable) {
+        return value.isEmpty;
+      }
+      return false;
+    });
+
+    return sanitized.isEmpty ? null : sanitized;
   }
 
   String? _formatDate(dynamic value) {

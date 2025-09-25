@@ -24,11 +24,16 @@ class _UserSurveyPageState extends State<UserSurveyPage> with SingleTickerProvid
   final _nameController = TextEditingController();
   final _usernameController = TextEditingController();
   final _bioController = TextEditingController();
+  final _primaryGoalController = TextEditingController();
+  final _otherNotesController = TextEditingController();
   DateTime? _selectedDate;
   String? _selectedProfession;
   String? _selectedSource;
+  String? _experienceLevel;
+  String? _usageFrequency;
   File? _profileImage;
   String? _selectedAvatar;
+  final Set<String> _selectedInterests = <String>{};
   bool _isSubmitting = false;
   String? _errorMessage;
   double _progressValue = 0.0;
@@ -62,6 +67,32 @@ class _UserSurveyPageState extends State<UserSurveyPage> with SingleTickerProvid
     'assets/avatar2.jpg',
   ];
 
+  final List<String> _experienceLevels = [
+    'Beginner',
+    'Intermediate',
+    'Advanced',
+    'Expert'
+  ];
+
+  final List<String> _usageFrequencyOptions = [
+    'Multiple times a day',
+    'Daily',
+    'A few times a week',
+    'Weekly',
+    'Occasionally'
+  ];
+
+  final List<String> _interestOptions = [
+    'Productivity',
+    'Coding',
+    'Design',
+    'Research',
+    'Writing',
+    'Learning',
+    'Business',
+    'Creative Projects'
+  ];
+
   @override
   void initState() {
     super.initState();
@@ -85,21 +116,27 @@ class _UserSurveyPageState extends State<UserSurveyPage> with SingleTickerProvid
     _nameController.dispose();
     _usernameController.dispose();
     _bioController.dispose();
+    _primaryGoalController.dispose();
+    _otherNotesController.dispose();
     super.dispose();
   }
 
   void _updateProgress() {
-    double progress = 0.0;
-    if (_nameController.text.isNotEmpty) progress += 0.17;
-    if (_usernameController.text.isNotEmpty) progress += 0.17;
-    if (_selectedDate != null) progress += 0.17;
-    if (_selectedProfession != null) progress += 0.17;
-    if (_selectedSource != null) progress += 0.16;
-    if (_profileImage != null || _selectedAvatar != null) progress += 0.16;
+    final checks = <bool>[
+      _nameController.text.trim().isNotEmpty,
+      _usernameController.text.trim().isNotEmpty,
+      _selectedDate != null,
+      _selectedProfession?.isNotEmpty == true,
+      _selectedSource?.isNotEmpty == true,
+      _profileImage != null || _selectedAvatar != null,
+      _primaryGoalController.text.trim().isNotEmpty,
+      _selectedInterests.isNotEmpty,
+      _experienceLevel?.isNotEmpty == true,
+      _usageFrequency?.isNotEmpty == true,
+    ];
 
-    setState(() {
-      _progressValue = progress.clamp(0.0, 1.0);
-    });
+    final completed = checks.where((value) => value).length;
+    _progressValue = checks.isEmpty ? 0.0 : completed / checks.length;
   }
 
   Future<void> _pickImage() async {
@@ -171,6 +208,14 @@ class _UserSurveyPageState extends State<UserSurveyPage> with SingleTickerProvid
         }
       }
 
+      final onboarding = {
+        'primary_goal': _primaryGoalController.text.trim(),
+        'interests': _selectedInterests.toList(),
+        'experience_level': _experienceLevel,
+        'usage_frequency': _usageFrequency,
+        'other_notes': _otherNotesController.text.trim(),
+      };
+
       await authState.completeProfile(
         fullName: _nameController.text.trim(),
         username: _usernameController.text.trim(),
@@ -179,6 +224,7 @@ class _UserSurveyPageState extends State<UserSurveyPage> with SingleTickerProvid
         profession: _selectedProfession,
         heardFrom: _selectedSource,
         avatarUrl: avatarUrl,
+        onboarding: onboarding,
       );
 
       await authState.refreshProfile();
@@ -245,7 +291,7 @@ class _UserSurveyPageState extends State<UserSurveyPage> with SingleTickerProvid
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     LinearProgressIndicator(
-                      value: _progressValue,
+                      value: _progressValue.clamp(0.0, 1.0),
                       backgroundColor: Colors.grey[300],
                       valueColor: const AlwaysStoppedAnimation<Color>(Color(0xFF6D28D9)),
                       minHeight: 8,
@@ -311,21 +357,20 @@ class _UserSurveyPageState extends State<UserSurveyPage> with SingleTickerProvid
                                   controller: _nameController,
                                   decoration: _buildInputDecoration('Full Name'),
                                   validator: (value) => value == null || value.trim().isEmpty ? 'Required' : null,
-                                  onChanged: (_) => _updateProgress(),
+                                  onChanged: (_) => setState(_updateProgress),
                                 ),
                                 const SizedBox(height: 16),
                                 TextFormField(
                                   controller: _usernameController,
                                   decoration: _buildInputDecoration('Username'),
                                   validator: (value) => value == null || value.trim().isEmpty ? 'Required' : null,
-                                  onChanged: (_) => _updateProgress(),
+                                  onChanged: (_) => setState(_updateProgress),
                                 ),
                                 const SizedBox(height: 16),
                                 TextFormField(
                                   controller: _bioController,
                                   maxLines: 3,
                                   decoration: _buildInputDecoration('Bio (optional)'),
-                                  onChanged: (_) => _updateProgress(),
                                 ),
                                 const SizedBox(height: 16),
                                 InkWell(
@@ -352,6 +397,8 @@ class _UserSurveyPageState extends State<UserSurveyPage> with SingleTickerProvid
                                       _updateProgress();
                                     });
                                   },
+                                  validator: (value) =>
+                                      value == null || value.isEmpty ? 'Please select a profession' : null,
                                 ),
                                 const SizedBox(height: 16),
                                 DropdownButtonFormField<String>(
@@ -366,6 +413,89 @@ class _UserSurveyPageState extends State<UserSurveyPage> with SingleTickerProvid
                                       _updateProgress();
                                     });
                                   },
+                                ),
+                                const SizedBox(height: 24),
+                                Text(
+                                  'Tell us about your goals',
+                                  style:
+                                      Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600),
+                                ),
+                                const SizedBox(height: 12),
+                                TextFormField(
+                                  controller: _primaryGoalController,
+                                  decoration: _buildInputDecoration('Primary goal for using PocketLLM'),
+                                  validator: (value) =>
+                                      value == null || value.trim().isEmpty ? 'Please share your goal' : null,
+                                  onChanged: (_) => setState(_updateProgress),
+                                ),
+                                const SizedBox(height: 16),
+                                Text(
+                                  'Which topics interest you?',
+                                  style:
+                                      Theme.of(context).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w500),
+                                ),
+                                const SizedBox(height: 8),
+                                Wrap(
+                                  spacing: 8,
+                                  runSpacing: 8,
+                                  children: _interestOptions.map((interest) {
+                                    final selected = _selectedInterests.contains(interest);
+                                    return FilterChip(
+                                      label: Text(interest),
+                                      selected: selected,
+                                      selectedColor: const Color(0xFF6D28D9).withOpacity(0.15),
+                                      checkmarkColor: const Color(0xFF6D28D9),
+                                      onSelected: (value) {
+                                        setState(() {
+                                          if (value) {
+                                            _selectedInterests.add(interest);
+                                          } else {
+                                            _selectedInterests.remove(interest);
+                                          }
+                                          _updateProgress();
+                                        });
+                                      },
+                                    );
+                                  }).toList(),
+                                ),
+                                const SizedBox(height: 16),
+                                DropdownButtonFormField<String>(
+                                  value: _experienceLevel,
+                                  decoration: _buildInputDecoration('Experience level with AI tools'),
+                                  items: _experienceLevels
+                                      .map((value) => DropdownMenuItem(value: value, child: Text(value)))
+                                      .toList(),
+                                  onChanged: (newValue) {
+                                    setState(() {
+                                      _experienceLevel = newValue;
+                                      _updateProgress();
+                                    });
+                                  },
+                                  validator: (value) =>
+                                      value == null || value.isEmpty ? 'Please select your experience level' : null,
+                                ),
+                                const SizedBox(height: 16),
+                                DropdownButtonFormField<String>(
+                                  value: _usageFrequency,
+                                  decoration:
+                                      _buildInputDecoration('How often do you expect to use PocketLLM?'),
+                                  items: _usageFrequencyOptions
+                                      .map((value) => DropdownMenuItem(value: value, child: Text(value)))
+                                      .toList(),
+                                  onChanged: (newValue) {
+                                    setState(() {
+                                      _usageFrequency = newValue;
+                                      _updateProgress();
+                                    });
+                                  },
+                                  validator: (value) =>
+                                      value == null || value.isEmpty ? 'Please choose a frequency' : null,
+                                ),
+                                const SizedBox(height: 16),
+                                TextFormField(
+                                  controller: _otherNotesController,
+                                  maxLines: 3,
+                                  decoration: _buildInputDecoration('Anything else we should know? (optional)'),
                                 ),
                                 const SizedBox(height: 24),
                                 if (_errorMessage != null)

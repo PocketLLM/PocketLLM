@@ -5,6 +5,12 @@
 http://localhost:8000/v1
 ```
 
+For the hosted demo deployment you can target:
+
+```
+https://pocket-llm-lemon.vercel.app/v1
+```
+
 ## 🚀 Getting Started
 
 Follow these steps to prepare the NestJS backend before exercising the API collection:
@@ -23,9 +29,10 @@ Follow these steps to prepare the NestJS backend before exercising the API colle
    ```bash
    npm run start:dev
    ```
-   The REST API will be available at `http://localhost:8000/v1` and Swagger documentation at `http://localhost:8000/api/docs`.
+   The REST API will be available at `http://localhost:8000/v1` and Swagger documentation at `http://localhost:8000/api/docs` (aliased at `http://localhost:8000/docs`).
+   In production (Vercel demo) the docs are published at `https://pocket-llm-lemon.vercel.app/docs` (legacy path `https://pocket-llm-lemon.vercel.app/api/docs`).
 4. **Authenticate requests**
-   Use `POST /v1/auth/signin` to obtain an access token and send it in the `Authorization: Bearer <token>` header when calling protected routes. The Users, Chats, and Jobs controllers are guarded by the Supabase JWT so every request must include a valid token.
+   Use `POST /v1/auth/signin` to obtain an access token and send it in the `Authorization: Bearer <token>` header when calling protected routes. The Users, Chats, and Jobs controllers are guarded by the Supabase JWT so every request must include a valid token. You can always call `GET /v1` to verify routing and to see the currently active documentation links exposed by the server.
 
 I've created a comprehensive API documentation guide for Postman testing. Let me create a summary of what was accomplished:
 
