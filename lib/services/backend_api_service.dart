@@ -147,12 +147,6 @@ class BackendApiService {
       String.fromEnvironment('FALLBACK_BACKEND_URL', defaultValue: ''),
     ];
 
-    const builtInFallbackCandidates = [
-      'http://10.0.2.2:8000',
-      'http://127.0.0.1:8000',
-      'http://localhost:8000',
-    ];
-
     for (final candidate in primaryEnvironmentCandidates) {
       addCandidate(candidate);
     }
@@ -165,13 +159,27 @@ class BackendApiService {
       addCandidate(candidate);
     }
 
-    for (final candidate in builtInFallbackCandidates) {
-      addCandidate(candidate);
+    if (urls.isEmpty) {
+      addCandidate('https://pocket-llm-lemon.vercel.app');
     }
 
-    if (urls.isEmpty) {
-      addCandidate('https://pocketllm.onrender.com');
-    }
+    urls.sort((a, b) {
+      int weight(String url) {
+        if (url.contains('pocket-llm-lemon.vercel.app')) {
+          return 0;
+        }
+        if (url.startsWith('https://')) {
+          return 1;
+        }
+        return 2;
+      }
+
+      final diff = weight(a) - weight(b);
+      if (diff != 0) {
+        return diff;
+      }
+      return a.compareTo(b);
+    });
 
     debugPrint('Resolved backend URLs: $urls');
 
@@ -284,13 +292,15 @@ class BackendApiService {
 
   dynamic _handleResponse(http.Response response) {
     try {
-      final decoded = jsonDecode(response.body);
+      final rawBody = response.body;
+      final hasBody = rawBody.isNotEmpty && rawBody.trim().isNotEmpty;
+      final decoded = hasBody ? jsonDecode(rawBody) : <String, dynamic>{};
       if (response.statusCode >= 200 && response.statusCode < 300) {
         // Return the entire response data, not just the 'data' field
         return decoded;
       }
 
-      final errorMessage = decoded['error']?['message'] ?? response.reasonPhrase;
+      final errorMessage = _extractErrorMessage(decoded) ?? response.reasonPhrase;
       throw BackendApiException(response.statusCode, errorMessage ?? 'Unknown error');
     } catch (e) {
       if (e is BackendApiException) {
@@ -299,6 +309,41 @@ class BackendApiService {
       debugPrint('BackendApiService error: $e');
       throw BackendApiException(response.statusCode, 'Failed to parse backend response');
     }
+  }
+
+  String? _extractErrorMessage(dynamic payload) {
+    if (payload == null) {
+      return null;
+    }
+
+    if (payload is String) {
+      final trimmed = payload.trim();
+      return trimmed.isEmpty ? null : trimmed;
+    }
+
+    if (payload is Map<String, dynamic>) {
+      for (final key in ['error', 'message', 'detail', 'description']) {
+        if (!payload.containsKey(key)) {
+          continue;
+        }
+        final resolved = _extractErrorMessage(payload[key]);
+        if (resolved != null && resolved.isNotEmpty) {
+          return resolved;
+        }
+      }
+      return null;
+    }
+
+    if (payload is List) {
+      for (final element in payload) {
+        final resolved = _extractErrorMessage(element);
+        if (resolved != null && resolved.isNotEmpty) {
+          return resolved;
+        }
+      }
+    }
+
+    return null;
   }
 }
 
