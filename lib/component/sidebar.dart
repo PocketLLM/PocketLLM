@@ -97,6 +97,16 @@ class _SidebarState extends State<Sidebar> {
     FocusScope.of(context).unfocus();
   }
 
+  void _showComingSoonMessage() {
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        const SnackBar(
+          content: Text('Dark mode will be available in a future update.'),
+        ),
+      );
+  }
+
   void _closeDrawer() {
     _dismissKeyboard();
     final navigator = Navigator.of(context);
@@ -136,11 +146,6 @@ class _SidebarState extends State<Sidebar> {
       if (!mounted) return;
       rootNavigator.push(route);
     });
-  }
-
-  Future<void> _createNewChat() async {
-    final conversation = await _chatHistoryService.createConversation();
-    _selectConversation(conversation.id);
   }
 
   void _selectConversation(String conversationId) {
@@ -357,9 +362,7 @@ class _SidebarState extends State<Sidebar> {
             icon: Icons.dark_mode,
             selected: isDark,
             colorScheme: colorScheme,
-            onTap: () {
-              themeService.setThemeMode(AppThemeMode.dark);
-            },
+            onTap: _showComingSoonMessage,
           ),
         ],
       ),
@@ -418,6 +421,12 @@ class _SidebarState extends State<Sidebar> {
         label: 'Home',
         subtitle: 'Return to your main workspace',
         onTap: _closeDrawer,
+      ),
+      _NavigationItem(
+        icon: Icons.chat_bubble_outline,
+        label: 'Chat History',
+        subtitle: 'Browse all previous conversations',
+        onTap: _openChatHistoryPage,
       ),
       _NavigationItem(
         icon: Icons.store_outlined,
@@ -500,24 +509,13 @@ class _SidebarState extends State<Sidebar> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Text(
-                                'History',
-                                style: TextStyle(
-                                  color: colorScheme.onSurface,
-                                  fontSize: 15,
-                                  fontWeight: FontWeight.w700,
-                                ),
-                              ),
-                              const SizedBox(width: 6),
-                              Icon(
-                                Icons.open_in_new_rounded,
-                                size: 16,
-                                color: colorScheme.onSurface.withOpacity(0.6),
-                              ),
-                            ],
+                          Text(
+                            'Chat history',
+                            style: TextStyle(
+                              color: colorScheme.onSurface,
+                              fontSize: 15,
+                              fontWeight: FontWeight.w700,
+                            ),
                           ),
                           const SizedBox(height: 4),
                           Text(
@@ -532,11 +530,6 @@ class _SidebarState extends State<Sidebar> {
                     ),
                   ),
                 ),
-              ),
-              IconButton(
-                tooltip: 'New chat',
-                icon: Icon(Icons.add, color: colorScheme.primary),
-                onPressed: _createNewChat,
               ),
               IconButton(
                 tooltip: isHistoryExpanded ? 'Hide recent chats' : 'Show recent chats',

@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter/foundation.dart';
 import 'component/splash_screen.dart';
 import 'component/home_screen.dart';
 import 'component/onboarding_screens/onboarding_screen.dart';
@@ -131,29 +130,12 @@ class MyApp extends StatelessWidget {
       animation: ThemeService(),
       builder: (context, _) {
         final themeService = ThemeService();
-        final appThemeMode = themeService.themeMode;
-        ThemeMode themeMode;
-
-        switch (appThemeMode) {
-          case AppThemeMode.light:
-            themeMode = ThemeMode.light;
-            break;
-          case AppThemeMode.dark:
-            themeMode = ThemeMode.dark;
-            break;
-          case AppThemeMode.highContrast:
-            themeMode = ThemeMode.dark;
-            break;
-          case AppThemeMode.system:
-            themeMode = themeService.followSystemTheme ? ThemeMode.system : ThemeMode.light;
-            break;
-        }
 
         return MaterialApp(
           title: 'PocketLLM',
           theme: themeService.lightTheme,
           darkTheme: themeService.darkTheme,
-          themeMode: themeMode,
+          themeMode: ThemeMode.light,
           debugShowCheckedModeBanner: false,
           home: initializationError != null
               ? ErrorScreen(
