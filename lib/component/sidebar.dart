@@ -347,7 +347,9 @@ class _SidebarState extends State<Sidebar> {
             icon: Icons.light_mode,
             selected: !isDark,
             colorScheme: colorScheme,
-            onTap: () => ThemeService().setThemeMode(AppThemeMode.light),
+            onTap: () {
+              themeService.setThemeMode(AppThemeMode.light);
+            },
           ),
           const SizedBox(width: 8),
           _ThemeToggleButton(
@@ -355,7 +357,9 @@ class _SidebarState extends State<Sidebar> {
             icon: Icons.dark_mode,
             selected: isDark,
             colorScheme: colorScheme,
-            onTap: _showDarkModeComingSoon,
+            onTap: () {
+              themeService.setThemeMode(AppThemeMode.dark);
+            },
           ),
         ],
       ),
@@ -486,26 +490,47 @@ class _SidebarState extends State<Sidebar> {
               ),
               const SizedBox(width: 12),
               Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Recent conversations',
-                      style: TextStyle(
-                        color: colorScheme.onSurface,
-                        fontSize: 15,
-                        fontWeight: FontWeight.w700,
+                child: Material(
+                  color: Colors.transparent,
+                  child: InkWell(
+                    borderRadius: BorderRadius.circular(12),
+                    onTap: _openChatHistoryPage,
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 2),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Text(
+                                'History',
+                                style: TextStyle(
+                                  color: colorScheme.onSurface,
+                                  fontSize: 15,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                              const SizedBox(width: 6),
+                              Icon(
+                                Icons.open_in_new_rounded,
+                                size: 16,
+                                color: colorScheme.onSurface.withOpacity(0.6),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            'Review previous conversations in detail.',
+                            style: TextStyle(
+                              color: colorScheme.onSurface.withOpacity(0.6),
+                              fontSize: 12,
+                            ),
+                          ),
+                        ],
                       ),
                     ),
-                    const SizedBox(height: 4),
-                    Text(
-                      'Continue where you left off or create something new.',
-                      style: TextStyle(
-                        color: colorScheme.onSurface.withOpacity(0.6),
-                        fontSize: 12,
-                      ),
-                    ),
-                  ],
+                  ),
                 ),
               ),
               IconButton(
@@ -703,18 +728,6 @@ class _SidebarState extends State<Sidebar> {
     );
   }
 
-  void _showDarkModeComingSoon() {
-    if (!mounted) return;
-    final messenger = ScaffoldMessenger.of(context);
-    messenger.hideCurrentSnackBar();
-    messenger.showSnackBar(
-      const SnackBar(
-        content: Text('Dark mode support is coming soon.'),
-        behavior: SnackBarBehavior.floating,
-      ),
-    );
-  }
-
   Widget _buildFooter(AppColorScheme colorScheme) {
     final year = DateTime.now().year;
 
@@ -752,69 +765,83 @@ class _SidebarState extends State<Sidebar> {
         final colorScheme = themeService.colorScheme;
         final isDark = themeService.isDarkMode;
         final mediaQuery = MediaQuery.of(context);
-        final drawerWidth = math.min(mediaQuery.size.width * 0.9, 420.0);
 
         return Drawer(
-          width: drawerWidth,
+          width: mediaQuery.size.width,
           backgroundColor: Colors.transparent,
           elevation: 0,
           child: SafeArea(
-            child: Padding(
-              padding: const EdgeInsets.all(16.0),
-              child: Container(
-                decoration: BoxDecoration(
-                  color: colorScheme.surface,
-                  borderRadius: BorderRadius.circular(28),
-                  border: Border.all(
-                    color: colorScheme.cardBorder.withOpacity(isDark ? 0.5 : 0.3),
-                  ),
-                  boxShadow: [
-                    BoxShadow(
-                      color: colorScheme.shadow.withOpacity(isDark ? 0.35 : 0.18),
-                      blurRadius: 38,
-                      offset: const Offset(0, 18),
-                    ),
-                  ],
-                ),
-                clipBehavior: Clip.antiAlias,
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Padding(
-                      padding: const EdgeInsets.fromLTRB(24, 24, 24, 0),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          _buildHeader(colorScheme),
-                          const SizedBox(height: 24),
-                          _buildThemeToggle(themeService, colorScheme),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(height: 24),
-                    Expanded(
-                      child: SingleChildScrollView(
-                        physics: const BouncingScrollPhysics(),
-                        padding: const EdgeInsets.symmetric(horizontal: 24),
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                final availableWidth = constraints.maxWidth;
+                final horizontalMargin = math.max(availableWidth * 0.04, 16.0);
+                final contentWidth = availableWidth - (horizontalMargin * 2);
+                final drawerContentWidth = contentWidth > 0 ? contentWidth : availableWidth;
+
+                return Align(
+                  alignment: Alignment.center,
+                  child: SizedBox(
+                    width: drawerContentWidth,
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 16.0),
+                      child: Container(
+                        decoration: BoxDecoration(
+                          color: colorScheme.surface,
+                          borderRadius: BorderRadius.circular(28),
+                          border: Border.all(
+                            color: colorScheme.cardBorder.withOpacity(isDark ? 0.5 : 0.3),
+                          ),
+                          boxShadow: [
+                            BoxShadow(
+                              color: colorScheme.shadow.withOpacity(isDark ? 0.35 : 0.18),
+                              blurRadius: 38,
+                              offset: const Offset(0, 18),
+                            ),
+                          ],
+                        ),
+                        clipBehavior: Clip.antiAlias,
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            _buildSearchField(colorScheme),
+                            Padding(
+                              padding: const EdgeInsets.fromLTRB(24, 24, 24, 0),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  _buildHeader(colorScheme),
+                                  const SizedBox(height: 24),
+                                  _buildThemeToggle(themeService, colorScheme),
+                                ],
+                              ),
+                            ),
                             const SizedBox(height: 24),
-                            _buildNavigationSection(colorScheme),
-                            const SizedBox(height: 24),
-                            _buildChatHistorySection(colorScheme),
+                            Expanded(
+                              child: SingleChildScrollView(
+                                physics: const BouncingScrollPhysics(),
+                                padding: const EdgeInsets.symmetric(horizontal: 24),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    _buildSearchField(colorScheme),
+                                    const SizedBox(height: 24),
+                                    _buildNavigationSection(colorScheme),
+                                    const SizedBox(height: 24),
+                                    _buildChatHistorySection(colorScheme),
+                                  ],
+                                ),
+                              ),
+                            ),
+                            Padding(
+                              padding: const EdgeInsets.fromLTRB(24, 0, 24, 24),
+                              child: _buildFooter(colorScheme),
+                            ),
                           ],
                         ),
                       ),
                     ),
-                    Padding(
-                      padding: const EdgeInsets.fromLTRB(24, 0, 24, 24),
-                      child: _buildFooter(colorScheme),
-                    ),
-                  ],
-                ),
-              ),
+                  ),
+                );
+              },
             ),
           ),
         );

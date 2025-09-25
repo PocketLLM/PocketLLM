@@ -131,11 +131,29 @@ class MyApp extends StatelessWidget {
       animation: ThemeService(),
       builder: (context, _) {
         final themeService = ThemeService();
+        final appThemeMode = themeService.themeMode;
+        ThemeMode themeMode;
+
+        switch (appThemeMode) {
+          case AppThemeMode.light:
+            themeMode = ThemeMode.light;
+            break;
+          case AppThemeMode.dark:
+            themeMode = ThemeMode.dark;
+            break;
+          case AppThemeMode.highContrast:
+            themeMode = ThemeMode.dark;
+            break;
+          case AppThemeMode.system:
+            themeMode = themeService.followSystemTheme ? ThemeMode.system : ThemeMode.light;
+            break;
+        }
+
         return MaterialApp(
           title: 'PocketLLM',
-          theme: themeService.currentTheme,
-          darkTheme: themeService.currentTheme,
-          themeMode: themeService.isDarkMode ? ThemeMode.dark : ThemeMode.light,
+          theme: themeService.lightTheme,
+          darkTheme: themeService.darkTheme,
+          themeMode: themeMode,
           debugShowCheckedModeBanner: false,
           home: initializationError != null
               ? ErrorScreen(

@@ -104,9 +104,6 @@ class ThemeService extends ChangeNotifier {
     // Load theme preferences
     final themeModeIndex = prefs.getInt(_themeModeKey) ?? AppThemeMode.system.index;
     _themeMode = AppThemeMode.values[themeModeIndex];
-    if (_themeMode == AppThemeMode.dark) {
-      _themeMode = AppThemeMode.light;
-    }
     
     final colorSchemeIndex = prefs.getInt(_colorSchemeTypeKey) ?? ColorSchemeType.standard.index;
     _colorSchemeType = ColorSchemeType.values[colorSchemeIndex];
@@ -115,7 +112,8 @@ class ThemeService extends ChangeNotifier {
     
     // Get system brightness
     _updateSystemBrightness();
-    
+    _updateSystemStatusBar();
+
     notifyListeners();
   }
   
@@ -130,12 +128,11 @@ class ThemeService extends ChangeNotifier {
   }
   
   Future<void> setThemeMode(AppThemeMode mode) async {
-    final effectiveMode = mode == AppThemeMode.dark ? AppThemeMode.light : mode;
-    if (_themeMode == effectiveMode) return;
+    if (_themeMode == mode) return;
 
-    _themeMode = effectiveMode;
+    _themeMode = mode;
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setInt(_themeModeKey, effectiveMode.index);
+    await prefs.setInt(_themeModeKey, mode.index);
 
     _updateSystemStatusBar();
     notifyListeners();
@@ -143,21 +140,22 @@ class ThemeService extends ChangeNotifier {
   
   Future<void> setColorSchemeType(ColorSchemeType type) async {
     if (_colorSchemeType == type) return;
-    
+
     _colorSchemeType = type;
     final prefs = await SharedPreferences.getInstance();
     await prefs.setInt(_colorSchemeTypeKey, type.index);
-    
+
     notifyListeners();
   }
-  
+
   Future<void> setFollowSystemTheme(bool follow) async {
     if (_followSystemTheme == follow) return;
-    
+
     _followSystemTheme = follow;
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool(_systemThemeKey, follow);
-    
+
+    _updateSystemStatusBar();
     notifyListeners();
   }
   
@@ -184,6 +182,9 @@ class ThemeService extends ChangeNotifier {
       case AppThemeMode.highContrast:
         return Brightness.dark;
       case AppThemeMode.system:
+        if (_followSystemTheme) {
+          return _systemBrightness;
+        }
         return Brightness.light;
     }
   }
@@ -206,9 +207,7 @@ class ThemeService extends ChangeNotifier {
     );
   }
 
-  AppColorScheme _getCurrentColorScheme() {
-    final brightness = _getEffectiveBrightness();
-    
+  AppColorScheme _getColorSchemeForBrightness(Brightness brightness) {
     switch (_colorSchemeType) {
       case ColorSchemeType.standard:
         return brightness == Brightness.dark ? _darkColorScheme : _lightColorScheme;
@@ -219,13 +218,24 @@ class ThemeService extends ChangeNotifier {
         return brightness == Brightness.dark ? _darkColorScheme : _lightColorScheme;
     }
   }
-  
+
+  AppColorScheme _getCurrentColorScheme() {
+    final brightness = _getEffectiveBrightness();
+    return _getColorSchemeForBrightness(brightness);
+  }
+
   ThemeData get currentTheme {
     final brightness = _getEffectiveBrightness();
     final colorScheme = _getCurrentColorScheme();
-    
+
     return _buildThemeData(brightness, colorScheme);
   }
+
+  ThemeData get lightTheme =>
+      _buildThemeData(Brightness.light, _getColorSchemeForBrightness(Brightness.light));
+
+  ThemeData get darkTheme =>
+      _buildThemeData(Brightness.dark, _getColorSchemeForBrightness(Brightness.dark));
   
   ThemeData _buildThemeData(Brightness brightness, AppColorScheme colorScheme) {
     final isDark = brightness == Brightness.dark;
