@@ -276,6 +276,7 @@ class AuthStateNotifier extends ChangeNotifier {
     String? profession,
     String? heardFrom,
     String? avatarUrl,
+    Map<String, dynamic>? onboarding,
   }) async {
     _ensureAuthenticated();
     final payload = {
@@ -288,7 +289,19 @@ class AuthStateNotifier extends ChangeNotifier {
       'avatar_url': avatarUrl,
       'survey_completed': true,
       'age': _calculateAge(dateOfBirth),
-    }..removeWhere((key, value) => value == null || (value is String && value.isEmpty));
+      'onboarding': onboarding,
+    }..removeWhere((key, value) {
+        if (value == null) {
+          return true;
+        }
+        if (value is String) {
+          return value.isEmpty;
+        }
+        if (value is Map && value.isEmpty) {
+          return true;
+        }
+        return false;
+      });
 
     final response = await _post(
       '/users/profile/onboarding',
