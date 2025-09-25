@@ -417,13 +417,22 @@ class AuthStateNotifier extends ChangeNotifier {
   }
 
   Future<void> _fetchProfile() async {
-    final response = await _get('/users/profile', requiresAuth: true);
-    final data = _extractData(response);
-    if (data is Map<String, dynamic>) {
-      final profile = UserProfile.fromMap(data);
-      await _synchronizeDeletionSchedule(profile);
-      _profile = profile;
-      _applyDeletionScheduleToProfile();
+    try {
+      final response = await _get('/users/profile', requiresAuth: true);
+      final data = _extractData(response);
+      if (data is Map<String, dynamic>) {
+        final profile = UserProfile.fromMap(data);
+        await _synchronizeDeletionSchedule(profile);
+        _profile = profile;
+        _applyDeletionScheduleToProfile();
+      }
+    } on AuthException catch (error) {
+      if (error.statusCode == 404) {
+        debugPrint('AuthState: No remote profile found for current user.');
+        _profile = null;
+        return;
+      }
+      rethrow;
     }
   }
 
