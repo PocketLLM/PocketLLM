@@ -8,6 +8,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.v1.api import api_router
+from app.api.v1.endpoints import default as default_endpoints
 from app.core.config import get_settings
 from app.core.database import close_database, connect_to_database
 from app.core.logging import configure_logging
@@ -53,6 +54,7 @@ def create_application() -> FastAPI:
         allow_headers=["*"],
     )
 
+    application.include_router(default_endpoints.router)
     application.include_router(api_router, prefix=settings.api_v1_prefix)
     return application
 
