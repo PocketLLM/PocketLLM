@@ -13,6 +13,14 @@ import { PostgrestError } from '@supabase/supabase-js';
 @Injectable()
 export class AuthService {
   private readonly logger = new Logger(AuthService.name);
+  private readonly optionalProfileColumns = new Set([
+    'email',
+    'heard_from',
+    'deletion_status',
+    'deletion_requested_at',
+    'deletion_scheduled_for',
+  ]);
+  private profileEmailColumnSupported: boolean | null = null;
 
   constructor(private readonly supabaseService: SupabaseService) {}
 
@@ -54,10 +62,23 @@ export class AuthService {
         },
       });
 
+      const { data: signInData, error: signInError } = await this.supabaseService.auth.signInWithPassword({
+        email,
+        password,
+      });
+
+      if (signInError) {
+        this.logger.error('Supabase post-signup sign in error:', signInError);
+        await this.safeDeleteUser(user.id);
+        throw new InternalServerErrorException('Failed to establish session for the new account.');
+      }
+
+      await this.ensureProfileForUser(signInData.user, { emailFallback: email });
+
       return {
-        user: user as any,
-        session: null,
-        message: 'User created successfully. Please sign in to get a session.',
+        user: signInData.user as any,
+        session: signInData.session as any,
+        message: 'Account created successfully.',
       };
     } catch (error) {
       this.logger.error('Failed to sign up user:', error);
@@ -141,19 +162,15 @@ export class AuthService {
     const email = this.resolveEmail(user) ?? options?.emailFallback;
 
     try {
-      const { data: existingProfile, error: lookupError } = await this.supabaseService
-        .from('profiles')
-        .select('id, email')
-        .eq('id', userId)
-        .maybeSingle();
+      const existingProfile = await this.lookupExistingProfile(userId);
 
-      if (lookupError) {
-        this.logger.error(`Failed to look up profile for user ${userId}:`, lookupError);
+      if (existingProfile.error) {
+        this.logger.error(`Failed to look up profile for user ${userId}:`, existingProfile.error);
         throw new InternalServerErrorException('Unable to verify profile state.');
       }
 
-      if (existingProfile) {
-        await this.updateEmailIfMissing(userId, existingProfile.email, email);
+      if (existingProfile.data) {
+        await this.updateEmailIfMissing(userId, existingProfile.data.email ?? null, email);
         return;
       }
 
@@ -174,14 +191,7 @@ export class AuthService {
         deletion_status: 'active',
       };
 
-      const { error: insertError } = await this.supabaseService
-        .from('profiles')
-        .upsert(this.sanitizeProfilePayload(profilePayload), { onConflict: 'id' });
-
-      if (insertError) {
-        this.logger.error(`Failed to provision profile for user ${userId}:`, insertError);
-        throw new InternalServerErrorException('Unable to create user profile.');
-      }
+      await this.upsertProfileWithFallback(this.sanitizeProfilePayload(profilePayload));
     } catch (error) {
       if (options?.cleanupOnFailure) {
         await options.cleanupOnFailure().catch((cleanupError) => {
@@ -239,6 +249,10 @@ export class AuthService {
       return;
     }
 
+    if (this.profileEmailColumnSupported === false) {
+      return;
+    }
+
     if (existingEmail && !this.isPlaceholderEmail(existingEmail) && existingEmail === newEmail) {
       return;
     }
@@ -255,6 +269,9 @@ export class AuthService {
 
       if (error) {
         this.handleProfileUpdateError('email backfill', userId, error);
+        if (error.code === '42703') {
+          this.profileEmailColumnSupported = false;
+        }
       }
     } catch (error) {
       this.logger.warn(`Unexpected error while updating email for profile ${userId}:`, error);
@@ -300,5 +317,88 @@ export class AuthService {
       normalizedMessage.includes('already registered') ||
       normalizedMessage.includes('duplicate key value violates unique constraint')
     );
+  }
+
+  private async lookupExistingProfile(
+    userId: string,
+  ): Promise<{ data: { id: string; email?: string | null } | null; error: PostgrestError | null }> {
+    const selectColumns = this.profileEmailColumnSupported === false ? 'id' : 'id, email';
+
+    const { data, error } = await this.supabaseService
+      .from('profiles')
+      .select(selectColumns)
+      .eq('id', userId)
+      .maybeSingle();
+
+    if (error?.code === '42703' && this.profileEmailColumnSupported !== false) {
+      this.logger.warn('Profiles table is missing the email column. Falling back to minimal selection.');
+      this.profileEmailColumnSupported = false;
+      return this.lookupExistingProfile(userId);
+    }
+
+    return { data, error };
+  }
+
+  private async upsertProfileWithFallback(payload: Record<string, any>): Promise<void> {
+    let attempt = { ...payload };
+    const attemptedColumns = new Set(Object.keys(attempt));
+
+    while (true) {
+      const { error } = await this.supabaseService
+        .from('profiles')
+        .upsert(attempt, { onConflict: 'id' });
+
+      if (!error) {
+        return;
+      }
+
+      if (error.code !== '42703') {
+        throw error;
+      }
+
+      const missingColumn =
+        this.extractMissingColumnName(error.message, attemptedColumns) ?? this.findOptionalColumnToRemove(attempt);
+
+      if (!missingColumn) {
+        throw error;
+      }
+
+      if (missingColumn === 'email') {
+        this.profileEmailColumnSupported = false;
+      }
+
+      delete attempt[missingColumn];
+      attemptedColumns.delete(missingColumn);
+      this.optionalProfileColumns.delete(missingColumn);
+      this.logger.warn(
+        `Removing unsupported column "${missingColumn}" from profile payload to satisfy current schema.`,
+      );
+    }
+  }
+
+  private extractMissingColumnName(
+    message: string | undefined,
+    attemptedColumns: Set<string>,
+  ): string | null {
+    if (!message) {
+      return null;
+    }
+
+    const match = message.match(/column\s+"?([a-zA-Z0-9_]+)"?/i);
+    if (!match) {
+      return null;
+    }
+
+    const candidate = match[1];
+    return attemptedColumns.has(candidate) ? candidate : null;
+  }
+
+  private findOptionalColumnToRemove(payload: Record<string, any>): string | null {
+    for (const column of this.optionalProfileColumns) {
+      if (Object.prototype.hasOwnProperty.call(payload, column)) {
+        return column;
+      }
+    }
+    return null;
   }
 }
