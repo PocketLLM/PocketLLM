@@ -81,6 +81,8 @@ class AuthStateNotifier extends ChangeNotifier {
     'avatar_url',
     'survey_completed',
     'heard_from',
+    'age',
+    'onboarding',
   };
 
   final FlutterSecureStorage _secureStorage;
@@ -276,7 +278,7 @@ class AuthStateNotifier extends ChangeNotifier {
     String? avatarUrl,
   }) async {
     _ensureAuthenticated();
-    final update = {
+    final payload = {
       'full_name': fullName,
       'username': username,
       'bio': bio,
@@ -285,9 +287,26 @@ class AuthStateNotifier extends ChangeNotifier {
       'heard_from': heardFrom,
       'avatar_url': avatarUrl,
       'survey_completed': true,
+      'age': _calculateAge(dateOfBirth),
     }..removeWhere((key, value) => value == null || (value is String && value.isEmpty));
 
-    await _updateProfile(update);
+    final response = await _post(
+      '/users/profile/onboarding',
+      body: payload,
+      requiresAuth: true,
+    );
+
+    final data = _extractData(response);
+    final profileData = data is Map<String, dynamic>
+        ? _extractProfilePayload(data) ?? data
+        : null;
+
+    if (profileData != null) {
+      _profile = UserProfile.fromMap(_mergeProfileWithDeletion(profileData));
+    } else {
+      await _fetchProfile();
+    }
+
     notifyListeners();
   }
 
@@ -776,6 +795,29 @@ class AuthStateNotifier extends ChangeNotifier {
   bool _looksLikeWhitelistError(AuthException error) {
     final message = error.message.toLowerCase();
     return message.contains('non-whitelisted') || message.contains('should not exist');
+  }
+
+  int? _calculateAge(DateTime? birthDate) {
+    if (birthDate == null) {
+      return null;
+    }
+
+    final today = DateTime.now();
+    int age = today.year - birthDate.year;
+
+    final hasHadBirthdayThisYear =
+        (today.month > birthDate.month) ||
+        (today.month == birthDate.month && today.day >= birthDate.day);
+
+    if (!hasHadBirthdayThisYear) {
+      age -= 1;
+    }
+
+    if (age < 0 || age > 150) {
+      return null;
+    }
+
+    return age;
   }
 
   String? _formatDate(dynamic value) {

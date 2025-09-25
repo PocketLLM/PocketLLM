@@ -1,9 +1,10 @@
-import { Controller, Get, Put, Delete, Body, UseGuards, Req } from '@nestjs/common';
+import { Controller, Get, Put, Delete, Post, Body, UseGuards, Req } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse, ApiBody, ApiBearerAuth } from '@nestjs/swagger';
 import { UsersService } from './users.service';
 import { UpdateProfileDto } from './dto/update-profile.dto';
 import { ProfileDto } from './dto/profile.dto';
 import { SupabaseAuthGuard } from '../auth/guards/supabase-auth.guard';
+import { CompleteOnboardingDto } from './dto/complete-onboarding.dto';
 
 @ApiTags('Users')
 @Controller('users')
@@ -32,7 +33,7 @@ export class UsersController {
   }
 
   @Put('profile')
-  @ApiOperation({ 
+  @ApiOperation({
     summary: 'Update user profile',
     description: 'Update the current user\'s profile information'
   })
@@ -52,6 +53,25 @@ export class UsersController {
   ): Promise<ProfileDto> {
     const userId = request.user?.id;
     return this.usersService.updateProfile(userId, updateProfileDto);
+  }
+
+  @Post('profile/onboarding')
+  @ApiOperation({
+    summary: 'Complete onboarding survey',
+    description: 'Capture onboarding responses and mark the profile as completed',
+  })
+  @ApiBody({ type: CompleteOnboardingDto })
+  @ApiResponse({
+    status: 200,
+    description: 'Onboarding data saved successfully',
+    type: ProfileDto,
+  })
+  async completeOnboarding(
+    @Req() request: any,
+    @Body() completeOnboardingDto: CompleteOnboardingDto,
+  ): Promise<ProfileDto> {
+    const userId = request.user?.id;
+    return this.usersService.completeOnboarding(userId, completeOnboardingDto);
   }
 
   @Delete('profile')

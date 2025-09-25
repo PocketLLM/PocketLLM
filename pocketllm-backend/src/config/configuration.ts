@@ -15,4 +15,13 @@ export default registerAs('app', () => ({
     prefix: 'v1',
     version: '1.0.0',
   },
+  docs: {
+    enabled:
+      process.env.ENABLE_SWAGGER_DOCS?.toLowerCase() === 'false'
+        ? false
+        : process.env.ENABLE_SWAGGER_DOCS?.toLowerCase() === 'true'
+        ? true
+        : true,
+    path: process.env.SWAGGER_DOCS_PATH || 'api/docs',
+  },
 }));

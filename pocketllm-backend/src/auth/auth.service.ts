@@ -4,6 +4,7 @@ import {
   BadRequestException,
   UnauthorizedException,
   InternalServerErrorException,
+  ConflictException,
 } from '@nestjs/common';
 import { SupabaseService } from '../common/services/supabase.service';
 import { SignUpRequest, SignInRequest, AuthResponse } from '../api/v1/schemas/auth.schemas';
@@ -32,6 +33,11 @@ export class AuthService {
 
       if (error) {
         this.logger.error('Supabase sign up error:', error);
+
+        if (this.isDuplicateEmailError(error)) {
+          throw new ConflictException('An account with this email already exists.');
+        }
+
         throw new BadRequestException(error.message);
       }
 
@@ -56,7 +62,7 @@ export class AuthService {
     } catch (error) {
       this.logger.error('Failed to sign up user:', error);
       
-      if (error instanceof BadRequestException) {
+      if (error instanceof BadRequestException || error instanceof ConflictException) {
         throw error;
       }
       
@@ -170,7 +176,7 @@ export class AuthService {
 
       const { error: insertError } = await this.supabaseService
         .from('profiles')
-        .insert(profilePayload);
+        .upsert(this.sanitizeProfilePayload(profilePayload), { onConflict: 'id' });
 
       if (insertError) {
         this.logger.error(`Failed to provision profile for user ${userId}:`, insertError);
@@ -190,6 +196,12 @@ export class AuthService {
       this.logger.error(`Unexpected error while ensuring profile for user ${userId}:`, error);
       throw new InternalServerErrorException('Unexpected error while preparing user profile.');
     }
+  }
+
+  private sanitizeProfilePayload(payload: Record<string, any>): Record<string, any> {
+    return Object.fromEntries(
+      Object.entries(payload).filter(([, value]) => value !== undefined),
+    );
   }
 
   private resolveEmail(user: any): string | null {
@@ -274,5 +286,19 @@ export class AuthService {
 
   private isPlaceholderEmail(email: string): boolean {
     return typeof email === 'string' && email.endsWith('@placeholder.pocketllm');
+  }
+
+  private isDuplicateEmailError(error: { message?: string; status?: number; code?: string }): boolean {
+    if (!error) {
+      return false;
+    }
+
+    const normalizedMessage = error.message?.toLowerCase() ?? '';
+    return (
+      error.status === 409 ||
+      error.code === '23505' ||
+      normalizedMessage.includes('already registered') ||
+      normalizedMessage.includes('duplicate key value violates unique constraint')
+    );
   }
 }

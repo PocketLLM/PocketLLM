@@ -1,4 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
+import { OnboardingDetailsDto } from './onboarding-details.dto';
 
 export class ProfileDto {
   @ApiProperty({ description: 'Profile ID (UUID)' })
@@ -27,6 +28,16 @@ export class ProfileDto {
 
   @ApiProperty({ description: 'Avatar URL', nullable: true })
   avatar_url: string | null;
+
+  @ApiProperty({ description: 'User age', nullable: true, example: 27 })
+  age: number | null;
+
+  @ApiProperty({
+    description: 'Structured onboarding responses captured during signup',
+    nullable: true,
+    type: () => OnboardingDetailsDto,
+  })
+  onboarding: OnboardingDetailsDto | null;
 
   @ApiProperty({ description: 'Whether user has completed the survey' })
   survey_completed: boolean;
