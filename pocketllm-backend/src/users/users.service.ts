@@ -9,13 +9,20 @@ import {
 import { SupabaseService } from '../common/services/supabase.service';
 import { UpdateProfileDto } from './dto/update-profile.dto';
 import { ProfileDto } from './dto/profile.dto';
-import { User } from '@supabase/supabase-js';
+import { PostgrestError, User } from '@supabase/supabase-js';
 import { CompleteOnboardingDto } from './dto/complete-onboarding.dto';
 import { OnboardingDetailsDto } from './dto/onboarding-details.dto';
 
 @Injectable()
 export class UsersService {
   private readonly logger = new Logger(UsersService.name);
+  private readonly optionalProfileColumns = new Set([
+    'email',
+    'heard_from',
+    'deletion_status',
+    'deletion_requested_at',
+    'deletion_scheduled_for',
+  ]);
 
   constructor(private readonly supabaseService: SupabaseService) {}
 
@@ -71,22 +78,10 @@ export class UsersService {
         return this.normalizeProfile(profileRecord, authUser);
       }
 
-      const { data, error } = await this.supabaseService
-        .from('profiles')
-        .update(updatePayload)
-        .eq('id', userId)
-        .select()
-        .maybeSingle();
-
-      if (error) {
-        this.logger.error('Supabase update profile error:', error);
-
-        if (error.code === '23505') {
-          throw new ConflictException('Username is already taken.');
-        }
-
-        throw new InternalServerErrorException('Failed to update profile.');
-      }
+      const data = await this.mutateProfileWithFallback('update', updatePayload, userId, {
+        failureMessage: 'Failed to update profile.',
+        conflictMessage: 'Username is already taken.',
+      });
 
       const profileRecord = data ?? (await this.ensureProfileExists(userId, authUser));
       return this.normalizeProfile(profileRecord, authUser);
@@ -134,21 +129,10 @@ export class UsersService {
         survey_completed: completeOnboardingDto.survey_completed ?? true,
       });
 
-      const { data, error } = await this.supabaseService
-        .from('profiles')
-        .upsert(upsertPayload, { onConflict: 'id' })
-        .select()
-        .maybeSingle();
-
-      if (error) {
-        this.logger.error('Supabase onboarding upsert error:', error);
-
-        if (error.code === '23505') {
-          throw new ConflictException('Username is already taken.');
-        }
-
-        throw new InternalServerErrorException('Failed to save onboarding responses.');
-      }
+      const data = await this.mutateProfileWithFallback('upsert', upsertPayload, userId, {
+        failureMessage: 'Failed to save onboarding responses.',
+        conflictMessage: 'Username is already taken.',
+      });
 
       const profileRecord = data ?? (await this.ensureProfileExists(userId, authUser));
       return this.normalizeProfile(profileRecord, authUser);
@@ -247,18 +231,20 @@ export class UsersService {
       deletion_status: 'active',
     });
 
-    const { data: created, error: insertError } = await this.supabaseService
-      .from('profiles')
-      .upsert(profilePayload, { onConflict: 'id' })
-      .select()
-      .maybeSingle();
+    try {
+      const created = await this.mutateProfileWithFallback('upsert', profilePayload, userId, {
+        failureMessage: 'Unable to create user profile.',
+        conflictMessage: 'Username is already taken.',
+      });
+      return created;
+    } catch (error) {
+      if (error instanceof ConflictException || error instanceof InternalServerErrorException) {
+        throw error;
+      }
 
-    if (insertError) {
-      this.logger.error(`Failed to provision profile for user ${userId}:`, insertError);
+      this.logger.error(`Failed to provision profile for user ${userId}:`, error);
       throw new InternalServerErrorException('Unable to create user profile.');
     }
-
-    return created;
   }
 
   private buildProfileMutationPayload(input: Record<string, any>): Record<string, any> {
@@ -312,6 +298,88 @@ export class UsersService {
     return Object.fromEntries(
       Object.entries(payload).filter(([, value]) => value !== undefined),
     );
+  }
+
+  private async mutateProfileWithFallback(
+    operation: 'update' | 'upsert',
+    payload: Record<string, any>,
+    userId: string,
+    context: { failureMessage: string; conflictMessage: string },
+  ): Promise<any> {
+    if (!payload || Object.keys(payload).length === 0) {
+      return null;
+    }
+
+    let attempt = { ...payload };
+    const attemptedColumns = new Set(Object.keys(attempt));
+
+    while (true) {
+      const query = this.supabaseService.from('profiles');
+      const builder =
+        operation === 'update'
+          ? query.update(attempt).eq('id', userId)
+          : query.upsert(attempt, { onConflict: 'id' });
+
+      const { data, error } = await builder.select().maybeSingle();
+
+      if (!error) {
+        return data;
+      }
+
+      if (error.code === '23505') {
+        throw new ConflictException(context.conflictMessage);
+      }
+
+      if (error.code !== '42703') {
+        this.logger.error(`Supabase profile ${operation} error:`, error);
+        throw new InternalServerErrorException(context.failureMessage);
+      }
+
+      const missingColumn =
+        this.extractMissingColumnName(error.message, attemptedColumns) ?? this.findOptionalColumnToRemove(attempt);
+
+      if (!missingColumn) {
+        this.logger.error(`Supabase profile ${operation} error:`, error);
+        throw new InternalServerErrorException(context.failureMessage);
+      }
+
+      delete attempt[missingColumn];
+      attemptedColumns.delete(missingColumn);
+      this.optionalProfileColumns.delete(missingColumn);
+      this.logger.warn(
+        `Removing unsupported column "${missingColumn}" from profile payload to satisfy current schema.`,
+      );
+
+      if (Object.keys(attempt).length === 0) {
+        return null;
+      }
+    }
+  }
+
+  private extractMissingColumnName(
+    message: string | undefined,
+    attemptedColumns: Set<string>,
+  ): string | null {
+    if (!message) {
+      return null;
+    }
+
+    const match = message.match(/column\s+"?([a-zA-Z0-9_]+)"?/i);
+    if (!match) {
+      return null;
+    }
+
+    const candidate = match[1];
+    return attemptedColumns.has(candidate) ? candidate : null;
+  }
+
+  private findOptionalColumnToRemove(payload: Record<string, any>): string | null {
+    for (const column of this.optionalProfileColumns) {
+      if (Object.prototype.hasOwnProperty.call(payload, column)) {
+        return column;
+      }
+    }
+    return null;
   }
 
   private normalizeProfile(profile: any, authUser: User | null): ProfileDto {
