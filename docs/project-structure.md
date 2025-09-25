@@ -39,6 +39,7 @@ lib/
 │   ├── settings/          # Settings pages
 │   └── ...                # Other main pages
 ├── services/              # Business logic and state management
+├── theme/                 # Design tokens and shared theme definitions
 ├── widgets/               # Reusable widgets
 └── main.dart              # Application entry point
 ```
@@ -77,6 +78,14 @@ The [services/](../lib/services/) directory contains business logic and state ma
 - [model_state.dart](../lib/services/model_state.dart) - Model state management
 - [secure_storage_service.dart](../lib/services/secure_storage_service.dart) - Secure data storage
 - [pocket_llm_service.dart](../lib/services/pocket_llm_service.dart) - Core application service
+
+### Theme Directory
+
+The [theme/](../lib/theme/) directory centralizes design tokens and reusable
+palettes:
+
+- [app_colors.dart](../lib/theme/app_colors.dart) - Brand color tokens and
+  canonical light/dark/high-contrast schemes used by the theme service
 
 ### Widgets Directory
 
