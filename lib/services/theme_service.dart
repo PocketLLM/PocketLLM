@@ -104,6 +104,9 @@ class ThemeService extends ChangeNotifier {
     // Load theme preferences
     final themeModeIndex = prefs.getInt(_themeModeKey) ?? AppThemeMode.system.index;
     _themeMode = AppThemeMode.values[themeModeIndex];
+    if (_themeMode == AppThemeMode.dark) {
+      _themeMode = AppThemeMode.light;
+    }
     
     final colorSchemeIndex = prefs.getInt(_colorSchemeTypeKey) ?? ColorSchemeType.standard.index;
     _colorSchemeType = ColorSchemeType.values[colorSchemeIndex];
@@ -127,12 +130,13 @@ class ThemeService extends ChangeNotifier {
   }
   
   Future<void> setThemeMode(AppThemeMode mode) async {
-    if (_themeMode == mode) return;
-    
-    _themeMode = mode;
+    final effectiveMode = mode == AppThemeMode.dark ? AppThemeMode.light : mode;
+    if (_themeMode == effectiveMode) return;
+
+    _themeMode = effectiveMode;
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setInt(_themeModeKey, mode.index);
-    
+    await prefs.setInt(_themeModeKey, effectiveMode.index);
+
     _updateSystemStatusBar();
     notifyListeners();
   }
@@ -180,7 +184,7 @@ class ThemeService extends ChangeNotifier {
       case AppThemeMode.highContrast:
         return Brightness.dark;
       case AppThemeMode.system:
-        return _followSystemTheme ? _systemBrightness : Brightness.light;
+        return Brightness.light;
     }
   }
   

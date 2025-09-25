@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 
 import '../component/appbar/about.dart';
@@ -104,33 +106,35 @@ class _SidebarState extends State<Sidebar> {
   }
 
   void _openPage(Widget page) {
-    _dismissKeyboard();
-    final navigator = Navigator.of(context);
-    if (navigator.canPop()) {
-      navigator.pop();
-    }
-    Future.microtask(() {
-      navigator.push(
-        MaterialPageRoute(builder: (context) => page),
-      );
-    });
+    _pushAfterDrawerClose(
+      MaterialPageRoute(builder: (context) => page),
+    );
   }
 
   void _openChatHistoryPage() {
+    _pushAfterDrawerClose(
+      MaterialPageRoute(
+        builder: (context) => ChatHistory(
+          onConversationSelected: (id) {
+            _selectConversation(id);
+          },
+        ),
+      ),
+    );
+  }
+
+  void _pushAfterDrawerClose(Route route) {
+    _dismissKeyboard();
     final navigator = Navigator.of(context);
+    final rootNavigator = Navigator.of(context, rootNavigator: true);
+
     if (navigator.canPop()) {
       navigator.pop();
     }
-    Future.microtask(() {
-      navigator.push(
-        MaterialPageRoute(
-          builder: (context) => ChatHistory(
-            onConversationSelected: (id) {
-              _selectConversation(id);
-            },
-          ),
-        ),
-      );
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      rootNavigator.push(route);
     });
   }
 
@@ -249,55 +253,63 @@ class _SidebarState extends State<Sidebar> {
 
   Widget _buildHeader(AppColorScheme colorScheme) {
     return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Container(
-          height: 56,
-          width: 56,
-          decoration: BoxDecoration(
-            shape: BoxShape.circle,
-            gradient: LinearGradient(
-              colors: [
-                colorScheme.primary.withOpacity(0.85),
-                colorScheme.primaryVariant.withOpacity(0.8),
-              ],
-            ),
-          ),
-          child: CircleAvatar(
-            backgroundColor: Colors.transparent,
-            child: Icon(
-              Icons.person_outline,
-              color: colorScheme.onPrimary,
-              size: 28,
-            ),
-          ),
-        ),
-        const SizedBox(width: 16),
         Expanded(
-          child: Column(
+          child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(
-                'Hello,',
-                style: TextStyle(
-                  color: colorScheme.onSurface.withOpacity(0.7),
-                  fontSize: 14,
+              Container(
+                height: 56,
+                width: 56,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  gradient: LinearGradient(
+                    colors: [
+                      colorScheme.primary.withOpacity(0.85),
+                      colorScheme.primaryVariant.withOpacity(0.8),
+                    ],
+                  ),
+                ),
+                child: CircleAvatar(
+                  backgroundColor: Colors.transparent,
+                  child: Icon(
+                    Icons.person_outline,
+                    color: colorScheme.onPrimary,
+                    size: 28,
+                  ),
                 ),
               ),
-              const SizedBox(height: 2),
-              Text(
-                'PocketLLM Explorer',
-                style: TextStyle(
-                  color: colorScheme.onSurface,
-                  fontSize: 20,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-              const SizedBox(height: 6),
-              Text(
-                'Curate, manage, and revisit your AI chats.',
-                style: TextStyle(
-                  color: colorScheme.onSurface.withOpacity(0.6),
-                  fontSize: 12,
+              const SizedBox(width: 16),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Hello,',
+                      style: TextStyle(
+                        color: colorScheme.onSurface.withOpacity(0.7),
+                        fontSize: 14,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      'PocketLLM Explorer',
+                      style: TextStyle(
+                        color: colorScheme.onSurface,
+                        fontSize: 20,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      'Curate, manage, and revisit your AI chats.',
+                      style: TextStyle(
+                        color: colorScheme.onSurface.withOpacity(0.6),
+                        fontSize: 12,
+                      ),
+                    ),
+                  ],
                 ),
               ),
             ],
@@ -307,6 +319,12 @@ class _SidebarState extends State<Sidebar> {
           tooltip: 'App information',
           icon: Icon(Icons.info_outline, color: colorScheme.onSurface.withOpacity(0.6)),
           onPressed: () => _openPage(About()),
+        ),
+        const SizedBox(width: 4),
+        IconButton(
+          tooltip: 'Close sidebar',
+          icon: Icon(Icons.close_rounded, color: colorScheme.onSurface.withOpacity(0.6)),
+          onPressed: _closeDrawer,
         ),
       ],
     );
@@ -337,7 +355,7 @@ class _SidebarState extends State<Sidebar> {
             icon: Icons.dark_mode,
             selected: isDark,
             colorScheme: colorScheme,
-            onTap: () => ThemeService().setThemeMode(AppThemeMode.dark),
+            onTap: _showDarkModeComingSoon,
           ),
         ],
       ),
@@ -685,6 +703,18 @@ class _SidebarState extends State<Sidebar> {
     );
   }
 
+  void _showDarkModeComingSoon() {
+    if (!mounted) return;
+    final messenger = ScaffoldMessenger.of(context);
+    messenger.hideCurrentSnackBar();
+    messenger.showSnackBar(
+      const SnackBar(
+        content: Text('Dark mode support is coming soon.'),
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
+  }
+
   Widget _buildFooter(AppColorScheme colorScheme) {
     final year = DateTime.now().year;
 
@@ -721,8 +751,11 @@ class _SidebarState extends State<Sidebar> {
         final themeService = ThemeService();
         final colorScheme = themeService.colorScheme;
         final isDark = themeService.isDarkMode;
+        final mediaQuery = MediaQuery.of(context);
+        final drawerWidth = math.min(mediaQuery.size.width * 0.9, 420.0);
 
         return Drawer(
+          width: drawerWidth,
           backgroundColor: Colors.transparent,
           elevation: 0,
           child: SafeArea(
