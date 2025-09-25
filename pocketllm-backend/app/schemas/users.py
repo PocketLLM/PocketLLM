@@ -54,8 +54,24 @@ class OnboardingSurvey(BaseModel):
 class DeleteAccountResponse(BaseModel):
     """Response when scheduling account deletion."""
 
-    status: str = "scheduled"
+    status: str = "pending"
+    deletion_requested_at: datetime
     deletion_scheduled_for: datetime
 
 
-__all__ = ["UserProfile", "UserProfileUpdate", "OnboardingSurvey", "DeleteAccountResponse"]
+class CancelDeletionResponse(BaseModel):
+    """Response when cancelling a scheduled deletion."""
+
+    canceled: bool
+    profile: UserProfile
+    previous_deletion_requested_at: datetime | None = None
+    previous_deletion_scheduled_for: datetime | None = None
+
+
+__all__ = [
+    "UserProfile",
+    "UserProfileUpdate",
+    "OnboardingSurvey",
+    "DeleteAccountResponse",
+    "CancelDeletionResponse",
+]

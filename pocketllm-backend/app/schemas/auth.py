@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Optional
+from typing import Literal, Optional
 from uuid import UUID
 
 from pydantic import BaseModel, EmailStr, Field
@@ -44,12 +44,24 @@ class SignUpRequest(BaseModel):
     full_name: Optional[str] = Field(default=None, max_length=120)
 
 
+class AccountStatus(BaseModel):
+    """Account lifecycle metadata returned with auth responses."""
+
+    deletion_scheduled: bool = False
+    deletion_scheduled_for: datetime | None = None
+    deletion_requested_at: datetime | None = None
+    deletion_canceled: bool = False
+    previous_deletion_requested_at: datetime | None = None
+    previous_deletion_scheduled_for: datetime | None = None
+
+
 class SignUpResponse(BaseModel):
     """Response returned after a successful sign up."""
 
     user: AuthenticatedUser
     tokens: AuthTokens | None = None
     session: SessionMetadata | None = None
+    account_status: AccountStatus = Field(default_factory=AccountStatus)
 
 
 class SignInRequest(BaseModel):
@@ -65,6 +77,33 @@ class SignInResponse(BaseModel):
     user: AuthenticatedUser
     tokens: AuthTokens
     session: SessionMetadata
+    account_status: AccountStatus
+
+
+class MagicLinkRequest(BaseModel):
+    """Request a passwordless email link."""
+
+    email: EmailStr
+
+
+class PhoneOtpRequest(BaseModel):
+    """Request an OTP for phone-based sign in."""
+
+    phone: str = Field(min_length=8, max_length=32)
+
+
+class OAuthProviderRequest(BaseModel):
+    """Initiate an OAuth sign-in flow."""
+
+    provider: str
+
+
+class AuthFeatureAvailabilityResponse(BaseModel):
+    """Placeholder response for upcoming authentication features."""
+
+    feature: str
+    status: Literal["coming_soon", "available"] = "coming_soon"
+    message: str
 
 
 class TokenPayload(BaseModel):
@@ -110,6 +149,11 @@ __all__ = [
     "SignUpResponse",
     "SignInRequest",
     "SignInResponse",
+    "AccountStatus",
+    "MagicLinkRequest",
+    "PhoneOtpRequest",
+    "OAuthProviderRequest",
+    "AuthFeatureAvailabilityResponse",
     "TokenPayload",
     "RefreshTokenRequest",
     "RefreshTokenResponse",

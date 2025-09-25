@@ -8,7 +8,13 @@ from uuid import UUID
 from fastapi import HTTPException, status
 
 from app.core.database import Database
-from app.schemas.users import DeleteAccountResponse, OnboardingSurvey, UserProfile, UserProfileUpdate
+from app.schemas.users import (
+    CancelDeletionResponse,
+    DeleteAccountResponse,
+    OnboardingSurvey,
+    UserProfile,
+    UserProfileUpdate,
+)
 
 
 class UsersService:
@@ -17,14 +23,23 @@ class UsersService:
     def __init__(self, database: Database) -> None:
         self._database = database
 
-    async def get_profile(self, user_id: UUID) -> UserProfile:
+    async def _get_profile_record(self, user_id: UUID):
         record = await self._database.fetchrow(
             "SELECT * FROM public.profiles WHERE id = $1",
             user_id,
         )
         if not record:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Profile not found")
+        return record
+
+    async def get_profile(self, user_id: UUID) -> UserProfile:
+        record = await self._get_profile_record(user_id)
         return UserProfile.model_validate(dict(record))
+
+    async def get_profile_by_id(self, user_id: UUID) -> UserProfile:
+        """Fetch a profile by identifier."""
+
+        return await self.get_profile(user_id)
 
     async def update_profile(self, user_id: UUID, payload: UserProfileUpdate) -> UserProfile:
         update_columns = {k: v for k, v in payload.model_dump().items() if v is not None}
@@ -67,19 +82,80 @@ class UsersService:
         record = await self._database.fetchrow(
             """
             UPDATE public.profiles
-            SET deletion_status = 'scheduled',
+            SET deletion_status = 'pending',
                 deletion_requested_at = NOW(),
                 deletion_scheduled_for = $2,
                 updated_at = NOW()
             WHERE id = $1
-            RETURNING deletion_scheduled_for
+            RETURNING deletion_requested_at, deletion_scheduled_for
             """,
             user_id,
             schedule_for,
         )
         if not record:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Profile not found")
-        return DeleteAccountResponse(deletion_scheduled_for=record["deletion_scheduled_for"])
+        return DeleteAccountResponse(
+            deletion_requested_at=record["deletion_requested_at"],
+            deletion_scheduled_for=record["deletion_scheduled_for"],
+        )
+
+    async def cancel_deletion(self, user_id: UUID) -> CancelDeletionResponse:
+        """Cancel a pending deletion request, if present."""
+
+        existing = await self._get_profile_record(user_id)
+        record = await self._database.fetchrow(
+            """
+            UPDATE public.profiles
+            SET deletion_status = 'active',
+                deletion_requested_at = NULL,
+                deletion_scheduled_for = NULL,
+                updated_at = NOW()
+            WHERE id = $1
+            RETURNING *
+            """,
+            user_id,
+        )
+        return CancelDeletionResponse(
+            canceled=existing["deletion_status"] == "pending",
+            previous_deletion_requested_at=existing["deletion_requested_at"]
+            if existing["deletion_status"] == "pending"
+            else None,
+            previous_deletion_scheduled_for=existing["deletion_scheduled_for"]
+            if existing["deletion_status"] == "pending"
+            else None,
+            profile=UserProfile.model_validate(dict(record)),
+        )
+
+    async def cancel_deletion_if_pending(self, user_id: UUID) -> CancelDeletionResponse:
+        """Cancel the scheduled deletion only when the account is pending deletion."""
+
+        existing = await self._get_profile_record(user_id)
+        if existing["deletion_status"] != "pending":
+            return CancelDeletionResponse(
+                canceled=False,
+                previous_deletion_requested_at=None,
+                previous_deletion_scheduled_for=None,
+                profile=UserProfile.model_validate(dict(existing)),
+            )
+
+        record = await self._database.fetchrow(
+            """
+            UPDATE public.profiles
+            SET deletion_status = 'active',
+                deletion_requested_at = NULL,
+                deletion_scheduled_for = NULL,
+                updated_at = NOW()
+            WHERE id = $1
+            RETURNING *
+            """,
+            user_id,
+        )
+        return CancelDeletionResponse(
+            canceled=True,
+            previous_deletion_requested_at=existing["deletion_requested_at"],
+            previous_deletion_scheduled_for=existing["deletion_scheduled_for"],
+            profile=UserProfile.model_validate(dict(record)),
+        )
 
 
 __all__ = ["UsersService"]

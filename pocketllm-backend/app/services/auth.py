@@ -12,6 +12,7 @@ from fastapi import HTTPException, status
 from app.core.config import Settings
 from app.core.database import Database
 from app.schemas.auth import (
+    AccountStatus,
     AuthTokens,
     AuthenticatedUser,
     SessionMetadata,
@@ -22,6 +23,7 @@ from app.schemas.auth import (
     SignUpResponse,
 )
 from app.utils.security import create_supabase_service_headers
+from app.services.users import UsersService
 
 
 class AuthService:
@@ -56,7 +58,13 @@ class AuthService:
         session = self._map_session(session_payload)
 
         await self._upsert_profile(user, payload.full_name)
-        return SignUpResponse(user=user, tokens=tokens, session=session)
+        account_status = AccountStatus()
+        return SignUpResponse(
+            user=user,
+            tokens=tokens,
+            session=session,
+            account_status=account_status,
+        )
 
     async def sign_in(self, payload: SignInRequest) -> SignInResponse:
         """Authenticate a user via email/password."""
@@ -78,7 +86,8 @@ class AuthService:
         tokens = self._map_tokens(data)
         session = self._map_session(data)
         await self._upsert_profile(user)
-        return SignInResponse(user=user, tokens=tokens, session=session)
+        account_status = await self._resolve_account_status(user.id)
+        return SignInResponse(user=user, tokens=tokens, session=session, account_status=account_status)
 
     async def sign_out(self, access_token: str) -> SignOutResponse:
         """Invalidate the active session."""
@@ -108,6 +117,20 @@ class AuthService:
             updated_at = NOW()
         """
         await self._database.execute(query, user.id, user.email, full_name)
+
+    async def _resolve_account_status(self, user_id: UUID) -> AccountStatus:
+        users_service = UsersService(database=self._database)
+        cancellation = await users_service.cancel_deletion_if_pending(user_id)
+        profile = cancellation.profile
+        deletion_scheduled = profile.deletion_status == "pending" and profile.deletion_scheduled_for is not None
+        return AccountStatus(
+            deletion_scheduled=deletion_scheduled,
+            deletion_scheduled_for=profile.deletion_scheduled_for,
+            deletion_requested_at=profile.deletion_requested_at,
+            deletion_canceled=cancellation.canceled,
+            previous_deletion_requested_at=cancellation.previous_deletion_requested_at,
+            previous_deletion_scheduled_for=cancellation.previous_deletion_scheduled_for,
+        )
 
     def _map_user(self, payload: dict[str, Any] | None) -> AuthenticatedUser:
         if not payload:

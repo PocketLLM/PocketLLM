@@ -8,17 +8,34 @@ in the `Authorization: Bearer <token>` header.
 ### `POST /v1/auth/signup`
 Register a new user through Supabase GoTrue.
 - **Body:** `SignUpRequest { email, password, full_name? }`
-- **Response:** `SignUpResponse { user, tokens, session? }`
+- **Response:** `SignUpResponse { user, tokens, session?, account_status }`
+  - `account_status` surfaces deletion metadata (`deletion_scheduled`, `deletion_canceled`, `previous_deletion_*`).
 
 ### `POST /v1/auth/signin`
 Authenticate an existing user with email/password credentials.
 - **Body:** `SignInRequest { email, password }`
-- **Response:** `SignInResponse { user, tokens, session }`
+- **Response:** `SignInResponse { user, tokens, session, account_status }`
+  - When an account deletion was previously scheduled the backend automatically cancels it and flags `account_status.deletion_canceled = true` while preserving historical timestamps.
 
 ### `POST /v1/auth/signout`
 Invalidate the current session using the provided access token.
 - **Headers:** `Authorization: Bearer <access_token>`
 - **Response:** `SignOutResponse`
+
+### `POST /v1/auth/signin/magic-link`
+Placeholder endpoint announcing the upcoming passwordless email flow.
+- **Body:** `MagicLinkRequest { email }`
+- **Response:** `AuthFeatureAvailabilityResponse { feature="magic_link", status="coming_soon", message }`
+
+### `POST /v1/auth/signin/otp`
+Placeholder endpoint for SMS one-time-passcode sign-in.
+- **Body:** `PhoneOtpRequest { phone }`
+- **Response:** `AuthFeatureAvailabilityResponse { feature="sms_otp", status="coming_soon", message }`
+
+### `POST /v1/auth/signin/oauth`
+Placeholder endpoint for third-party OAuth provider flows.
+- **Body:** `OAuthProviderRequest { provider }`
+- **Response:** `AuthFeatureAvailabilityResponse { feature="oauth:<provider>", status="coming_soon", message }`
 
 ## Users
 
@@ -32,12 +49,20 @@ Update profile attributes such as name, username, and avatar.
 - **Response:** `UserProfile`
 
 ### `DELETE /v1/users/profile`
-Schedule account deletion after a configurable retention period (default 30 days).
-- **Response:** `DeleteAccountResponse`
+Schedule account deletion after a 30 day grace period.
+- **Response:** `DeleteAccountResponse { status="pending", deletion_requested_at, deletion_scheduled_for }`
+
+### `POST /v1/users/profile/deletion/cancel`
+Cancel a scheduled deletion. Automatically invoked during sign-in and exposed for manual recovery.
+- **Response:** `CancelDeletionResponse { canceled, profile, previous_deletion_requested_at?, previous_deletion_scheduled_for? }`
 
 ### `POST /v1/users/profile/onboarding`
 Persist onboarding questionnaire results.
 - **Body:** `OnboardingSurvey`
+- **Response:** `UserProfile`
+
+### `GET /v1/users/{userId}`
+Fetch a profile by identifier. For security the caller must match the requested `userId`.
 - **Response:** `UserProfile`
 
 ## Chats

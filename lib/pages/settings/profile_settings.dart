@@ -6,6 +6,7 @@ import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../auth/auth_page.dart';
+import '../../models/user_profile.dart';
 import '../../services/auth_state.dart';
 
 extension StringExtension on String {
@@ -266,6 +267,41 @@ class _ProfileSettingsPageState extends State<ProfileSettingsPage> {
     }
   }
 
+  Widget _buildPendingDeletionCard(AuthState authState, UserProfile profile) {
+    return Container(
+      key: const ValueKey('pending-deletion-card'),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.orange[50],
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.orange[200]!),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'Account scheduled for deletion',
+            style: TextStyle(fontWeight: FontWeight.bold, color: Colors.orange),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            'Your account will be removed on ${_formatDateDisplay(profile.deletionScheduledFor)} unless you cancel.',
+            style: const TextStyle(color: Colors.orange),
+          ),
+          const SizedBox(height: 8),
+          Align(
+            alignment: Alignment.centerLeft,
+            child: TextButton.icon(
+              onPressed: _isProcessing ? null : () => _cancelDeletion(authState),
+              icon: const Icon(Icons.restore, size: 18),
+              label: const Text('Cancel deletion'),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildProfileContent(AuthState authState) {
     final profile = authState.profile;
     if (profile == null) {
@@ -284,17 +320,24 @@ class _ProfileSettingsPageState extends State<ProfileSettingsPage> {
       }
     }
 
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(16.0),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Center(
-            child: Column(
-              children: [
-                GestureDetector(
-                  onTap: _isProcessing ? null : () => _pickImage(authState),
-                  child: Stack(
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final maxContentWidth = constraints.maxWidth > 860 ? 860.0 : constraints.maxWidth;
+        return Align(
+          alignment: Alignment.topCenter,
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.all(16.0),
+            child: ConstrainedBox(
+              constraints: BoxConstraints(maxWidth: maxContentWidth),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Center(
+                    child: Column(
+                      children: [
+                        GestureDetector(
+                          onTap: _isProcessing ? null : () => _pickImage(authState),
+                          child: Stack(
                     children: [
                       CircleAvatar(
                         radius: 60,
@@ -317,40 +360,20 @@ class _ProfileSettingsPageState extends State<ProfileSettingsPage> {
                   ),
                 ),
                 const SizedBox(height: 16),
-                Text(profile.username ?? 'Username', style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold)),
-                Text(profile.email, style: TextStyle(fontSize: 16, color: Colors.grey[600])),
-                if (profile.hasPendingDeletion) ...[
-                  const SizedBox(height: 12),
-                  Container(
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: Colors.orange[50],
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: Colors.orange[200]!),
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Text('Account scheduled for deletion', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.orange)),
-                        const SizedBox(height: 4),
-                        Text(
-                          'Your account will be removed on ${_formatDateDisplay(profile.deletionScheduledFor)} unless you cancel.',
-                          style: const TextStyle(color: Colors.orange),
-                        ),
-                        const SizedBox(height: 8),
-                        TextButton(
-                          onPressed: _isProcessing ? null : () => _cancelDeletion(authState),
-                          child: const Text('Cancel deletion'),
+                        Text(profile.username ?? 'Username', style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold)),
+                        Text(profile.email, style: TextStyle(fontSize: 16, color: Colors.grey[600])),
+                        const SizedBox(height: 12),
+                        AnimatedSwitcher(
+                          duration: const Duration(milliseconds: 280),
+                          child: profile.hasPendingDeletion
+                              ? _buildPendingDeletionCard(authState, profile)
+                              : const SizedBox.shrink(key: ValueKey('no-deletion-card')),
                         ),
                       ],
                     ),
                   ),
-                ],
-              ],
-            ),
-          ),
-          const SizedBox(height: 32),
-          _buildSectionTitle('Personal Information'),
+                  const SizedBox(height: 32),
+                  _buildSectionTitle('Personal Information'),
           const SizedBox(height: 16),
           _buildEditableField('Full Name', profile.fullName ?? '', () => _updateField(authState, 'full_name', profile.fullName ?? '')),
           _buildEditableField('Username', profile.username ?? '', () => _updateField(authState, 'username', profile.username ?? '')),
@@ -368,21 +391,25 @@ class _ProfileSettingsPageState extends State<ProfileSettingsPage> {
           _buildSettingsItem(Icons.lock_outline, 'Change Password', () => _changePassword(authState)),
           _buildSettingsItem(Icons.delete_outline, 'Delete Account', () => _handleDeleteAccount(authState), isDestructive: true),
           const SizedBox(height: 32),
-          Center(
-            child: ElevatedButton.icon(
-              onPressed: _isProcessing ? null : () => _handleSignOut(authState),
-              icon: const Icon(Icons.logout),
-              label: const Text('Logout'),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFF8B5CF6),
-                foregroundColor: Colors.white,
-                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  Center(
+                    child: ElevatedButton.icon(
+                      onPressed: _isProcessing ? null : () => _handleSignOut(authState),
+                      icon: const Icon(Icons.logout),
+                      label: const Text('Logout'),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFF8B5CF6),
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      ),
+                    ),
+                  ),
+                ],
               ),
             ),
           ),
-        ],
-      ),
+        );
+      },
     );
   }
 
