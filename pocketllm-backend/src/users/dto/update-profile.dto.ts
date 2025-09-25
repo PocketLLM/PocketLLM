@@ -52,6 +52,15 @@ export class UpdateProfileDto {
   profession?: string | null;
 
   @ApiProperty({
+    description: 'How the user heard about PocketLLM',
+    example: 'Friend recommendation',
+    required: false,
+  })
+  @IsOptional()
+  @IsString()
+  heard_from?: string | null;
+
+  @ApiProperty({
     description: 'Avatar URL',
     example: 'https://example.com/avatar.jpg',
     required: false,

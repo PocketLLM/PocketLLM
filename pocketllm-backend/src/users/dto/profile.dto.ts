@@ -4,6 +4,9 @@ export class ProfileDto {
   @ApiProperty({ description: 'Profile ID (UUID)' })
   id: string;
 
+  @ApiProperty({ description: 'User email address' })
+  email: string;
+
   @ApiProperty({ description: 'User full name', nullable: true })
   full_name: string | null;
 
@@ -19,11 +22,23 @@ export class ProfileDto {
   @ApiProperty({ description: 'User profession', nullable: true })
   profession: string | null;
 
+  @ApiProperty({ description: 'How the user heard about the product', nullable: true })
+  heard_from: string | null;
+
   @ApiProperty({ description: 'Avatar URL', nullable: true })
   avatar_url: string | null;
 
   @ApiProperty({ description: 'Whether user has completed the survey' })
   survey_completed: boolean;
+
+  @ApiProperty({ description: 'Account deletion status', example: 'active' })
+  deletion_status: string;
+
+  @ApiProperty({ description: 'Timestamp when account deletion was requested', nullable: true })
+  deletion_requested_at: string | null;
+
+  @ApiProperty({ description: 'Scheduled timestamp for account deletion', nullable: true })
+  deletion_scheduled_for: string | null;
 
   @ApiProperty({ description: 'Profile creation timestamp' })
   created_at: string;
