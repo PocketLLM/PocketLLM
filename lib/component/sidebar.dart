@@ -299,7 +299,7 @@ class _SidebarState extends State<Sidebar> {
                     ),
                     const SizedBox(height: 2),
                     Text(
-                      'PocketLLM Explorer',
+                      'PocketLLM',
                       style: TextStyle(
                         color: colorScheme.onSurface,
                         fontSize: 20,
@@ -819,7 +819,7 @@ class _SidebarState extends State<Sidebar> {
                                     const SizedBox(height: 24),
                                     _buildNavigationSection(colorScheme),
                                     const SizedBox(height: 24),
-                                    _buildChatHistorySection(colorScheme),
+                                    // _buildChatHistorySection(colorScheme), // Removed duplicate chat history section
                                   ],
                                 ),
                               ),
