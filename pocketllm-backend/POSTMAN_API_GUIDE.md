@@ -23,7 +23,7 @@ Follow these steps to prepare the NestJS backend before exercising the API colle
    ```bash
    npm run start:dev
    ```
-   The REST API will be available at `http://localhost:8000/v1` and Swagger documentation at `http://localhost:8000/api/docs`.
+   The REST API will be available at `http://localhost:8000/v1` and Swagger documentation at `http://localhost:8000/docs` (the legacy path `http://localhost:8000/api/docs` remains available).
 4. **Authenticate requests**
    Use `POST /v1/auth/signin` to obtain an access token and send it in the `Authorization: Bearer <token>` header when calling protected routes. The Users, Chats, and Jobs controllers are guarded by the Supabase JWT so every request must include a valid token.
 
@@ -1097,7 +1097,7 @@ All errors follow the same format:
 ### Mobile Device Connectivity
 When running the Flutter client on a physical device while the backend is hosted on your development machine:
 
-1. Confirm both devices share the same Wi‑Fi/LAN and the backend is reachable at `http://<computer-ip>:8000/api/docs`.
+1. Confirm both devices share the same Wi‑Fi/LAN and the backend is reachable at `http://<computer-ip>:8000/docs` (or `http://<computer-ip>:8000/api/docs`).
 2. Launch Flutter with a LAN override so API calls target your desktop instead of `localhost`:
    ```bash
    flutter run --dart-define=POCKETLLM_BACKEND_URL=http://<computer-ip>:8000/v1

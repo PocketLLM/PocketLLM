@@ -41,8 +41,10 @@ export async function createApp() {
     }),
   );
 
-  // Swagger documentation setup (only in development)
-  if (process.env.NODE_ENV !== 'production') {
+  const docsConfig = configService.get<{ enabled?: boolean; paths?: string[] }>('app.docs');
+  const shouldEnableDocs = docsConfig?.enabled !== false;
+
+  if (shouldEnableDocs) {
     const config = new DocumentBuilder()
       .setTitle('PocketLLM API')
       .setDescription('Backend API for PocketLLM - AI Chat Application')
@@ -55,10 +57,25 @@ export async function createApp() {
       .build();
 
     const document = SwaggerModule.createDocument(app, config);
-    SwaggerModule.setup('api/docs', app, document, {
-      swaggerOptions: {
-        persistAuthorization: true,
-      },
+    const docPaths = Array.isArray(docsConfig?.paths) && docsConfig.paths.length > 0
+      ? docsConfig.paths
+      : ['docs', 'api/docs'];
+
+    const normalizedDocPaths = Array.from(
+      new Set(
+        docPaths
+          .map((path) => path.trim())
+          .filter((path) => path.length > 0)
+          .map((path) => path.replace(/^\/+/, '')),
+      ),
+    );
+
+    normalizedDocPaths.forEach((path) => {
+      SwaggerModule.setup(path, app, document, {
+        swaggerOptions: {
+          persistAuthorization: true,
+        },
+      });
     });
   }
 
@@ -74,7 +91,35 @@ async function bootstrap() {
   await app.listen(port);
   
   console.log(`🚀 PocketLLM Backend is running on: http://localhost:${port}`);
-  console.log(`📚 API Documentation: http://localhost:${port}/api/docs`);
+  const docsConfig = app.get(ConfigService).get<{ enabled?: boolean; paths?: string[] }>('app.docs');
+  if (docsConfig?.enabled !== false) {
+    const docPaths = Array.isArray(docsConfig?.paths) && docsConfig.paths.length > 0
+      ? docsConfig.paths
+      : ['docs', 'api/docs'];
+    const normalizedDocPaths = Array.from(
+      new Set(
+        docPaths
+          .map((path) => path.trim())
+          .filter((path) => path.length > 0)
+          .map((path) => path.replace(/^\/+/, '')),
+      ),
+    );
+
+    if (normalizedDocPaths.length > 0) {
+      console.log(
+        `📚 API Documentation: http://localhost:${port}/${normalizedDocPaths[0]}`,
+      );
+
+      if (normalizedDocPaths.length > 1) {
+        console.log(
+          `   Alternate documentation URLs: ${normalizedDocPaths
+            .slice(1)
+            .map((path) => `http://localhost:${port}/${path}`)
+            .join(', ')}`,
+        );
+      }
+    }
+  }
   console.log(`🔗 API Base URL: http://localhost:${port}/v1`);
 }
 

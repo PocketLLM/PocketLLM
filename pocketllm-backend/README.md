@@ -118,7 +118,7 @@ npm run start:debug
 ```
 
 The server will start on `http://localhost:8000` with:
-- 📚 API Documentation: `http://localhost:8000/api/docs`
+- 📚 API Documentation: `http://localhost:8000/docs` (legacy: `http://localhost:8000/api/docs`)
 - 🔗 API Base URL: `http://localhost:8000/v1`
 
 ## ☁️ Deploying to Vercel
@@ -152,14 +152,18 @@ After Vercel finishes building:
 
 1. Visit `https://<your-vercel-domain>/` – you should see a JSON payload confirming that the API is running and that all endpoints live under `/v1`.
 2. Visit `https://<your-vercel-domain>/health` to perform a lightweight health check that Vercel can use for monitoring.
-3. Call one of the actual API routes such as `https://<your-vercel-domain>/v1/auth/signin` to confirm that routing (and the `/v1` prefix) works as expected.
+3. Browse the live Swagger UI at `https://<your-vercel-domain>/docs` (or the legacy path `https://<your-vercel-domain>/api/docs`).
+4. Call one of the actual API routes such as `https://<your-vercel-domain>/v1/auth/signin` to confirm that routing (and the `/v1` prefix) works as expected.
 
 If you encounter a 404, double-check that the project root is set to `pocketllm-backend` and that the output directory is left blank. Setting an output directory forces Vercel to treat the build as a static site and bypass the serverless handler, which results in the `404: NOT_FOUND` error.
 
 ## 📖 API Documentation
 
-The API is fully documented with Swagger/OpenAPI. Once the server is running, visit:
-`http://localhost:8000/api/docs`
+The API is fully documented with Swagger/OpenAPI. Once the server is running, visit `http://localhost:8000/docs` for the primary UI (the legacy path `http://localhost:8000/api/docs` remains available).
+
+> **Tip:** You can customise documentation availability via environment variables:
+> - `SWAGGER_ENABLED=false` disables Swagger entirely.
+> - `SWAGGER_PATHS=/docs,/api/docs` controls which paths expose the Swagger UI (comma-separated list).
 
 ### Key Endpoints
 

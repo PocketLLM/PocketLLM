@@ -91,8 +91,9 @@ When updating the comprehensive API guide ([api-documentation.md](api-documentat
 
 The backend automatically generates Swagger documentation available at:
 ```
-http://localhost:8000/api/docs
+http://localhost:8000/docs
 ```
+(the legacy path `http://localhost:8000/api/docs` remains available)
 
 To view the latest documentation:
 1. Start the backend server: `npm run start:dev`

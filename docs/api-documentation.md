@@ -860,7 +860,7 @@ For testing the API, you can use:
 
 1. **Postman**: Import the collection from [POSTMAN_API_GUIDE.md](../pocketllm-backend/POSTMAN_API_GUIDE.md)
 2. **curl**: Command-line HTTP client
-3. **Swagger UI**: Available at `http://localhost:8000/api/docs` when the server is running
+3. **Swagger UI**: Available at `http://localhost:8000/docs` (legacy: `http://localhost:8000/api/docs`) when the server is running
 
 ## 📚 Additional Resources
 

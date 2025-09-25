@@ -15,4 +15,11 @@ export default registerAs('app', () => ({
     prefix: 'v1',
     version: '1.0.0',
   },
+  docs: {
+    enabled: process.env.SWAGGER_ENABLED !== 'false',
+    paths:
+      process.env.SWAGGER_PATHS?.split(',')
+        .map((path) => path.trim())
+        .filter(Boolean) || ['docs', 'api/docs'],
+  },
 }));
