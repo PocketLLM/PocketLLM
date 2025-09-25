@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter/foundation.dart';
 import 'component/splash_screen.dart';
 import 'component/home_screen.dart';
 import 'component/onboarding_screens/onboarding_screen.dart';
@@ -10,6 +9,7 @@ import 'services/model_state.dart';
 import 'services/error_service.dart';
 import 'services/app_lifecycle_service.dart';
 import 'services/auth_state.dart';
+import 'services/theme_service.dart';
 
 import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:async';
@@ -51,13 +51,15 @@ void main() async {
   // Catch any errors that occur during app initialization
   await runZonedGuarded(() async {
     WidgetsFlutterBinding.ensureInitialized();
-    
+
     // Set preferred orientations
     await SystemChrome.setPreferredOrientations([
       DeviceOrientation.portraitUp,
       DeviceOrientation.portraitDown,
     ]);
-    
+
+    await ThemeService().init();
+
     // Initialize app lifecycle service
     final appLifecycleService = AppLifecycleService();
     
@@ -115,7 +117,7 @@ void main() async {
 class MyApp extends StatelessWidget {
   final AppLifecycleService appLifecycleService;
   final String? initializationError;
-  
+
   const MyApp({
     required this.appLifecycleService,
     this.initializationError,
@@ -124,23 +126,25 @@ class MyApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'PocketLLM',
-      theme: ThemeData(
-        primarySwatch: Colors.purple,
-        primaryColor: Colors.purple,
-        colorScheme: ColorScheme.fromSeed(
-          seedColor: Colors.purple,
-          brightness: Brightness.light,
-        ),
-      ),
-      debugShowCheckedModeBanner: false,
-      home: initializationError != null
-          ? ErrorScreen(
-              error: initializationError!,
-              appLifecycleService: appLifecycleService,
-            )
-          : SplashLoader(appLifecycleService: appLifecycleService),
+    return AnimatedBuilder(
+      animation: ThemeService(),
+      builder: (context, _) {
+        final themeService = ThemeService();
+
+        return MaterialApp(
+          title: 'PocketLLM',
+          theme: themeService.lightTheme,
+          darkTheme: themeService.darkTheme,
+          themeMode: ThemeMode.light,
+          debugShowCheckedModeBanner: false,
+          home: initializationError != null
+              ? ErrorScreen(
+                  error: initializationError!,
+                  appLifecycleService: appLifecycleService,
+                )
+              : SplashLoader(appLifecycleService: appLifecycleService),
+        );
+      },
     );
   }
 }

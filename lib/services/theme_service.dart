@@ -85,10 +85,10 @@ class ThemeService extends ChangeNotifier {
   static const String _themeModeKey = 'theme_mode';
   static const String _colorSchemeTypeKey = 'color_scheme_type';
   static const String _systemThemeKey = 'follow_system_theme';
-  
-  AppThemeMode _themeMode = AppThemeMode.system;
+
+  AppThemeMode _themeMode = AppThemeMode.light;
   ColorSchemeType _colorSchemeType = ColorSchemeType.standard;
-  bool _followSystemTheme = true;
+  bool _followSystemTheme = false;
   Brightness _systemBrightness = Brightness.light;
   
   AppThemeMode get themeMode => _themeMode;
@@ -100,128 +100,90 @@ class ThemeService extends ChangeNotifier {
 
   Future<void> init() async {
     final prefs = await SharedPreferences.getInstance();
-    
-    // Load theme preferences
-    final themeModeIndex = prefs.getInt(_themeModeKey) ?? AppThemeMode.system.index;
-    _themeMode = AppThemeMode.values[themeModeIndex];
-    
-    final colorSchemeIndex = prefs.getInt(_colorSchemeTypeKey) ?? ColorSchemeType.standard.index;
-    _colorSchemeType = ColorSchemeType.values[colorSchemeIndex];
-    
-    _followSystemTheme = prefs.getBool(_systemThemeKey) ?? true;
-    
-    // Get system brightness
-    _updateSystemBrightness();
-    
+
+    // Always start in light mode while dark mode is not implemented.
+    _themeMode = AppThemeMode.light;
+    _colorSchemeType = ColorSchemeType.standard;
+    _followSystemTheme = false;
+    _systemBrightness = Brightness.light;
+
+    await prefs.setInt(_themeModeKey, AppThemeMode.light.index);
+    await prefs.setInt(_colorSchemeTypeKey, ColorSchemeType.standard.index);
+    await prefs.setBool(_systemThemeKey, false);
+
+    _updateSystemStatusBar();
+
     notifyListeners();
   }
-  
+
   void _updateSystemBrightness() {
-    try {
-      final window = WidgetsBinding.instance.platformDispatcher;
-      _systemBrightness = window.platformBrightness;
-    } catch (e) {
-      // Fallback to light mode if binding is not initialized (e.g., in tests)
-      _systemBrightness = Brightness.light;
-    }
+    _systemBrightness = Brightness.light;
   }
-  
+
   Future<void> setThemeMode(AppThemeMode mode) async {
-    if (_themeMode == mode) return;
-    
-    _themeMode = mode;
+    // Persist the request but keep the app in light mode until dark mode is supported.
+    _themeMode = AppThemeMode.light;
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setInt(_themeModeKey, mode.index);
-    
+    await prefs.setInt(_themeModeKey, AppThemeMode.light.index);
+
     _updateSystemStatusBar();
     notifyListeners();
   }
   
   Future<void> setColorSchemeType(ColorSchemeType type) async {
     if (_colorSchemeType == type) return;
-    
+
     _colorSchemeType = type;
     final prefs = await SharedPreferences.getInstance();
     await prefs.setInt(_colorSchemeTypeKey, type.index);
-    
+
     notifyListeners();
   }
-  
+
   Future<void> setFollowSystemTheme(bool follow) async {
-    if (_followSystemTheme == follow) return;
-    
-    _followSystemTheme = follow;
+    if (_followSystemTheme == false) return;
+
+    _followSystemTheme = false;
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool(_systemThemeKey, follow);
-    
+    await prefs.setBool(_systemThemeKey, false);
+
     notifyListeners();
   }
-  
+
   Future<void> toggleDarkMode() async {
-    final newMode = isDarkMode ? AppThemeMode.light : AppThemeMode.dark;
-    await setThemeMode(newMode);
+    await setThemeMode(AppThemeMode.light);
   }
-  
+
   void updateSystemBrightness(Brightness brightness) {
-    if (_systemBrightness == brightness) return;
-    
-    _systemBrightness = brightness;
-    if (_followSystemTheme && _themeMode == AppThemeMode.system) {
-      _updateSystemStatusBar();
-      notifyListeners();
-    }
+    if (_systemBrightness == Brightness.light) return;
+
+    _systemBrightness = Brightness.light;
   }
-  
-  Brightness _getEffectiveBrightness() {
-    switch (_themeMode) {
-      case AppThemeMode.light:
-        return Brightness.light;
-      case AppThemeMode.dark:
-      case AppThemeMode.highContrast:
-        return Brightness.dark;
-      case AppThemeMode.system:
-        return _followSystemTheme ? _systemBrightness : Brightness.light;
-    }
-  }
-  
+
+  Brightness _getEffectiveBrightness() => Brightness.light;
+
   void _updateSystemStatusBar() {
-    final brightness = _getEffectiveBrightness();
     SystemChrome.setSystemUIOverlayStyle(
       SystemUiOverlayStyle(
         statusBarColor: Colors.transparent,
-        statusBarIconBrightness: brightness == Brightness.dark 
-            ? Brightness.light 
-            : Brightness.dark,
-        systemNavigationBarColor: brightness == Brightness.dark
-            ? const Color(0xFF121212)
-            : Colors.white,
-        systemNavigationBarIconBrightness: brightness == Brightness.dark
-            ? Brightness.light
-            : Brightness.dark,
+        statusBarIconBrightness: Brightness.dark,
+        systemNavigationBarColor: Colors.white,
+        systemNavigationBarIconBrightness: Brightness.dark,
       ),
     );
   }
 
-  AppColorScheme _getCurrentColorScheme() {
-    final brightness = _getEffectiveBrightness();
-    
-    switch (_colorSchemeType) {
-      case ColorSchemeType.standard:
-        return brightness == Brightness.dark ? _darkColorScheme : _lightColorScheme;
-      case ColorSchemeType.highContrast:
-        return brightness == Brightness.dark ? _darkHighContrastColorScheme : _lightHighContrastColorScheme;
-      case ColorSchemeType.custom:
-        // TODO: Implement custom color schemes
-        return brightness == Brightness.dark ? _darkColorScheme : _lightColorScheme;
-    }
-  }
-  
+  AppColorScheme _getColorSchemeForBrightness(Brightness brightness) => _lightColorScheme;
+
+  AppColorScheme _getCurrentColorScheme() => _lightColorScheme;
+
   ThemeData get currentTheme {
-    final brightness = _getEffectiveBrightness();
-    final colorScheme = _getCurrentColorScheme();
-    
-    return _buildThemeData(brightness, colorScheme);
+    return _buildThemeData(Brightness.light, _lightColorScheme);
   }
+
+  ThemeData get lightTheme => _buildThemeData(Brightness.light, _lightColorScheme);
+
+  ThemeData get darkTheme => _buildThemeData(Brightness.light, _lightColorScheme);
   
   ThemeData _buildThemeData(Brightness brightness, AppColorScheme colorScheme) {
     final isDark = brightness == Brightness.dark;
