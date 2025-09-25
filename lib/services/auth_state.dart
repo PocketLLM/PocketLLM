@@ -115,6 +115,11 @@ class AuthStateNotifier extends ChangeNotifier {
         return;
       }
 
+      await _verifyBackendHealth();
+      if (!_serviceAvailable) {
+        return;
+      }
+
       _accessToken = await _secureStorage.read(key: _accessTokenKey);
       _refreshToken = await _secureStorage.read(key: _refreshTokenKey);
       final expiryIso = await _secureStorage.read(key: _tokenExpiryKey);
@@ -147,6 +152,35 @@ class AuthStateNotifier extends ChangeNotifier {
         _readyCompleter.complete();
       }
       notifyListeners();
+    }
+  }
+
+  Future<void> _verifyBackendHealth() async {
+    try {
+      final response = await _backendApi.get(
+        '/health',
+        withSuffix: false,
+      );
+
+      if (response is Map<String, dynamic>) {
+        final successFlag = response['success'];
+        if (successFlag is bool && !successFlag) {
+          _serviceAvailable = false;
+          return;
+        }
+      }
+
+      _serviceAvailable = true;
+    } on BackendApiException catch (error) {
+      debugPrint(
+        'AuthState: Backend health check failed: ${error.statusCode} - ${error.message}',
+      );
+      _serviceAvailable = false;
+    } on SocketException {
+      _serviceAvailable = false;
+    } catch (error) {
+      debugPrint('AuthState: Unexpected health check error: $error');
+      _serviceAvailable = false;
     }
   }
 
