@@ -4,13 +4,18 @@
 -- =================================================================
 CREATE TABLE public.profiles (
   id UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
+  email TEXT NOT NULL,
   full_name TEXT,
   username TEXT UNIQUE,
   bio TEXT,
   date_of_birth DATE,
   profession TEXT,
+  heard_from TEXT,
   avatar_url TEXT,
   survey_completed BOOLEAN DEFAULT FALSE,
+  deletion_status TEXT DEFAULT 'active',
+  deletion_requested_at TIMESTAMPTZ,
+  deletion_scheduled_for TIMESTAMPTZ,
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );

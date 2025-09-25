@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -34,10 +35,17 @@ class _AuthPageState extends State<AuthPage> {
   final FocusNode _emailFocus = FocusNode();
   final FocusNode _passwordFocus = FocusNode();
 
+  static final RegExp _emailRegex =
+      RegExp(r'^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$');
+
   _AuthMode _mode = _AuthMode.signIn;
   bool _obscurePassword = true;
   bool _obscureConfirmPassword = true;
   bool _isSurveyActive = false;
+
+  void _log(String message) {
+    debugPrint('[AuthPage] $message');
+  }
 
   @override
   void dispose() {
@@ -238,13 +246,15 @@ class _AuthPageState extends State<AuthPage> {
                 hintText: 'Email',
                 keyboardType: TextInputType.emailAddress,
                 textInputAction: TextInputAction.next,
-                onSubmitted: (_) => FocusScope.of(context).requestFocus(_passwordFocus),
+                autovalidateMode: AutovalidateMode.onUserInteraction,
+                onSubmitted: (_) =>
+                    FocusScope.of(context).requestFocus(_passwordFocus),
                 validator: (value) {
                   if (value == null || value.isEmpty) {
                     return 'Please enter your email address';
                   }
-                  final emailRegex = RegExp(r'^[\\w-\\.]+@([\\w-]+\\.)+[\\w-]{2,4}\\$');
-                  if (!emailRegex.hasMatch(value.trim())) {
+                  final normalizedValue = value.trim();
+                  if (!_emailRegex.hasMatch(normalizedValue)) {
                     return 'Enter a valid email address';
                   }
                   return null;
@@ -688,22 +698,31 @@ class _AuthPageState extends State<AuthPage> {
 
   Future<void> _handleSubmit(BuildContext context) async {
     final authState = context.read<AuthState>();
+    _log('Submit tapped. mode=$_mode, serviceAvailable=${authState.isServiceAvailable}, isPerformingRequest=${authState.isPerformingRequest}');
     if (!authState.isServiceAvailable) {
+      _log('Submission aborted: authentication service unavailable.');
       _showSnackBar(context, 'Authentication service is currently unavailable. Please try again soon.');
       return;
     }
 
-    if (!(_formKey.currentState?.validate() ?? false)) {
+    final isValid = _formKey.currentState?.validate() ?? false;
+    _log('Form validation result: $isValid');
+    if (!isValid) {
+      _log('Submission aborted: form validation failed.');
       return;
     }
 
     final email = _emailController.text.trim();
     final password = _passwordController.text;
+    _log('Attempting submission for email=$email');
 
     try {
       if (_mode == _AuthMode.signIn) {
+        _log('Starting sign-in flow.');
         final result = await authState.signInWithEmail(email: email, password: password);
         if (!mounted) return;
+
+        _log('Sign-in completed. canceledDeletion=${result.canceledDeletion}, profileLoaded=${authState.profile != null}');
 
         await _clearAuthSkipFlag();
         final profile = authState.profile;
@@ -724,14 +743,20 @@ class _AuthPageState extends State<AuthPage> {
           }
         }
       } else {
+        _log('Starting sign-up flow.');
         final result = await authState.signUpWithEmail(email: email, password: password);
         if (!mounted) return;
 
+        _log('Sign-up completed. userId=${result.userId}, emailConfirmationRequired=${result.emailConfirmationRequired}');
+
         if (result.emailConfirmationRequired) {
           await _clearAuthSkipFlag();
+          final message = (result.message?.isNotEmpty ?? false)
+              ? result.message!
+              : 'Please check your email to confirm your account before continuing.';
           _showSnackBar(
             context,
-            'Please check your email to confirm your account before continuing.',
+            message,
             success: true,
           );
           widget.onLoginSuccess?.call(authState.currentUserEmail ?? email);
@@ -746,10 +771,13 @@ class _AuthPageState extends State<AuthPage> {
         }
       }
     } on AuthException catch (e) {
+      _log('Authentication error surfaced to UI: ${e.message}');
       _showSnackBar(context, e.message, success: false);
     } on StateError catch (e) {
+      _log('State error surfaced to UI: ${e.message}');
       _showSnackBar(context, e.message, success: false);
     } catch (e) {
+      _log('Unexpected error surfaced to UI: $e');
       _showSnackBar(context, 'Something went wrong: $e', success: false);
     }
   }

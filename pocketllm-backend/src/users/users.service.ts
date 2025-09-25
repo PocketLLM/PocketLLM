@@ -9,6 +9,7 @@ import {
 import { SupabaseService } from '../common/services/supabase.service';
 import { UpdateProfileDto } from './dto/update-profile.dto';
 import { ProfileDto } from './dto/profile.dto';
+import { User } from '@supabase/supabase-js';
 
 @Injectable()
 export class UsersService {
@@ -31,14 +32,19 @@ export class UsersService {
         .from('profiles')
         .select('*')
         .eq('id', userId)
-        .single();
+        .maybeSingle();
 
       if (error) {
         this.logger.error('Supabase get profile error:', error);
         throw new NotFoundException('Profile not found.');
       }
 
-      return data as ProfileDto;
+      if (!data) {
+        throw new NotFoundException('Profile not found.');
+      }
+
+      const authUser = await this.fetchAuthUser(userId);
+      return this.normalizeProfile(data, authUser);
     } catch (error) {
       this.logger.error('Failed to retrieve profile:', error);
       
@@ -67,20 +73,24 @@ export class UsersService {
         .update(updateProfileDto)
         .eq('id', userId)
         .select()
-        .single();
+        .maybeSingle();
 
       if (error) {
         this.logger.error('Supabase update profile error:', error);
-        
-        // Handle unique constraint violation on username
+
         if (error.code === '23505') {
           throw new ConflictException('Username is already taken.');
         }
-        
+
         throw new InternalServerErrorException('Failed to update profile.');
       }
 
-      return data as ProfileDto;
+      if (!data) {
+        throw new InternalServerErrorException('Profile update did not return any data.');
+      }
+
+      const authUser = await this.fetchAuthUser(userId);
+      return this.normalizeProfile(data, authUser);
     } catch (error) {
       this.logger.error('Failed to update profile:', error);
       
@@ -115,12 +125,143 @@ export class UsersService {
       return { message: 'User account permanently deleted.' };
     } catch (error) {
       this.logger.error('Failed to delete user account:', error);
-      
+
       if (error instanceof InternalServerErrorException) {
         throw error;
       }
-      
+
       throw new InternalServerErrorException('An unexpected error occurred while deleting the user account.');
     }
+  }
+
+  private async fetchAuthUser(userId: string): Promise<User | null> {
+    try {
+      const { data, error } = await this.supabaseService.auth.admin.getUserById(userId);
+      if (error) {
+        this.logger.warn(`Failed to fetch auth user ${userId}:`, error);
+        return null;
+      }
+      return data?.user ?? null;
+    } catch (error) {
+      this.logger.warn(`Unexpected error while fetching auth user ${userId}:`, error);
+      return null;
+    }
+  }
+
+  private normalizeProfile(profile: any, authUser: User | null): ProfileDto {
+    const email = this.resolveEmail(profile, authUser);
+
+    const normalized: ProfileDto = {
+      id: profile.id,
+      email,
+      full_name: this.normalizeNullableString(profile.full_name),
+      username: this.normalizeNullableString(profile.username),
+      bio: this.normalizeNullableString(profile.bio),
+      date_of_birth: this.normalizeDateOfBirth(profile.date_of_birth),
+      profession: this.normalizeNullableString(profile.profession),
+      heard_from: this.normalizeNullableString(profile.heard_from),
+      avatar_url: this.normalizeNullableString(profile.avatar_url),
+      survey_completed: Boolean(profile.survey_completed),
+      created_at: this.formatDate(profile.created_at) ?? new Date().toISOString(),
+      updated_at: this.formatDate(profile.updated_at) ?? this.formatDate(profile.created_at) ?? new Date().toISOString(),
+      deletion_status: profile.deletion_status ?? (profile.deletion_scheduled_for ? 'pending' : 'active'),
+      deletion_requested_at: this.formatDate(profile.deletion_requested_at),
+      deletion_scheduled_for: this.formatDate(profile.deletion_scheduled_for),
+    };
+
+    return normalized;
+  }
+
+  private resolveEmail(profile: any, authUser: User | null): string {
+    const profileEmail = typeof profile?.email === 'string' ? profile.email : null;
+    if (profileEmail && !this.isPlaceholderEmail(profileEmail)) {
+      return profileEmail;
+    }
+
+    const candidateEmail = authUser?.email ?? authUser?.user_metadata?.email;
+    if (candidateEmail && typeof candidateEmail === 'string') {
+      return candidateEmail;
+    }
+
+    const identityEmail = authUser?.identities?.find((identity) => identity?.identity_data?.email)?.identity_data
+      ?.email;
+    if (identityEmail) {
+      return identityEmail;
+    }
+
+    return '';
+  }
+
+  private formatDate(value: any): string | null {
+    if (!value) {
+      return null;
+    }
+
+    if (value instanceof Date) {
+      return value.toISOString();
+    }
+
+    if (typeof value === 'string') {
+      const parsed = new Date(value);
+      if (!Number.isNaN(parsed.getTime())) {
+        return parsed.toISOString();
+      }
+      return value;
+    }
+
+    if (typeof value === 'number') {
+      const parsed = new Date(value);
+      if (!Number.isNaN(parsed.getTime())) {
+        return parsed.toISOString();
+      }
+    }
+
+    return null;
+  }
+
+  private normalizeNullableString(value: any): string | null {
+    if (value === null || value === undefined) {
+      return null;
+    }
+
+    if (typeof value === 'string') {
+      const trimmed = value.trim();
+      return trimmed.length > 0 ? trimmed : null;
+    }
+
+    if (value instanceof Date) {
+      return value.toISOString();
+    }
+
+    if (typeof value === 'number') {
+      const parsed = new Date(value);
+      if (!Number.isNaN(parsed.getTime())) {
+        return parsed.toISOString();
+      }
+    }
+
+    return String(value);
+  }
+
+  private normalizeDateOfBirth(value: any): string | null {
+    const normalized = this.normalizeNullableString(value);
+    if (!normalized) {
+      return null;
+    }
+
+    if (/^\d{4}-\d{2}-\d{2}$/.test(normalized)) {
+      return normalized;
+    }
+
+    const iso = this.formatDate(value);
+    if (iso) {
+      return iso.substring(0, 10);
+    }
+
+    return normalized;
+  }
+
+  private isPlaceholderEmail(email: string): boolean {
+    return typeof email === 'string' && email.endsWith('@placeholder.pocketllm');
   }
 }
