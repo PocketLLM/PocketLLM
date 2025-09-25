@@ -130,33 +130,51 @@ class BackendApiService {
       }
     }
 
-    const primaryCandidates = [
+    const primaryEnvironmentCandidates = [
       String.fromEnvironment('POCKETLLM_BACKEND_URL', defaultValue: ''),
       String.fromEnvironment('POCKETLLM_BACKEND_BASE_URL', defaultValue: ''),
       String.fromEnvironment('POCKETLLM_BACKEND_ROOT_URL', defaultValue: ''),
       String.fromEnvironment('BACKEND_BASE_URL', defaultValue: ''),
     ];
 
-    for (final candidate in primaryCandidates) {
-      addCandidate(candidate);
-    }
+    const builtInPrimaryCandidates = [
+      'https://pocket-llm-lemon.vercel.app',
+      'https://pocketllm.onrender.com',
+    ];
 
-    if (urls.isEmpty) {
-      addCandidate('http://localhost:8000');
-    }
-
-    const fallbackCandidates = [
+    const fallbackEnvironmentCandidates = [
       String.fromEnvironment('POCKETLLM_FALLBACK_BACKEND_URL', defaultValue: ''),
       String.fromEnvironment('FALLBACK_BACKEND_URL', defaultValue: ''),
     ];
 
-    for (final candidate in fallbackCandidates) {
+    const builtInFallbackCandidates = [
+      'http://10.0.2.2:8000',
+      'http://127.0.0.1:8000',
+      'http://localhost:8000',
+    ];
+
+    for (final candidate in primaryEnvironmentCandidates) {
       addCandidate(candidate);
     }
 
-    // Debug print the resolved URLs
+    for (final candidate in builtInPrimaryCandidates) {
+      addCandidate(candidate);
+    }
+
+    for (final candidate in fallbackEnvironmentCandidates) {
+      addCandidate(candidate);
+    }
+
+    for (final candidate in builtInFallbackCandidates) {
+      addCandidate(candidate);
+    }
+
+    if (urls.isEmpty) {
+      addCandidate('https://pocketllm.onrender.com');
+    }
+
     debugPrint('Resolved backend URLs: $urls');
-    
+
     return List.unmodifiable(urls);
   }
 
