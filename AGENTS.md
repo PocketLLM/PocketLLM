@@ -1,8 +1,76 @@
+## Setup Script for Flutter and Android Development in Codex
 
+```bash
+#!/bin/bash
+set -euxo pipefail
 
-I'll analyze your current AGENTS.md file and enhance it with best practices based on my research. Here's an improved version:
+# Environment variables
+WORKSPACE="${WORKSPACE:-/workspace}"
+PROJECT_DIR="$(grep -Rl --include=pubspec.yaml -e 'sdk:[[:space:]]*flutter' "$WORKSPACE" | head -n1 | xargs dirname)"
+APP_NAME="$(basename "$PROJECT_DIR")"
 
-```markdown
+echo "🚀 Setting up Flutter and Android development environment for $APP_NAME"
+
+# 1. Install Flutter SDK
+FLUTTER_VERSION="3.19.6"
+FLUTTER_SDK_INSTALL_DIR="$HOME/flutter"
+FLUTTER_TARBALL_URL="https://storage.googleapis.com/flutter_infra_release/releases/stable/linux/flutter_linux_${FLUTTER_VERSION}-stable.tar.xz"
+
+if [[ ! -d "$FLUTTER_SDK_INSTALL_DIR" ]]; then
+    echo "📦 Downloading Flutter $FLUTTER_VERSION..."
+    curl -sL "$FLUTTER_TARBALL_URL" | tar -xJ -C "$HOME"
+else
+    echo "⚠️ Flutter cache found at $FLUTTER_SDK_INSTALL_DIR"
+fi
+
+# Fix git ownership issues
+git config --global --add safe.directory "$FLUTTER_SDK_INSTALL_DIR"
+
+# 2. Add Flutter and Dart to PATH
+export PATH="$FLUTTER_SDK_INSTALL_DIR/bin:$PATH"
+sudo ln -sf "$FLUTTER_SDK_INSTALL_DIR/bin/flutter" /usr/local/bin/flutter
+sudo ln -sf "$FLUTTER_SDK_INSTALL_DIR/bin/dart" /usr/local/bin/dart
+
+# Verify installation
+flutter --version
+dart --version
+
+# 3. Pre-cache Flutter components
+flutter precache --linux --no-web --no-ios --no-android --no-windows --no-macos
+
+# 4. Install Android SDK (required for Flutter Android builds)
+ANDROID_SDK_ROOT="/usr/lib/android-sdk"
+if [[ ! -d "$ANDROID_SDK_ROOT" ]]; then
+    echo "📦 Installing Android SDK..."
+    apt-get update && apt-get install -y openjdk-17-jdk
+    wget -q https://dl.google.com/android/repository/commandlinetools-linux-11095708_latest.zip
+    mkdir -p "$ANDROID_SDK_ROOT/cmdline-tools/latest"
+    unzip -q commandlinetools-linux-11095708_latest.zip -d "$ANDROID_SDK_ROOT/cmdline-tools/latest"
+    rm commandlinetools-linux-11095708_latest.zip
+    
+    # Set Android environment variables
+    export ANDROID_HOME="$ANDROID_SDK_ROOT"
+    export ANDROID_SDK_ROOT="$ANDROID_HOME"
+    export PATH="$PATH:$ANDROID_SDK_ROOT/cmdline-tools/latest/bin:$ANDROID_SDK_ROOT/platform-tools"
+    
+    # Accept Android licenses
+    echo "y" | flutter doctor --android-licenses
+fi
+
+# 5. Install project dependencies
+cd "$PROJECT_DIR"
+flutter pub get
+
+# 6. Generate localization files
+flutter gen-l10n
+
+# 7. Run build_runner if needed
+if grep -R --include='*.dart' -e 'part .*\.g\.dart' lib >/dev/null; then
+    dart run build_runner build --delete-conflicting-outputs --build-filter="lib/**"
+fi
+
+echo "✅ Setup completed for $APP_NAME"
+```
 # AGENTS.md - PocketLLM Development Guide
 
 This document provides comprehensive guidance for AI agents (like OpenAI Codex) working with the PocketLLM codebase. It explains the project structure, development environment setup, build processes, and key workflows.
@@ -55,7 +123,7 @@ PROJECT_DIR="$(grep -Rl --include=pubspec.yaml -e 'sdk:[[:space:]]*flutter' "$WO
 APP_NAME="$(basename "$PROJECT_DIR")"
 
 # 1. Install Flutter SDK
-FLUTTER_VERSION="3.32.2"
+FLUTTER_VERSION="3.19.6"
 FLUTTER_SDK_INSTALL_DIR="$HOME/flutter"
 FLUTTER_TARBALL_URL="https://storage.googleapis.com/flutter_infra_release/releases/stable/linux/flutter_linux_${FLUTTER_VERSION}-stable.tar.xz"
 
@@ -483,15 +551,77 @@ For questions about the codebase, refer to:
 - Project maintainers listed in [README.md](README.md)
 - Existing issues on GitHub
 - Code comments and documentation
+
+## 🎯 AGENT INSTRUCTIONS
+
+### For AI Agents Working on This Project
+
+**ALWAYS follow these instructions:**
+
+1. **SETUP FLUTTER ENVIRONMENT FIRST**: Before starting any task, ensure the Flutter development environment is properly set up:
+   ```bash
+   # Run the setup script
+   ./setup.sh
+   ```
+
+2. **RUN FLUTTER TESTS BEFORE SUBMITTING**: Always run Flutter tests before submitting any changes:
+   ```bash
+   flutter test
+   ```
+
+3. **ENSURE PRODUCTION-READY CODE**: All code must be production-ready:
+   - Follow Dart/TypeScript best practices
+   - Include proper error handling
+   - Add comprehensive logging
+   - Write unit tests for all new functionality
+   - Ensure code passes all linting rules
+
+4. **UPDATE DOCUMENTATION**: Always update relevant documentation when making changes:
+   - Update AGENTS.md with any structural changes
+   - Update README.md for major features
+   - Update API documentation for endpoint changes
+   - Add code comments for complex logic
+
+5. **BUILD VERIFICATION**: Run build verification before submitting:
+   ```bash
+   # Flutter verification
+   flutter analyze
+   flutter test
+   flutter build apk --debug
+   
+   # Backend verification (if applicable)
+   npm test
+   npm run build
+   ```
+
+6. **MAINTAIN CLEAN CODE**: Keep the codebase clean and maintainable:
+   - Follow existing code patterns
+   - Use meaningful variable and function names
+   - Keep functions small and focused
+   - Add proper type annotations
+   - Remove unused code and dependencies
+
+7. **SECURITY CONSIDERATIONS**: Always consider security:
+   - Validate all user inputs
+   - Use secure storage for sensitive data
+   - Follow authentication and authorization best practices
+   - Keep dependencies updated
+
+**Remember**: The goal is to maintain a high-quality, production-ready codebase that is well-documented and thoroughly tested.
 ```
 
-This enhanced AGENTS.md file includes:
+## Summary
 
-1. **Detailed setup script** for Flutter in Codex environments
-2. **Specific implementation guides** for Ollama and OpenRouter providers
-3. **Clear documentation maintenance requirements**
-4. **Build verification steps** for both frontend and backend
-5. **Database schema examples** for new providers
-6. **Pre-commit checklist** to ensure code quality
+This comprehensive setup and documentation provides:
 
-The file now provides more comprehensive guidance for AI agents working on your PocketLLM project, especially for implementing the new providers you mentioned.
+1. **Understanding of Codex System**: ChatGPT Codex works in sandboxed cloud containers with setup scripts that configure the environment before tasks begin.
+
+2. **Complete Setup Script**: A bash script that installs Flutter SDK, Android SDK, configures the environment, and prepares the project for development.
+
+3. **Production-Ready Guidelines**: Clear instructions for ensuring code quality, testing, and documentation.
+
+4. **Agent Instructions**: Specific guidelines for AI agents working on the project, including mandatory Flutter environment setup and testing before submission.
+
+5. **Comprehensive Documentation**: Detailed project structure, workflows, and troubleshooting guides.
+
+The setup script handles the complete environment configuration needed for Flutter and Android development in Codex, including all dependencies and proper PATH configuration. The AGENTS.md file provides clear instructions for maintaining production-ready code with proper testing and documentation practices.
