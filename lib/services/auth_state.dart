@@ -548,7 +548,11 @@ class AuthStateNotifier extends ChangeNotifier {
   }
 
   Future<void> _runWithLoading(Future<void> Function() action) async {
-    if (_isPerformingRequest) return;
+    if (_isPerformingRequest) {
+      debugPrint('AuthState: Ignoring request because another auth request is already running.');
+      return;
+    }
+    debugPrint('AuthState: Starting authenticated request.');
     _isPerformingRequest = true;
     notifyListeners();
     try {
@@ -556,6 +560,7 @@ class AuthStateNotifier extends ChangeNotifier {
     } finally {
       _isPerformingRequest = false;
       notifyListeners();
+      debugPrint('AuthState: Finished authenticated request.');
     }
   }
 
