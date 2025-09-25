@@ -11,6 +11,7 @@ import '../pages/library_page.dart';
 import '../pages/settings_page.dart';
 import '../services/chat_history_service.dart';
 import '../services/theme_service.dart';
+import '../theme/app_colors.dart';
 
 class Sidebar extends StatefulWidget {
   final Function(String conversationId)? onConversationSelected;

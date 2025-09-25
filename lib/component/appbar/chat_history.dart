@@ -3,6 +3,7 @@ import 'package:intl/intl.dart';
 
 import '../../services/chat_history_service.dart';
 import '../../services/theme_service.dart';
+import '../../theme/app_colors.dart';
 import '../models.dart';
 
 class ChatHistory extends StatefulWidget {
