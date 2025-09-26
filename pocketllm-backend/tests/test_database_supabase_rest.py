@@ -49,8 +49,8 @@ async def test_upsert_profile_creates_new_record(monkeypatch):
     assert captured["method"] == "POST"
     assert captured["resource"] == "profiles"
     kwargs = captured["kwargs"]
-    assert kwargs["prefer"] == "return=minimal"
-    assert kwargs.get("params") is None
+    assert kwargs["prefer"] == "resolution=merge-duplicates,return=minimal"
+    assert kwargs.get("params") == {"on_conflict": "id"}
     payload = kwargs["json_payload"]
     assert payload["id"] == str(user_id)
     assert payload["email"] == "user@example.com"
@@ -104,4 +104,62 @@ async def test_upsert_profile_updates_existing_record(monkeypatch):
     assert "full_name" not in payload
     assert "updated_at" in payload
     # Ensure the updated_at value is an ISO formatted timestamp
+<<<<<<< HEAD
     assert "T" in payload["updated_at"]
+=======
+    assert "T" in payload["updated_at"]
+
+
+@pytest.mark.asyncio
+async def test_upsert_profile_retries_after_duplicate_error(monkeypatch):
+    settings = Settings(
+        supabase_url="https://example.supabase.co",
+        supabase_service_role_key="service-role-test-key",
+    )
+    store = _SupabaseRestStore(settings)
+
+    calls: list[dict[str, object]] = []
+
+    async def fake_get_profile(user_id: UUID):  # pragma: no cover - patched in test
+        return None
+
+    async def fake_request(method: str, resource: str, **kwargs):  # pragma: no cover - patched in test
+        calls.append({"method": method, "resource": resource, "kwargs": kwargs})
+        if method == "POST":
+            response = httpx.Response(
+                status_code=400,
+                request=httpx.Request("POST", "https://example.supabase.co/rest/v1/profiles"),
+                json={
+                    "code": "23505",
+                    "message": 'duplicate key value violates unique constraint "profiles_pkey"',
+                    "details": "Key (id)=(8fcae76c-1114-4147-b519-b87154abcf35) already exists.",
+                },
+            )
+            raise httpx.HTTPStatusError("duplicate", request=response.request, response=response)
+        return None
+
+    monkeypatch.setattr(store, "_get_profile", fake_get_profile)
+    monkeypatch.setattr(store, "_request", fake_request)
+
+    user_id = UUID("8fcae76c-1114-4147-b519-b87154abcf35")
+    query = """
+    INSERT INTO public.profiles (id, email)
+    VALUES ($1, $2)
+    ON CONFLICT (id) DO UPDATE SET
+        email = EXCLUDED.email
+    """
+
+    await store._upsert_profile(query, user_id, "user@example.com")
+
+    assert len(calls) == 2
+    assert calls[0]["method"] == "POST"
+    post_kwargs = calls[0]["kwargs"]
+    assert post_kwargs["prefer"] == "resolution=merge-duplicates,return=minimal"
+    assert post_kwargs["params"] == {"on_conflict": "id"}
+    assert calls[1]["method"] == "PATCH"
+    patch_kwargs = calls[1]["kwargs"]
+    assert patch_kwargs["params"] == {"id": f"eq.{user_id}"}
+    payload = patch_kwargs["json_payload"]
+    assert payload["email"] == "user@example.com"
+    assert "created_at" not in payload
+>>>>>>> c0953c09fe35ccf43249ab67839c6f5bcbfd3001
