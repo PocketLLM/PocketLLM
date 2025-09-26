@@ -4,7 +4,8 @@ from .auth import AuthService
 from .chats import ChatsService
 from .jobs import JobsService
 from .models import ModelsService
-from .providers import ProvidersService
+from .provider_configs import ProvidersService
+from .providers import ProviderModelCatalogue
 from .users import UsersService
 
 __all__ = [
@@ -13,5 +14,6 @@ __all__ = [
     "JobsService",
     "ModelsService",
     "ProvidersService",
+    "ProviderModelCatalogue",
     "UsersService",
 ]

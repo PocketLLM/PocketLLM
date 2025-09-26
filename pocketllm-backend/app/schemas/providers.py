@@ -12,11 +12,15 @@ from pydantic import BaseModel, Field
 class ProviderModel(BaseModel):
     """Available provider model metadata."""
 
+    provider: str
     id: str
     name: str
+    description: Optional[str] = None
     context_window: int | None = None
     max_output_tokens: int | None = None
     pricing: dict | None = None
+    is_active: Optional[bool] = None
+    metadata: dict | None = None
 
 
 class ProviderConfiguration(BaseModel):

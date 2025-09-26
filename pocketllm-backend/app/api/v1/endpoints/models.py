@@ -6,37 +6,41 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends
 
-from app.api.deps import get_current_request_user, get_database_dependency
+from app.api.deps import (
+    get_current_request_user,
+    get_database_dependency,
+    get_settings_dependency,
+)
 from app.schemas.auth import TokenPayload
 from app.schemas.models import (
     ModelConfiguration,
-    ModelCreateRequest,
     ModelDefaultRequest,
     ModelImportRequest,
-    ModelUpdateRequest,
 )
+from app.schemas.providers import ProviderModel
 from app.services.models import ModelsService
+from app.services.provider_configs import ProvidersService
 
 router = APIRouter(prefix="/models", tags=["models"])
 
 
-@router.get("", response_model=list[ModelConfiguration], summary="List saved models")
+@router.get("", response_model=list[ProviderModel], summary="List provider models")
 async def list_models(
+    user: TokenPayload = Depends(get_current_request_user),
+    settings=Depends(get_settings_dependency),
+    database=Depends(get_database_dependency),
+) -> list[ProviderModel]:
+    service = ProvidersService(settings=settings, database=database)
+    return await service.get_provider_models(user.sub)
+
+
+@router.get("/saved", response_model=list[ModelConfiguration], summary="List saved models")
+async def list_saved_models(
     user: TokenPayload = Depends(get_current_request_user),
     database=Depends(get_database_dependency),
 ) -> list[ModelConfiguration]:
     service = ModelsService(database=database)
     return await service.list_models(user.sub)
-
-
-@router.post("", response_model=ModelConfiguration, summary="Create model configuration")
-async def create_model(
-    payload: ModelCreateRequest,
-    user: TokenPayload = Depends(get_current_request_user),
-    database=Depends(get_database_dependency),
-) -> ModelConfiguration:
-    service = ModelsService(database=database)
-    return await service.create_model(user.sub, payload)
 
 
 @router.post("/import", response_model=list[ModelConfiguration], summary="Import models from provider")
@@ -78,14 +82,3 @@ async def set_default_model(
 ) -> ModelConfiguration:
     service = ModelsService(database=database)
     return await service.set_default_model(user.sub, model_id, payload)
-
-
-@router.put("/{model_id}", response_model=ModelConfiguration, summary="Update model")
-async def update_model(
-    model_id: UUID,
-    payload: ModelUpdateRequest,
-    user: TokenPayload = Depends(get_current_request_user),
-    database=Depends(get_database_dependency),
-) -> ModelConfiguration:
-    service = ModelsService(database=database)
-    return await service.update_model(user.sub, model_id, payload)

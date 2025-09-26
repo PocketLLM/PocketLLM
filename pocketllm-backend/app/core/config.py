@@ -72,6 +72,16 @@ class Settings(BaseSettings):
     storage_bucket_jobs: str = "job-results"
     user_asset_bucket_name: str = "user-assets"
 
+    # Provider configuration
+    openai_api_key: str | None = Field(default=None, alias="OPENAI_API_KEY")
+    openai_api_base: str | None = Field(default=None, alias="OPENAI_API_BASE")
+    groq_api_key: str | None = Field(default=None, alias="GROQ_API_KEY")
+    groq_api_base: str | None = Field(default=None, alias="GROQ_API_BASE")
+    openrouter_api_key: str | None = Field(default=None, alias="OPENROUTER_API_KEY")
+    openrouter_api_base: str | None = Field(default=None, alias="OPENROUTER_API_BASE")
+    openrouter_app_url: str | None = Field(default=None, alias="OPENROUTER_APP_URL")
+    openrouter_app_name: str | None = Field(default=None, alias="OPENROUTER_APP_NAME")
+
 
 @lru_cache
 def get_settings() -> Settings:
