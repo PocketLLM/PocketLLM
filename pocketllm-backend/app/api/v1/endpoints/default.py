@@ -4,7 +4,8 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends, Request, Response
+from fastapi.encoders import jsonable_encoder
 from fastapi.responses import HTMLResponse, JSONResponse
 
 from app.api.deps import get_settings_dependency
@@ -23,19 +24,19 @@ def _wants_html(request: Request) -> bool:
 
 
 @router.get("/", summary="Root endpoint")
-async def root(request: Request) -> JSONResponse | HTMLResponse:
+async def root(request: Request) -> Response:
     """Display a friendly landing page for the backend root endpoint."""
 
     if _wants_html(request):
         return HTMLResponse(content=render_root_page(), status_code=200)
 
-    return JSONResponse({"message": "PocketLLM backend is running"})
+    return JSONResponse(content={"message": "PocketLLM backend is running"})
 
 
 @router.get("/health", response_model=HealthResponse, summary="Health check")
 async def health(
     request: Request, settings: Settings = Depends(get_settings_dependency)
-) -> HealthResponse | HTMLResponse:
+) -> Response:
     """Return health status information in JSON or HTML depending on the client."""
 
     payload = HealthResponse(
@@ -45,4 +46,4 @@ async def health(
     if _wants_html(request):
         return HTMLResponse(content=render_health_page(payload), status_code=200)
 
-    return payload
+    return JSONResponse(content=jsonable_encoder(payload))
