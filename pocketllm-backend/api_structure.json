@@ -1367,8 +1367,8 @@
         "tags": [
           "models"
         ],
-        "summary": "List saved models",
-        "operationId": "list_models_v1_models_get",
+        "summary": "List provider models",
+        "operationId": "list_provider_models_v1_models_get",
         "responses": {
           "200": {
             "description": "Successful Response",
@@ -1376,10 +1376,10 @@
               "application/json": {
                 "schema": {
                   "items": {
-                    "$ref": "#/components/schemas/ModelConfiguration"
+                    "$ref": "#/components/schemas/ProviderModel"
                   },
                   "type": "array",
-                  "title": "Response List Models V1 Models Get"
+                  "title": "Response List Provider Models V1 Models Get"
                 }
               }
             }
@@ -1390,40 +1390,26 @@
             "HTTPBearer": []
           }
         ]
-      },
-      "post": {
+      }
+    },
+    "/v1/models/saved": {
+      "get": {
         "tags": [
           "models"
         ],
-        "summary": "Create model configuration",
-        "operationId": "create_model_v1_models_post",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/ModelCreateRequest"
-              }
-            }
-          },
-          "required": true
-        },
+        "summary": "List saved models",
+        "operationId": "list_saved_models_v1_models_saved_get",
         "responses": {
           "200": {
             "description": "Successful Response",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ModelConfiguration"
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ModelConfiguration"
+                  },
+                  "title": "Response List Saved Models V1 Models Saved Get"
                 }
               }
             }
@@ -1559,62 +1545,6 @@
         "responses": {
           "204": {
             "description": "Successful Response"
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      },
-      "put": {
-        "tags": [
-          "models"
-        ],
-        "summary": "Update model",
-        "operationId": "update_model_v1_models__model_id__put",
-        "security": [
-          {
-            "HTTPBearer": []
-          }
-        ],
-        "parameters": [
-          {
-            "name": "model_id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "format": "uuid",
-              "title": "Model Id"
-            }
-          }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/ModelUpdateRequest"
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ModelConfiguration"
-                }
-              }
-            }
           },
           "422": {
             "description": "Validation Error",
@@ -2571,55 +2501,6 @@
         "title": "ModelConfiguration",
         "description": "User specific model configuration."
       },
-      "ModelCreateRequest": {
-        "properties": {
-          "provider": {
-            "type": "string",
-            "title": "Provider"
-          },
-          "model": {
-            "type": "string",
-            "title": "Model"
-          },
-          "name": {
-            "type": "string",
-            "title": "Name"
-          },
-          "display_name": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Display Name"
-          },
-          "description": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Description"
-          },
-          "settings": {
-            "$ref": "#/components/schemas/ModelSettings"
-          }
-        },
-        "type": "object",
-        "required": [
-          "provider",
-          "model",
-          "name"
-        ],
-        "title": "ModelCreateRequest",
-        "description": "Create a custom model configuration."
-      },
       "ModelDefaultRequest": {
         "properties": {
           "is_default": {
@@ -2756,67 +2637,6 @@
         "type": "object",
         "title": "ModelSettings",
         "description": "Additional provider specific configuration."
-      },
-      "ModelUpdateRequest": {
-        "properties": {
-          "name": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Name"
-          },
-          "display_name": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Display Name"
-          },
-          "description": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Description"
-          },
-          "settings": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/ModelSettings"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          },
-          "is_active": {
-            "anyOf": [
-              {
-                "type": "boolean"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Is Active"
-          }
-        },
-        "type": "object",
-        "title": "ModelUpdateRequest",
-        "description": "Update an existing model configuration."
       },
       "OAuthProviderRequest": {
         "properties": {
@@ -3047,7 +2867,6 @@
           "pricing": {
             "anyOf": [
               {
-                "additionalProperties": true,
                 "type": "object"
               },
               {
@@ -3055,10 +2874,48 @@
               }
             ],
             "title": "Pricing"
+          },
+          "provider": {
+            "type": "string",
+            "title": "Provider"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "is_active": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Is Active"
+          },
+          "metadata": {
+            "anyOf": [
+              {
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Metadata"
           }
         },
         "type": "object",
         "required": [
+          "provider",
           "id",
           "name"
         ],

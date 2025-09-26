@@ -13,7 +13,7 @@ from app.schemas.providers import (
     ProviderModel,
     ProviderUpdateRequest,
 )
-from app.services.providers import ProvidersService
+from app.services.provider_configs import ProvidersService
 
 router = APIRouter(prefix="/providers", tags=["providers"])
 
@@ -65,8 +65,9 @@ async def deactivate_provider(
 @router.get("/{provider}/models", response_model=list[ProviderModel], summary="List available provider models")
 async def list_provider_models(
     provider: str,
+    user: TokenPayload = Depends(get_current_request_user),
     settings=Depends(get_settings_dependency),
     database=Depends(get_database_dependency),
 ) -> list[ProviderModel]:
     service = ProvidersService(settings=settings, database=database)
-    return await service.get_provider_models(provider)
+    return await service.get_provider_models(user.sub, provider)
