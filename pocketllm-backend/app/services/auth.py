@@ -24,6 +24,7 @@ from app.schemas.auth import (
     SignUpResponse,
 )
 from app.utils.security import create_supabase_service_headers
+from app.services.local_auth import local_auth_manager
 from app.services.users import UsersService
 
 
@@ -42,6 +43,9 @@ class AuthService:
             "password": payload.password,
             "data": {"full_name": payload.full_name},
         }
+        if not self._is_supabase_configured():
+            return await self._local_sign_up(payload)
+
         async with httpx.AsyncClient(timeout=15.0) as client:
             response = await client.post(
                 f"{self._settings.supabase_url}/auth/v1/signup",
@@ -70,6 +74,9 @@ class AuthService:
     async def sign_in(self, payload: SignInRequest) -> SignInResponse:
         """Authenticate a user via email/password."""
 
+        if not self._is_supabase_configured():
+            return await self._local_sign_in(payload)
+
         async with httpx.AsyncClient(timeout=15.0) as client:
             response = await client.post(
                 f"{self._settings.supabase_url}/auth/v1/token?grant_type=password",
@@ -92,6 +99,9 @@ class AuthService:
 
     async def sign_out(self, access_token: str) -> SignOutResponse:
         """Invalidate the active session."""
+
+        if not self._is_supabase_configured():
+            return await self._local_sign_out(access_token)
 
         async with httpx.AsyncClient(timeout=10.0) as client:
             response = await client.post(
@@ -214,6 +224,60 @@ class AuthService:
             return datetime.fromisoformat(value.replace("Z", "+00:00"))
         except ValueError:
             return None
+
+    def _is_supabase_configured(self) -> bool:
+        supabase_url = str(self._settings.supabase_url)
+        anon_key = (self._settings.supabase_anon_key or "").strip()
+        service_role = (self._settings.supabase_service_role_key or "").strip()
+        if not supabase_url or "example.supabase.co" in supabase_url:
+            return False
+        if not anon_key or anon_key.lower() == "anon-key-placeholder":
+            return False
+        if not service_role or service_role.lower() == "service-role-placeholder":
+            return False
+        return True
+
+    async def _local_sign_up(self, payload: SignUpRequest) -> SignUpResponse:
+        account = local_auth_manager.register_account(payload.email, payload.password, payload.full_name)
+        tokens, session = local_auth_manager.issue_tokens(
+            account,
+            access_minutes=self._settings.access_token_expire_minutes,
+            refresh_minutes=self._settings.refresh_token_expire_minutes,
+            audience=self._settings.supabase_jwt_audience,
+        )
+        user = AuthenticatedUser(
+            id=account.id,
+            email=account.email,
+            full_name=account.full_name,
+            created_at=account.created_at,
+            last_sign_in_at=account.last_sign_in_at,
+        )
+        await self._upsert_profile(user, payload.full_name)
+        account_status = AccountStatus()
+        return SignUpResponse(user=user, tokens=tokens, session=session, account_status=account_status)
+
+    async def _local_sign_in(self, payload: SignInRequest) -> SignInResponse:
+        account = local_auth_manager.authenticate_account(payload.email, payload.password)
+        tokens, session = local_auth_manager.issue_tokens(
+            account,
+            access_minutes=self._settings.access_token_expire_minutes,
+            refresh_minutes=self._settings.refresh_token_expire_minutes,
+            audience=self._settings.supabase_jwt_audience,
+        )
+        user = AuthenticatedUser(
+            id=account.id,
+            email=account.email,
+            full_name=account.full_name,
+            created_at=account.created_at,
+            last_sign_in_at=account.last_sign_in_at,
+        )
+        await self._upsert_profile(user)
+        account_status = await self._resolve_account_status(user.id)
+        return SignInResponse(user=user, tokens=tokens, session=session, account_status=account_status)
+
+    async def _local_sign_out(self, access_token: str) -> SignOutResponse:
+        local_auth_manager.revoke_access_token(access_token)
+        return SignOutResponse()
 
 
 __all__ = ["AuthService"]

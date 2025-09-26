@@ -35,6 +35,18 @@ class SignUpResult {
   });
 }
 
+class _AccessCredentials {
+  final String accessToken;
+  final String? refreshToken;
+  final int? expiresIn;
+
+  const _AccessCredentials({
+    required this.accessToken,
+    this.refreshToken,
+    this.expiresIn,
+  });
+}
+
 class DeletionSchedule {
   final DateTime requestedAt;
   final DateTime scheduledFor;
@@ -207,23 +219,19 @@ class AuthStateNotifier extends ChangeNotifier {
         debugPrint('Extracted data: $data');
         final user = data['user'] as Map<String, dynamic>?;
         final session = data['session'] as Map<String, dynamic>?;
+        final tokens = data['tokens'] as Map<String, dynamic>?;
         final message = data['message'] as String?;
 
-        if (session != null && user != null) {
-          final accessToken = session['access_token'] as String?;
-          if (accessToken == null || accessToken.isEmpty) {
-            throw const AuthException('Authentication token missing from response.');
-          }
+        final credentials = _extractAccessCredentials(session, tokens);
 
-          final refreshToken = session['refresh_token'] as String?;
-          final expiresIn = session['expires_in'] as int?;
+        if (credentials != null && user != null) {
           final userId = user['id'] as String?;
           final userEmail = user['email'] as String? ?? email;
 
           await _saveSession(
-            accessToken: accessToken,
-            refreshToken: refreshToken,
-            expiresIn: expiresIn,
+            accessToken: credentials.accessToken,
+            refreshToken: credentials.refreshToken,
+            expiresIn: credentials.expiresIn,
             userId: userId,
             email: userEmail,
           );
@@ -234,7 +242,7 @@ class AuthStateNotifier extends ChangeNotifier {
 
         result = SignUpResult(
           userId: user?['id'] as String?,
-          emailConfirmationRequired: session == null,
+          emailConfirmationRequired: credentials == null,
           message: message,
         );
       } catch (e) {
@@ -534,25 +542,24 @@ class AuthStateNotifier extends ChangeNotifier {
       debugPrint('Extracted data: $data');
       final user = data['user'] as Map<String, dynamic>?;
       final session = data['session'] as Map<String, dynamic>?;
+      final tokens = data['tokens'] as Map<String, dynamic>?;
 
-      if (session == null || user == null) {
+      if (user == null) {
         throw const AuthException('Invalid authentication response from server.');
       }
 
-      final accessToken = session['access_token'] as String?;
-      if (accessToken == null || accessToken.isEmpty) {
+      final credentials = _extractAccessCredentials(session, tokens);
+      if (credentials == null) {
         throw const AuthException('Authentication token missing from response.');
       }
 
-      final refreshToken = session['refresh_token'] as String?;
-      final expiresIn = session['expires_in'] as int?;
       final userId = user['id'] as String?;
       final userEmail = user['email'] as String? ?? email;
 
       await _saveSession(
-        accessToken: accessToken,
-        refreshToken: refreshToken,
-        expiresIn: expiresIn,
+        accessToken: credentials.accessToken,
+        refreshToken: credentials.refreshToken,
+        expiresIn: credentials.expiresIn,
         userId: userId,
         email: userEmail,
       );
@@ -849,6 +856,79 @@ class AuthStateNotifier extends ChangeNotifier {
     if (_accessToken == null) {
       throw const AuthException('You need to be signed in to continue.');
     }
+  }
+
+  _AccessCredentials? _extractAccessCredentials(
+    Map<String, dynamic>? session,
+    Map<String, dynamic>? tokens,
+  ) {
+    String? accessToken = _extractStringValue(session, const ['access_token', 'accessToken', 'token']);
+    if (accessToken == null || accessToken.isEmpty) {
+      accessToken = _extractStringValue(tokens, const ['access_token', 'accessToken', 'token']);
+    }
+    if (accessToken == null || accessToken.isEmpty) {
+      return null;
+    }
+
+    final refreshToken = _extractStringValue(
+          session,
+          const ['refresh_token', 'refreshToken'],
+        ) ??
+        _extractStringValue(tokens, const ['refresh_token', 'refreshToken']);
+
+    int? expiresIn = _extractIntValue(session, const ['expires_in', 'expiresIn', 'expires']);
+    expiresIn ??= _extractIntValue(tokens, const ['expires_in', 'expiresIn', 'expires']);
+
+    if (expiresIn == null) {
+      final expiresAt = _parseDateTime(session?['expires_at'] ?? session?['expiresAt']);
+      if (expiresAt != null) {
+        final diff = expiresAt.difference(DateTime.now().toUtc()).inSeconds;
+        if (diff > 0) {
+          expiresIn = diff;
+        }
+      }
+    }
+
+    return _AccessCredentials(
+      accessToken: accessToken,
+      refreshToken: refreshToken,
+      expiresIn: expiresIn,
+    );
+  }
+
+  String? _extractStringValue(Map<String, dynamic>? source, Iterable<String> keys) {
+    if (source == null) {
+      return null;
+    }
+    for (final key in keys) {
+      final value = source[key];
+      if (value is String && value.isNotEmpty) {
+        return value;
+      }
+    }
+    return null;
+  }
+
+  int? _extractIntValue(Map<String, dynamic>? source, Iterable<String> keys) {
+    if (source == null) {
+      return null;
+    }
+    for (final key in keys) {
+      final value = source[key];
+      if (value is int) {
+        return value;
+      }
+      if (value is num) {
+        return value.toInt();
+      }
+      if (value is String) {
+        final parsed = int.tryParse(value);
+        if (parsed != null) {
+          return parsed;
+        }
+      }
+    }
+    return null;
   }
 
   Map<String, dynamic> _extractData(Map<String, dynamic> response) {
