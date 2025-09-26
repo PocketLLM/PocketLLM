@@ -184,7 +184,7 @@ extension ModelProviderExtension on ModelProvider {
   String get defaultBaseUrl {
     switch (this) {
       case ModelProvider.pocketLLM:
-        return 'https://api.pocketllm.com';
+        return 'https://pocket-llm-api.vercel.app';
       case ModelProvider.ollama:
         return 'http://localhost:11434';
       case ModelProvider.openAI:

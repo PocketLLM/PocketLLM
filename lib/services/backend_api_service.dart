@@ -154,42 +154,42 @@ class BackendApiService {
       String.fromEnvironment('FALLBACK_BACKEND_URL', defaultValue: ''),
     ];
 
-    final merged = List.of(
-      ApiEndpoints.mergeBaseUrls(
-        <String>{
-          ...primaryEnvironmentCandidates,
-          ...fallbackEnvironmentCandidates,
-          ApiEndpoints.defaultBackendBaseUrl,
-          'http://localhost:8000',
-          'http://127.0.0.1:8000',
-        },
-      ),
-    );
+    final environmentCandidates = <String>[
+      ...primaryEnvironmentCandidates,
+      ...fallbackEnvironmentCandidates,
+    ];
 
-    int weight(String url) {
-      final lower = url.toLowerCase();
-      if (lower.contains('localhost') || lower.contains('127.0.0.1')) {
-        return -1;
+    final environmentOrder = <String>[];
+    final environmentSet = <String>{};
+    for (final candidate in environmentCandidates) {
+      final trimmed = candidate.trim();
+      if (trimmed.isEmpty) {
+        continue;
       }
-      if (lower.contains('pocket-llm-api.vercel.app')) {
-        return 0;
+
+      final normalized = _stripSuffix(
+        ApiEndpoints.resolveBaseUrl(trimmed),
+        suffix,
+      );
+
+      if (environmentSet.add(normalized)) {
+        environmentOrder.add(normalized);
       }
-      if (url.startsWith('https://')) {
-        return 1;
-      }
-      return 2;
     }
 
-    merged.sort((a, b) {
-      final diff = weight(a) - weight(b);
-      if (diff != 0) {
-        return diff;
-      }
-      return a.compareTo(b);
-    });
+    final merged = List.of(
+      ApiEndpoints.mergeBaseUrls(environmentCandidates),
+    );
 
     final ordered = <String>[];
     final seen = <String>{};
+
+    for (final normalized in environmentOrder) {
+      if (seen.add(normalized)) {
+        ordered.add(normalized);
+      }
+    }
+
     for (final candidate in merged) {
       final cleaned = _stripSuffix(candidate, suffix);
       if (seen.add(cleaned)) {

@@ -30,7 +30,7 @@ class Settings(BaseSettings):
     
     # CORS configuration
     backend_cors_origins: List[AnyHttpUrl] | List[str] = Field(
-        default_factory=lambda: ["http://localhost", "http://localhost:3000"],
+        default_factory=lambda: ["https://pocket-llm-api.vercel.app"],
     )
     cors_origin: str = "*"
 

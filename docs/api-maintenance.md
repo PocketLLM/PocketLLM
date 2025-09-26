@@ -53,7 +53,7 @@ Format for each endpoint:
 ```markdown
 ### [HTTP Method] [Endpoint Path]
 **Group:** [module name]  
-**URL:** `http://localhost:8000/v1/[endpoint]`
+**URL:** `https://pocket-llm-api.vercel.app/v1/[endpoint]`
 
 **Headers:**
 ```
@@ -90,11 +90,6 @@ When updating the comprehensive API guide ([api-documentation.md](api-documentat
 ### Swagger UI
 
 The backend automatically generates Swagger documentation available at:
-```
-http://localhost:8000/api/docs (or http://localhost:8000/docs)
-```
-
-Production demo:
 ```
 https://pocket-llm-api.vercel.app/docs (legacy path https://pocket-llm-api.vercel.app/api/docs)
 ```
@@ -190,7 +185,7 @@ Use standard HTTP status codes:
 
 The API uses URL versioning:
 ```
-http://localhost:8000/v1/[endpoint]
+https://pocket-llm-api.vercel.app/v1/[endpoint]
 ```
 
 When creating new API versions:
