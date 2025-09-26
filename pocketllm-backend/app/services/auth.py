@@ -6,6 +6,7 @@ from datetime import UTC, datetime, timedelta
 from typing import Any
 from uuid import UUID
 
+import asyncpg
 import httpx
 from fastapi import HTTPException, status
 
@@ -108,15 +109,38 @@ class AuthService:
     async def _upsert_profile(self, user: AuthenticatedUser, full_name: str | None = None) -> None:
         """Ensure that a profile exists for the authenticated Supabase user."""
 
-        query = """
-        INSERT INTO public.profiles (id, email, full_name)
-        VALUES ($1, $2, $3)
-        ON CONFLICT (id) DO UPDATE SET
-            email = EXCLUDED.email,
-            full_name = COALESCE(EXCLUDED.full_name, public.profiles.full_name),
-            updated_at = NOW()
-        """
-        await self._database.execute(query, user.id, user.email, full_name)
+        provided_full_name = full_name if full_name is not None else user.full_name
+        profile_fields: list[tuple[str, Any]] = []
+        profile_fields.append(("email", user.email))
+        if provided_full_name is not None:
+            profile_fields.append(("full_name", provided_full_name))
+
+        async def _execute_insert(fields: list[tuple[str, Any]]) -> None:
+            columns = ["id", *[name for name, _ in fields]]
+            placeholders = [f"${index}" for index in range(1, len(columns) + 1)]
+            update_assignments = []
+            for name, _ in fields:
+                if name == "full_name":
+                    update_assignments.append(
+                        "full_name = COALESCE(EXCLUDED.full_name, public.profiles.full_name)"
+                    )
+                else:
+                    update_assignments.append(f"{name} = EXCLUDED.{name}")
+            update_assignments.append("updated_at = NOW()")
+            query = f"""
+            INSERT INTO public.profiles ({", ".join(columns)})
+            VALUES ({", ".join(placeholders)})
+            ON CONFLICT (id) DO UPDATE SET
+                {", ".join(update_assignments)}
+            """
+            values = [user.id, *[value for _, value in fields]]
+            await self._database.execute(query, *values)
+
+        try:
+            await _execute_insert(profile_fields)
+        except asyncpg.UndefinedColumnError:
+            fallback_fields = [(name, value) for name, value in profile_fields if name != "email"]
+            await _execute_insert(fallback_fields)
 
     async def _resolve_account_status(self, user_id: UUID) -> AccountStatus:
         users_service = UsersService(database=self._database)
