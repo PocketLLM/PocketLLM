@@ -645,41 +645,88 @@ class _AuthPageState extends State<AuthPage> {
   }
 
   Widget _buildComingSoonButtons() {
-    final buttonStyle = OutlinedButton.styleFrom(
-      padding: const EdgeInsets.symmetric(vertical: 14),
-      side: BorderSide(color: Colors.grey[300]!),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      foregroundColor: Colors.grey[600],
-      backgroundColor: Colors.white,
-    );
+    final options = <({String label, Widget icon, Color background})>[
+      (
+        label: 'Google',
+        icon: Image.asset('assets/google.png', height: 28),
+        background: Colors.white,
+      ),
+      (
+        label: 'Facebook',
+        icon: const Icon(Icons.facebook, color: Colors.white, size: 28),
+        background: const Color(0xFF1877F2),
+      ),
+      (
+        label: 'GitHub',
+        icon: const Icon(Icons.code, color: Colors.white, size: 26),
+        background: const Color(0xFF24292F),
+      ),
+      (
+        label: 'Phone',
+        icon: const Icon(Icons.phone_android, color: Colors.white, size: 26),
+        background: const Color(0xFF6D28D9),
+      ),
+    ];
 
-    Widget buildButton(String label, Widget leading) {
-      return OutlinedButton(
-        onPressed: null,
-        style: buttonStyle,
-        child: Row(
+    Widget buildOption(int index) {
+      final option = options[index];
+
+      return TweenAnimationBuilder<double>(
+        tween: Tween(begin: 0, end: 1),
+        duration: const Duration(milliseconds: 420),
+        curve: _StaggeredCurve(
+          delayFraction: (index * 0.08).clamp(0.0, 0.7),
+        ),
+        builder: (context, value, child) => Opacity(
+          opacity: value,
+          child: Transform.translate(
+            offset: Offset(0, 12 * (1 - value)),
+            child: child,
+          ),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
           children: [
-            leading,
-            const SizedBox(width: 12),
-            Expanded(
-              child: Text(
-                label,
-                style: const TextStyle(fontSize: 16, color: Colors.black87, fontWeight: FontWeight.w500),
+            Tooltip(
+              message: '${option.label} coming soon',
+              child: Container(
+                width: 72,
+                height: 72,
+                decoration: BoxDecoration(
+                  color: option.background,
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(color: Colors.grey[200]!),
+                  boxShadow: const [
+                    BoxShadow(
+                      color: Color(0x11000000),
+                      blurRadius: 12,
+                      offset: Offset(0, 6),
+                    ),
+                  ],
+                ),
+                alignment: Alignment.center,
+                child: option.icon,
               ),
             ),
-            AnimatedOpacity(
-              opacity: 1,
-              duration: const Duration(milliseconds: 300),
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                decoration: BoxDecoration(
-                  color: const Color(0xFFFFF3CD),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: const Text(
-                  'Coming Soon',
-                  style: TextStyle(color: Color(0xFF946200), fontSize: 12, fontWeight: FontWeight.w700),
-                ),
+            const SizedBox(height: 8),
+            Text(
+              option.label,
+              style: const TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.w600,
+                color: Color(0xFF1F2937),
+              ),
+            ),
+            const SizedBox(height: 4),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+              decoration: BoxDecoration(
+                color: const Color(0xFFFFF3CD),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: const Text(
+                'Coming Soon',
+                style: TextStyle(color: Color(0xFF946200), fontSize: 11, fontWeight: FontWeight.w600),
               ),
             ),
           ],
@@ -687,51 +734,20 @@ class _AuthPageState extends State<AuthPage> {
       );
     }
 
-    final options = <Widget>[
-      buildButton(
-        'Continue with Google',
-        Image.asset('assets/google.png', height: 24, color: Colors.grey[600]),
-      ),
-      buildButton(
-        'Continue with Apple',
-        const Icon(Icons.apple, color: Colors.black87, size: 24),
-      ),
-      buildButton(
-        'Use magic link',
-        const Icon(Icons.mail_outline, color: Color(0xFF6D28D9), size: 22),
-      ),
-      buildButton(
-        'Use SMS one-time passcode',
-        const Icon(Icons.sms_outlined, color: Color(0xFF6D28D9), size: 22),
-      ),
-      buildButton(
-        'Continue with GitHub',
-        const Icon(Icons.code, color: Color(0xFF0F172A), size: 22),
-      ),
-    ];
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final isCompact = constraints.maxWidth < 420;
+        final spacing = isCompact ? 20.0 : 32.0;
 
-    return Column(
-      children: [
-        for (int index = 0; index < options.length; index++)
-          Padding(
-            padding: EdgeInsets.only(top: index == 0 ? 0 : 12),
-            child: TweenAnimationBuilder<double>(
-              tween: Tween(begin: 0, end: 1),
-              duration: const Duration(milliseconds: 420),
-              curve: _StaggeredCurve(
-                delayFraction: (index * 0.08).clamp(0.0, 0.7),
-              ),
-              builder: (context, value, child) => Opacity(
-                opacity: value,
-                child: Transform.translate(
-                  offset: Offset(0, 12 * (1 - value)),
-                  child: child,
-                ),
-              ),
-              child: options[index],
-            ),
-          ),
-      ],
+        return Wrap(
+          alignment: WrapAlignment.center,
+          spacing: spacing,
+          runSpacing: spacing,
+          children: [
+            for (int index = 0; index < options.length; index++) buildOption(index),
+          ],
+        );
+      },
     );
   }
 
