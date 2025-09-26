@@ -48,6 +48,8 @@ class UsersService:
 
         logger.debug("Updating profile", extra={"user_id": str(user_id), "fields": list(update_columns.keys())})
         record = await self._database.update_profile(user_id, update_columns)
+        if not record:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Profile not found")
         updated_profile = UserProfile.model_validate(record)
         logger.info(
             "Profile updated",
@@ -71,6 +73,8 @@ class UsersService:
             },
         )
         record = await self._database.update_profile(user_id, update_columns)
+        if not record:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Profile not found")
         profile = UserProfile.model_validate(record)
         logger.info(
             "Onboarding completed",
@@ -88,6 +92,8 @@ class UsersService:
                 "deletion_scheduled_for": schedule_for.isoformat(),
             },
         )
+        if not record:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Profile not found")
         return DeleteAccountResponse(
             deletion_requested_at=record.get("deletion_requested_at"),
             deletion_scheduled_for=record.get("deletion_scheduled_for"),
@@ -105,6 +111,8 @@ class UsersService:
                 "deletion_scheduled_for": None,
             },
         )
+        if not record:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Profile not found")
         return CancelDeletionResponse(
             canceled=existing["deletion_status"] == "pending",
             previous_deletion_requested_at=existing["deletion_requested_at"]
@@ -136,6 +144,8 @@ class UsersService:
                 "deletion_scheduled_for": None,
             },
         )
+        if not record:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Profile not found")
         return CancelDeletionResponse(
             canceled=True,
             previous_deletion_requested_at=existing["deletion_requested_at"],

@@ -42,17 +42,23 @@ class SupabaseDatabase:
 
         try:
             url = os.getenv("DATABASE_URL") or os.getenv("SUPABASE_URL")
-            key = os.getenv("SUPABASE_PUBLIC_KEY") or os.getenv("SUPABASE_ANON_KEY")
+            service_key = os.getenv("SUPABASE_SERVICE_ROLE_KEY") or os.getenv("SUPABASE_SERVICE_ROLE")
+            public_key = os.getenv("SUPABASE_PUBLIC_KEY") or os.getenv("SUPABASE_ANON_KEY")
+            key = service_key or public_key
 
             if not url or not key:
                 logger.critical("❌ FATAL: Missing Supabase credentials - APPLICATION CANNOT START")
                 raise ValueError(
                     "CRITICAL: Missing Supabase credentials. "
-                    "DATABASE_URL and SUPABASE_PUBLIC_KEY are REQUIRED. "
+                    "DATABASE_URL and a Supabase key are REQUIRED. "
+                    "Provide SUPABASE_SERVICE_ROLE_KEY (preferred) or SUPABASE_PUBLIC_KEY. "
                     "NO fallback options available."
                 )
 
             self._client = create_client(url, key)
+
+            if service_key:
+                logger.info("✅ USING SERVICE-ROLE Supabase credentials for SDK client")
 
             if not self._test_connection():
                 logger.critical("❌ FATAL: Supabase connection test failed - APPLICATION CANNOT START")
@@ -157,7 +163,7 @@ class SupabaseDatabase:
             logger.critical("❌ CRITICAL: Unexpected error retrieving profile for user %s: %s", user_id, exc)
             raise
 
-    def update_profile(self, user_id: str, updates: Dict[str, Any]) -> Dict[str, Any]:
+    def update_profile(self, user_id: str, updates: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         self._log_operation("update_profile", "profiles", data=updates, filters={"user_id": user_id})
 
         try:
@@ -170,8 +176,8 @@ class SupabaseDatabase:
                 .execute()
             )
             if not result.data:
-                logger.warning("⚠️ No profile found to update for user %s", user_id)
-                raise RuntimeError(f"Profile update failed for user {user_id}")
+                logger.info("ℹ️ No profile found to update for user %s", user_id)
+                return None
 
             record = result.data[0]
             logger.info("✅ Profile updated successfully for user %s", user_id)

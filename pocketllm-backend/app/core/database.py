@@ -64,7 +64,7 @@ class Database:
     async def upsert_profile(self, user_id: UUID | str, payload: Dict[str, Any]) -> Dict[str, Any]:
         return await self._run(self._supabase.upsert_profile, str(user_id), payload)
 
-    async def update_profile(self, user_id: UUID | str, payload: Dict[str, Any]) -> Dict[str, Any]:
+    async def update_profile(self, user_id: UUID | str, payload: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         return await self._run(self._supabase.update_profile, str(user_id), payload)
 
     # ------------------------------------------------------------------
