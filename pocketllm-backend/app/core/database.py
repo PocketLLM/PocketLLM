@@ -267,6 +267,7 @@ class _SupabaseRestStore:
         await self._request(
             "POST",
             "profiles",
+            params={"on_conflict": "id"},
             json_payload=[payload],
             prefer="resolution=merge-duplicates",
         )
