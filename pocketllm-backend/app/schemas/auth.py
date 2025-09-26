@@ -3,10 +3,10 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Literal, Optional
+from typing import Any, Literal, Optional
 from uuid import UUID
 
-from pydantic import BaseModel, EmailStr, Field
+from pydantic import BaseModel, ConfigDict, EmailStr, Field, model_validator
 
 
 class AuthenticatedUser(BaseModel):
@@ -39,9 +39,19 @@ class AuthTokens(BaseModel):
 class SignUpRequest(BaseModel):
     """Payload used to register a user through Supabase."""
 
+    model_config = ConfigDict(populate_by_name=True)
+
     email: EmailStr
     password: str = Field(min_length=8)
     full_name: Optional[str] = Field(default=None, max_length=120)
+
+    @model_validator(mode="before")
+    @classmethod
+    def _populate_full_name(cls, data: Any) -> Any:
+        if isinstance(data, dict) and "full_name" not in data and "name" in data:
+            data = dict(data)
+            data["full_name"] = data.get("name")
+        return data
 
 
 class AccountStatus(BaseModel):
