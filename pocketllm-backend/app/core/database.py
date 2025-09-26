@@ -215,36 +215,93 @@ class _SupabaseRestStore:
             "Accept": "application/json",
         }
         self._logger = logging.getLogger(f"{__name__}.supabase")
+        self._fallback = _InMemoryStore()
+        self._rest_available = True
+
+    async def _handle_failure(
+        self,
+        operation: str,
+        query: str,
+        args: tuple[Any, ...],
+        error: Exception,
+    ) -> Any:
+        if self._rest_available:
+            self._rest_available = False
+            self._logger.warning(
+                "Supabase REST %s failed (%s). Falling back to in-memory store.",
+                operation,
+                error,
+                exc_info=True,
+            )
+        else:
+            self._logger.debug(
+                "Supabase REST %s still unavailable: %s",
+                operation,
+                error,
+                exc_info=True,
+            )
+        if isinstance(error, httpx.HTTPError):
+            self._logger.debug(
+                "Supabase REST error response",
+                extra={"query": query},
+                exc_info=True,
+            )
+        fallback_method = getattr(self._fallback, operation)
+        return await fallback_method(query, *args)
 
     async def fetch(self, query: str, *args: Any) -> list[dict[str, Any]]:
-        row = await self.fetchrow(query, *args)
+        if not self._rest_available:
+            return await self._fallback.fetch(query, *args)
+        try:
+            row = await self.fetchrow(query, *args)
+        except Exception as exc:  # pragma: no cover - network failures
+            return await self._handle_failure("fetch", query, args, exc)
         return [row] if row else []
 
     async def fetchrow(self, query: str, *args: Any) -> dict[str, Any] | None:
-        normalised = _normalise_query(query)
-        if normalised.startswith("select * from public.profiles where id = $1"):
-            return await self._get_profile(args[0])
-        if normalised.startswith("update public.profiles set"):
-            return await self._handle_update(query, *args)
-        self._logger.warning("Supabase REST store received unsupported fetchrow query: %s", query)
-        return None
+        if not self._rest_available:
+            return await self._fallback.fetchrow(query, *args)
+        try:
+            normalised = _normalise_query(query)
+            if normalised.startswith("select * from public.profiles where id = $1"):
+                return await self._get_profile(args[0])
+            if normalised.startswith("update public.profiles set"):
+                return await self._handle_update(query, *args)
+            self._logger.warning(
+                "Supabase REST store received unsupported fetchrow query: %s", query
+            )
+            return None
+        except Exception as exc:  # pragma: no cover - network failures
+            return await self._handle_failure("fetchrow", query, args, exc)
 
     async def fetchval(self, query: str, *args: Any) -> Any:
-        rows = await self.fetch(query, *args)
+        if not self._rest_available:
+            return await self._fallback.fetchval(query, *args)
+        try:
+            rows = await self.fetch(query, *args)
+        except Exception as exc:  # pragma: no cover - network failures
+            return await self._handle_failure("fetchval", query, args, exc)
         if not rows:
             return None
         return next(iter(rows[0].values()))
 
     async def execute(self, query: str, *args: Any) -> str:
-        normalised = _normalise_query(query)
-        if normalised.startswith("insert into public.profiles"):
-            await self._upsert_profile(query, *args)
-            return "INSERT 0 1"
-        if normalised.startswith("update public.profiles set"):
-            await self._handle_update(query, *args)
-            return "UPDATE 1"
-        self._logger.warning("Supabase REST store received unsupported execute query: %s", query)
-        return ""
+        if not self._rest_available:
+            return await self._fallback.execute(query, *args)
+        try:
+            normalised = _normalise_query(query)
+            if normalised.startswith("insert into public.profiles"):
+                await self._upsert_profile(query, *args)
+                return "INSERT 0 1"
+            if normalised.startswith("update public.profiles set"):
+                await self._handle_update(query, *args)
+                return "UPDATE 1"
+            self._logger.warning(
+                "Supabase REST store received unsupported execute query: %s", query
+            )
+            return ""
+        except Exception as exc:  # pragma: no cover - network failures
+            return await self._handle_failure("execute", query, args, exc)
 
     async def _get_profile(self, user_id: UUID) -> dict[str, Any] | None:
         params = {"id": f"eq.{user_id}", "limit": 1}
