@@ -33,14 +33,39 @@ async def get_database_dependency(
 
 
 async def get_current_token_payload(
+    request: Request,
     credentials: HTTPAuthorizationCredentials | None = Depends(reusable_oauth2),
     settings: Settings = Depends(get_settings_dependency),
 ) -> TokenPayload:
-    """Decode the current JWT payload from the Authorization header."""
+    """Decode the current JWT payload from the request metadata."""
 
-    if credentials is None:
+    possible_tokens: list[str] = []
+
+    if credentials and credentials.credentials:
+        possible_tokens.append(credentials.credentials)
+
+    auth_header = request.headers.get("Authorization")
+    if auth_header:
+        scheme, _, token = auth_header.partition(" ")
+        if token and scheme.lower() == "bearer":
+            possible_tokens.append(token)
+        else:
+            possible_tokens.append(auth_header)
+
+    for cookie_key in ("sb-access-token", "access_token"):
+        cookie_token = request.cookies.get(cookie_key)
+        if cookie_token:
+            possible_tokens.append(cookie_token)
+            break
+
+    query_token = request.query_params.get("access_token")
+    if query_token:
+        possible_tokens.append(query_token)
+
+    token = next((value.strip() for value in possible_tokens if value and value.strip()), None)
+    if not token:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Not authenticated")
-    return decode_access_token(credentials.credentials, settings)
+    return decode_access_token(token, settings)
 
 
 async def get_current_request_user(
