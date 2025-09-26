@@ -1,3 +1,8 @@
+/// File Overview:
+/// - Purpose: Immutable representation of a user profile synchronized with the
+///   backend.
+/// - Backend Migration: Keep but confirm fields align with backend DTOs to
+///   prevent divergence.
 import 'package:equatable/equatable.dart';
 
 class UserProfile extends Equatable {

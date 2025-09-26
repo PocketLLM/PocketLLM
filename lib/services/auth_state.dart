@@ -1,3 +1,8 @@
+/// File Overview:
+/// - Purpose: Handles authentication tokens, profile state, and backend session
+///   interactions from the Flutter client.
+/// - Backend Migration: Keep but refactor to rely on backend-auth flows; remove
+///   any local token fallbacks as server support matures.
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';

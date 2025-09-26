@@ -1,3 +1,8 @@
+/// File Overview:
+/// - Purpose: Collects onboarding survey data locally before sending via
+///   `SurveyService`.
+/// - Backend Migration: Keep UI but ensure submission persists through backend
+///   APIs; consider reducing stored demographic questions if backend changes.
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 

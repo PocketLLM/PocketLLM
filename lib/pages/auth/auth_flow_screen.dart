@@ -1,3 +1,8 @@
+/// File Overview:
+/// - Purpose: Coordinates authentication flow, survey completion, and routing
+///   into the app.
+/// - Backend Migration: Keep but ensure skip/login logic reflects backend
+///   session rules rather than local shared preferences.
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';

@@ -1,3 +1,8 @@
+/// File Overview:
+/// - Purpose: Dialog for creating/editing model configurations with provider
+///   specific helpers.
+/// - Backend Migration: Keep UI but remove direct HTTP calls and rely on
+///   backend-administered model import flows.
 import 'package:flutter/material.dart';
 import '../services/model_service.dart';
 import '../component/models.dart';

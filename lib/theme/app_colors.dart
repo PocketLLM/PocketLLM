@@ -1,3 +1,8 @@
+/// File Overview:
+/// - Purpose: Central palette definitions used to keep visual styling
+///   consistent across PocketLLM themes.
+/// - Backend Migration: Keep; colors remain frontend concerns although they
+///   may later respond to backend-provided branding options.
 import 'package:flutter/material.dart';
 
 /// Foundational color tokens used across PocketLLM.

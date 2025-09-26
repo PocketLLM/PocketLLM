@@ -1,3 +1,8 @@
+/// File Overview:
+/// - Purpose: Manage provider API keys and activation state directly from the
+///   client.
+/// - Backend Migration: Keep UI but ensure key storage/activation happens on
+///   the backend rather than device-side.
 import 'package:flutter/material.dart';
 import '../services/model_service.dart';
 import '../component/models.dart';

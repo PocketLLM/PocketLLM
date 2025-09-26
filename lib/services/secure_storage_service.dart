@@ -1,3 +1,8 @@
+/// File Overview:
+/// - Purpose: Client-side vault for encrypting API keys and provider metadata
+///   using Flutter secure storage.
+/// - Backend Migration: Replace with backend-managed credential storage to
+///   avoid persisting secrets on devices.
 import 'dart:convert';
 import 'dart:math';
 import 'dart:typed_data';

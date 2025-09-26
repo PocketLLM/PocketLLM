@@ -1,3 +1,7 @@
+/// File Overview:
+/// - Purpose: Handles sign-in and sign-up UI, including survey handoff.
+/// - Backend Migration: Keep but ensure it relies solely on backend auth flows
+///   without local shortcuts or stored preferences for auth state.
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';

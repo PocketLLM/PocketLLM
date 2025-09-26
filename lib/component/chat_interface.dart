@@ -1,3 +1,8 @@
+/// File Overview:
+/// - Purpose: Core chat UI handling message rendering, attachments, and direct
+///   calls to various model/search services.
+/// - Backend Migration: Substantially refactor; remove embedded API keys,
+///   switch to backend chat/search endpoints, and simplify local state.
 import 'package:flutter/material.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
 import 'package:clipboard/clipboard.dart';

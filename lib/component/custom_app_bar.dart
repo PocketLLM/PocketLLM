@@ -1,3 +1,8 @@
+/// File Overview:
+/// - Purpose: Custom app bar showing selected model and quick navigation
+///   actions.
+/// - Backend Migration: Keep UI but ensure model menu reflects backend-managed
+///   state.
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import '../pages/config_page.dart';

@@ -1,3 +1,8 @@
+/// File Overview:
+/// - Purpose: Low-level HTTP client that supports base URL fallbacks and token
+///   injection for backend API access.
+/// - Backend Migration: Keep but audit once backend consolidates URLs and
+///   authentication; may be replaced by generated client.
 import 'dart:convert';
 
 import 'package:flutter/foundation.dart';

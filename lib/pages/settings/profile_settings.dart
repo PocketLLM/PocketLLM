@@ -1,3 +1,8 @@
+/// File Overview:
+/// - Purpose: Profile management screen allowing users to update personal info
+///   and avatars directly.
+/// - Backend Migration: Keep but ensure all operations call backend endpoints
+///   (no local shared preference fallbacks).
 import 'dart:io';
 
 import 'package:flutter/material.dart';

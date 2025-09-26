@@ -1,3 +1,8 @@
+/// File Overview:
+/// - Purpose: Settings hub that links to theming, profile, model, and API key
+///   configuration screens.
+/// - Backend Migration: Keep but audit sections that reference local-only
+///   features (e.g., direct model saves) as backend ownership grows.
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'dart:ui';
