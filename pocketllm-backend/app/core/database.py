@@ -242,9 +242,15 @@ class _SupabaseRestStore:
                 exc_info=True,
             )
         if isinstance(error, httpx.HTTPError):
+            response = error.response
+            details = {
+                "query": query,
+                "status_code": getattr(response, "status_code", None),
+                "response_body": getattr(response, "text", None),
+            }
             self._logger.debug(
                 "Supabase REST error response",
-                extra={"query": query},
+                extra=details,
                 exc_info=True,
             )
         fallback_method = getattr(self._fallback, operation)
@@ -334,6 +340,9 @@ class _SupabaseRestStore:
             update_values["updated_at"] = now
             payload = self._serialise_payload(update_values)
             payload = {k: v for k, v in payload.items() if v is not None}
+            if not payload:
+                self._logger.warning("Empty payload for Supabase profile update; skipping request")
+                return
             await self._request(
                 "PATCH",
                 "profiles",
@@ -348,7 +357,10 @@ class _SupabaseRestStore:
         insert_values.setdefault("updated_at", now)
         payload = self._serialise_payload(insert_values)
         payload = {k: v for k, v in payload.items() if v is not None}
-        prefer_header = "resolution=merge-duplicates,return=minimal"
+        if not payload:
+            self._logger.warning("Empty payload for Supabase profile insert; skipping request")
+            return
+        prefer_header = "resolution=merge-duplicates"
 
         try:
             await self._request(
@@ -370,6 +382,11 @@ class _SupabaseRestStore:
                 update_values["updated_at"] = datetime.now(tz=UTC)
                 update_payload = self._serialise_payload(update_values)
                 update_payload = {k: v for k, v in update_payload.items() if v is not None}
+                if not update_payload:
+                    self._logger.warning(
+                        "Empty payload for Supabase profile update retry; skipping request"
+                    )
+                    return
                 await self._request(
                     "PATCH",
                     "profiles",
@@ -384,6 +401,9 @@ class _SupabaseRestStore:
         user_id = args[0]
         assignments = self._parse_assignments(query, args)
         payload = self._serialise_payload(assignments)
+        if not payload:
+            self._logger.warning("Empty payload for Supabase profile update; skipping request")
+            return None
         prefer = "return=representation"
         data = await self._request(
             "PATCH",
@@ -488,14 +508,19 @@ class _SupabaseRestStore:
         try:
             response.raise_for_status()
         except httpx.HTTPStatusError as exc:  # pragma: no cover - network errors handled at runtime
+            response = exc.response
             self._logger.error(
-                "Supabase REST request failed",
+                "Supabase REST request failed", 
                 extra={
                     "method": method,
                     "url": url,
-                    "status_code": exc.response.status_code,
-                    "body": exc.response.text,
+                    "status_code": getattr(response, "status_code", None),
+                    "request_headers": headers,
+                    "request_params": params,
+                    "request_payload": json_payload,
+                    "response_body": getattr(response, "text", None),
                 },
+                exc_info=True,
             )
             raise
         if not response.content:
