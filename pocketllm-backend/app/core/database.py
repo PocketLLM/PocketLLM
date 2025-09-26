@@ -348,7 +348,7 @@ class _SupabaseRestStore:
         insert_values.setdefault("updated_at", now)
         payload = self._serialise_payload(insert_values)
         payload = {k: v for k, v in payload.items() if v is not None}
-        prefer_header = "resolution=merge-duplicates,return=minimal"
+        prefer_header = "resolution=merge-duplicates, return=minimal"
 
         try:
             await self._request(
