@@ -39,6 +39,15 @@ def mask_secret(secret: str, visible: int = 4) -> str:
 def decode_access_token(token: str, settings: Settings) -> TokenPayload:
     """Decode and validate a Supabase JWT access token."""
 
+    from app.services.local_auth import local_auth_manager
+
+    local_payload = local_auth_manager.get_payload_for_token(token)
+    if local_payload is not None:
+        if local_payload.exp < datetime.now(tz=UTC):
+            local_auth_manager.revoke_access_token(token)
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Token has expired")
+        return local_payload
+
     if not settings.supabase_jwt_secret:
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="JWT secret not configured")
 
