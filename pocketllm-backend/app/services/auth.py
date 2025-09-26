@@ -6,7 +6,6 @@ from datetime import UTC, datetime, timedelta
 from typing import Any
 from uuid import UUID
 
-import asyncpg
 import httpx
 from fastapi import HTTPException, status
 
@@ -24,7 +23,6 @@ from app.schemas.auth import (
     SignUpResponse,
 )
 from app.utils.security import create_supabase_service_headers
-from app.services.local_auth import local_auth_manager
 from app.services.users import UsersService
 
 
@@ -38,13 +36,13 @@ class AuthService:
     async def sign_up(self, payload: SignUpRequest) -> SignUpResponse:
         """Register a new user via Supabase GoTrue."""
 
+        self._require_supabase()
+
         request_body = {
             "email": payload.email,
             "password": payload.password,
             "data": {"full_name": payload.full_name},
         }
-        if not self._is_supabase_configured():
-            return await self._local_sign_up(payload)
 
         async with httpx.AsyncClient(timeout=15.0) as client:
             response = await client.post(
@@ -74,8 +72,7 @@ class AuthService:
     async def sign_in(self, payload: SignInRequest) -> SignInResponse:
         """Authenticate a user via email/password."""
 
-        if not self._is_supabase_configured():
-            return await self._local_sign_in(payload)
+        self._require_supabase()
 
         async with httpx.AsyncClient(timeout=15.0) as client:
             response = await client.post(
@@ -100,8 +97,7 @@ class AuthService:
     async def sign_out(self, access_token: str) -> SignOutResponse:
         """Invalidate the active session."""
 
-        if not self._is_supabase_configured():
-            return await self._local_sign_out(access_token)
+        self._require_supabase()
 
         async with httpx.AsyncClient(timeout=10.0) as client:
             response = await client.post(
@@ -120,37 +116,11 @@ class AuthService:
         """Ensure that a profile exists for the authenticated Supabase user."""
 
         provided_full_name = full_name if full_name is not None else user.full_name
-        profile_fields: list[tuple[str, Any]] = []
-        profile_fields.append(("email", user.email))
+        profile_payload: dict[str, Any] = {"email": user.email}
         if provided_full_name is not None:
-            profile_fields.append(("full_name", provided_full_name))
+            profile_payload["full_name"] = provided_full_name
 
-        async def _execute_insert(fields: list[tuple[str, Any]]) -> None:
-            columns = ["id", *[name for name, _ in fields]]
-            placeholders = [f"${index}" for index in range(1, len(columns) + 1)]
-            update_assignments = []
-            for name, _ in fields:
-                if name == "full_name":
-                    update_assignments.append(
-                        "full_name = COALESCE(EXCLUDED.full_name, public.profiles.full_name)"
-                    )
-                else:
-                    update_assignments.append(f"{name} = EXCLUDED.{name}")
-            update_assignments.append("updated_at = NOW()")
-            query = f"""
-            INSERT INTO public.profiles ({", ".join(columns)})
-            VALUES ({", ".join(placeholders)})
-            ON CONFLICT (id) DO UPDATE SET
-                {", ".join(update_assignments)}
-            """
-            values = [user.id, *[value for _, value in fields]]
-            await self._database.execute(query, *values)
-
-        try:
-            await _execute_insert(profile_fields)
-        except asyncpg.UndefinedColumnError:
-            fallback_fields = [(name, value) for name, value in profile_fields if name != "email"]
-            await _execute_insert(fallback_fields)
+        await self._database.upsert_profile(user.id, profile_payload)
 
     async def _resolve_account_status(self, user_id: UUID) -> AccountStatus:
         users_service = UsersService(database=self._database)
@@ -237,47 +207,12 @@ class AuthService:
             return False
         return True
 
-    async def _local_sign_up(self, payload: SignUpRequest) -> SignUpResponse:
-        account = local_auth_manager.register_account(payload.email, payload.password, payload.full_name)
-        tokens, session = local_auth_manager.issue_tokens(
-            account,
-            access_minutes=self._settings.access_token_expire_minutes,
-            refresh_minutes=self._settings.refresh_token_expire_minutes,
-            audience=self._settings.supabase_jwt_audience,
-        )
-        user = AuthenticatedUser(
-            id=account.id,
-            email=account.email,
-            full_name=account.full_name,
-            created_at=account.created_at,
-            last_sign_in_at=account.last_sign_in_at,
-        )
-        await self._upsert_profile(user, payload.full_name)
-        account_status = AccountStatus()
-        return SignUpResponse(user=user, tokens=tokens, session=session, account_status=account_status)
-
-    async def _local_sign_in(self, payload: SignInRequest) -> SignInResponse:
-        account = local_auth_manager.authenticate_account(payload.email, payload.password)
-        tokens, session = local_auth_manager.issue_tokens(
-            account,
-            access_minutes=self._settings.access_token_expire_minutes,
-            refresh_minutes=self._settings.refresh_token_expire_minutes,
-            audience=self._settings.supabase_jwt_audience,
-        )
-        user = AuthenticatedUser(
-            id=account.id,
-            email=account.email,
-            full_name=account.full_name,
-            created_at=account.created_at,
-            last_sign_in_at=account.last_sign_in_at,
-        )
-        await self._upsert_profile(user)
-        account_status = await self._resolve_account_status(user.id)
-        return SignInResponse(user=user, tokens=tokens, session=session, account_status=account_status)
-
-    async def _local_sign_out(self, access_token: str) -> SignOutResponse:
-        local_auth_manager.revoke_access_token(access_token)
-        return SignOutResponse()
+    def _require_supabase(self) -> None:
+        if not self._is_supabase_configured():
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Supabase configuration is required for authentication",
+            )
 
 
 __all__ = ["AuthService"]
