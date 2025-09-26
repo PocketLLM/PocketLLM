@@ -383,7 +383,6 @@ Authorization: Bearer <access_token>
   }
 }
 ```
-
 ---
 
 ## 💬 Chats
