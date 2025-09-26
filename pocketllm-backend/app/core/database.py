@@ -207,7 +207,8 @@ class _SupabaseRestStore:
 
     def __init__(self, settings: Settings) -> None:
         self._settings = settings
-        self._base_url = settings.supabase_url.rstrip("/") + "/rest/v1"
+        supabase_url = str(settings.supabase_url)
+        self._base_url = supabase_url.rstrip("/") + "/rest/v1"
         self._headers = {
             "apikey": settings.supabase_service_role_key,
             "Authorization": f"Bearer {settings.supabase_service_role_key}",
