@@ -23,11 +23,11 @@ For production deployments, replace `localhost:8000` with your server address.
 Production demo:
 
 ```
-https://pocket-llm-lemon.vercel.app/v1
+https://pocket-llm-api.vercel.app/v1
 ```
 
 Swagger UI is available locally at `http://localhost:8000/api/docs` (also aliased at `http://localhost:8000/docs`) and in the hosted demo at
-`https://pocket-llm-lemon.vercel.app/docs` (legacy path `https://pocket-llm-lemon.vercel.app/api/docs`) unless disabled via `ENABLE_SWAGGER_DOCS`. The root endpoint (`GET /`) echoes
+`https://pocket-llm-api.vercel.app/docs` (legacy path `https://pocket-llm-api.vercel.app/api/docs`) unless disabled via `ENABLE_SWAGGER_DOCS`. The root endpoint (`GET /`) echoes
 the active docs path for quick verification.
 
 ## 🔐 Authentication

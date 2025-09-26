@@ -35,7 +35,7 @@ class Settings(BaseSettings):
     cors_origin: str = "*"
 
     # URLs
-    backend_base_url: str = "https://pocket-llm-lemon.vercel.app/"
+    backend_base_url: str = "https://pocket-llm-api.vercel.app/"
     fallback_backend_url: str = "https://pocketllm.onrender.com"
 
     # Supabase configuration
