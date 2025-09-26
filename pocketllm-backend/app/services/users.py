@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from datetime import UTC, datetime, timedelta
 from uuid import UUID
 
@@ -15,6 +16,8 @@ from app.schemas.users import (
     UserProfile,
     UserProfileUpdate,
 )
+
+logger = logging.getLogger(__name__)
 
 
 class UsersService:
@@ -54,28 +57,51 @@ class UsersService:
         RETURNING *
         """
         values = [user_id, *update_columns.values()]
+        logger.debug("Updating profile", extra={"user_id": str(user_id), "fields": list(update_columns.keys())})
         record = await self._database.fetchrow(query, *values)
         if not record:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Profile not found")
-        return UserProfile.model_validate(dict(record))
+        updated_profile = UserProfile.model_validate(dict(record))
+        logger.info(
+            "Profile updated",
+            extra={"user_id": str(user_id), "username": updated_profile.username},
+        )
+        return updated_profile
 
     async def complete_onboarding(self, user_id: UUID, payload: OnboardingSurvey) -> UserProfile:
-        record = await self._database.fetchrow(
-            """
-            UPDATE public.profiles
-            SET survey_completed = $2,
-                onboarding_responses = $3,
-                updated_at = NOW()
-            WHERE id = $1
-            RETURNING *
-            """,
-            user_id,
-            payload.survey_completed,
-            payload.onboarding_responses,
+        update_columns = payload.model_dump(
+            exclude_none=True,
+            exclude={"onboarding", "onboarding_responses"},
         )
+        update_columns["survey_completed"] = payload.survey_completed
+        update_columns["onboarding_responses"] = payload.resolved_onboarding_responses()
+        set_clauses = ", ".join(
+            f"{column} = ${idx}" for idx, column in enumerate(update_columns, start=2)
+        )
+        query = f"""
+        UPDATE public.profiles
+        SET {set_clauses}, updated_at = NOW()
+        WHERE id = $1
+        RETURNING *
+        """
+        values = [user_id, *update_columns.values()]
+        logger.debug(
+            "Completing onboarding",
+            extra={
+                "user_id": str(user_id),
+                "survey_completed": payload.survey_completed,
+                "fields": list(update_columns.keys()),
+            },
+        )
+        record = await self._database.fetchrow(query, *values)
         if not record:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Profile not found")
-        return UserProfile.model_validate(dict(record))
+        profile = UserProfile.model_validate(dict(record))
+        logger.info(
+            "Onboarding completed",
+            extra={"user_id": str(user_id), "survey_completed": profile.survey_completed},
+        )
+        return profile
 
     async def schedule_deletion(self, user_id: UUID, days_until_delete: int = 30) -> DeleteAccountResponse:
         schedule_for = datetime.now(tz=UTC) + timedelta(days=days_until_delete)

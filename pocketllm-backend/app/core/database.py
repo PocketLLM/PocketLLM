@@ -7,10 +7,11 @@ import logging
 from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
 from datetime import UTC, date, datetime
-from typing import Any, AsyncIterator, Callable, Optional
+from typing import Any, AsyncIterator, Callable, Optional, Protocol
 from uuid import UUID
 
 import asyncpg
+import httpx
 
 from .config import Settings, get_settings
 
@@ -69,10 +70,20 @@ class _ProfileRecord:
         }
 
 
+class _BaseStore(Protocol):
+    async def fetch(self, query: str, *args: Any) -> list[dict[str, Any]]: ...
+
+    async def fetchrow(self, query: str, *args: Any) -> dict[str, Any] | None: ...
+
+    async def fetchval(self, query: str, *args: Any) -> Any: ...
+
+    async def execute(self, query: str, *args: Any) -> str: ...
+
+
 class _MockConnection:
     """Lightweight stand-in for :class:`asyncpg.Connection`."""
 
-    def __init__(self, store: "_InMemoryStore") -> None:
+    def __init__(self, store: _BaseStore) -> None:
         self._store = store
 
     async def fetch(self, query: str, *args: Any) -> list[dict[str, Any]]:
@@ -191,6 +202,177 @@ class _InMemoryStore:
         return record.as_dict()
 
 
+class _SupabaseRestStore:
+    """Fallback store that persists data using Supabase PostgREST."""
+
+    def __init__(self, settings: Settings) -> None:
+        self._settings = settings
+        self._base_url = settings.supabase_url.rstrip("/") + "/rest/v1"
+        self._headers = {
+            "apikey": settings.supabase_service_role_key,
+            "Authorization": f"Bearer {settings.supabase_service_role_key}",
+            "Content-Type": "application/json",
+            "Accept": "application/json",
+        }
+        self._logger = logging.getLogger(f"{__name__}.supabase")
+
+    async def fetch(self, query: str, *args: Any) -> list[dict[str, Any]]:
+        row = await self.fetchrow(query, *args)
+        return [row] if row else []
+
+    async def fetchrow(self, query: str, *args: Any) -> dict[str, Any] | None:
+        normalised = _normalise_query(query)
+        if normalised.startswith("select * from public.profiles where id = $1"):
+            return await self._get_profile(args[0])
+        if normalised.startswith("update public.profiles set"):
+            return await self._handle_update(query, *args)
+        self._logger.warning("Supabase REST store received unsupported fetchrow query: %s", query)
+        return None
+
+    async def fetchval(self, query: str, *args: Any) -> Any:
+        rows = await self.fetch(query, *args)
+        if not rows:
+            return None
+        return next(iter(rows[0].values()))
+
+    async def execute(self, query: str, *args: Any) -> str:
+        normalised = _normalise_query(query)
+        if normalised.startswith("insert into public.profiles"):
+            await self._upsert_profile(query, *args)
+            return "INSERT 0 1"
+        if normalised.startswith("update public.profiles set"):
+            await self._handle_update(query, *args)
+            return "UPDATE 1"
+        self._logger.warning("Supabase REST store received unsupported execute query: %s", query)
+        return ""
+
+    async def _get_profile(self, user_id: UUID) -> dict[str, Any] | None:
+        params = {"id": f"eq.{user_id}", "limit": 1}
+        data = await self._request("GET", "profiles", params=params)
+        if not data:
+            return None
+        return data[0]
+
+    async def _upsert_profile(self, query: str, *args: Any) -> None:
+        columns_section = query.split("(", 1)[1].split(")", 1)[0]
+        column_names = [column.strip() for column in columns_section.split(",") if column.strip()]
+        values = dict(zip(column_names, args))
+        payload = self._serialise_payload(values)
+        user_id = payload.get("id")
+        if user_id:
+            existing = await self._get_profile(UUID(str(user_id)))
+            if existing and payload.get("full_name") is None:
+                payload.pop("full_name", None)
+        payload = {k: v for k, v in payload.items() if v is not None}
+        await self._request(
+            "POST",
+            "profiles",
+            json_payload=[payload],
+            prefer="resolution=merge-duplicates",
+        )
+
+    async def _handle_update(self, query: str, *args: Any) -> dict[str, Any] | None:
+        user_id = args[0]
+        assignments = self._parse_assignments(query, args)
+        payload = self._serialise_payload(assignments)
+        prefer = "return=representation"
+        data = await self._request(
+            "PATCH",
+            "profiles",
+            params={"id": f"eq.{user_id}"},
+            json_payload=payload,
+            prefer=prefer,
+        )
+        if not data:
+            return None
+        record = data[0]
+        normalised = _normalise_query(query)
+        if "returning deletion_requested_at" in normalised and "returning *" not in normalised:
+            return {
+                "deletion_requested_at": record.get("deletion_requested_at"),
+                "deletion_scheduled_for": record.get("deletion_scheduled_for"),
+            }
+        return record
+
+    def _parse_assignments(self, query: str, args: Any) -> dict[str, Any]:
+        set_clause = query.split("SET", 1)[1]
+        if "WHERE" in set_clause:
+            set_clause = set_clause.split("WHERE", 1)[0]
+        assignments: dict[str, Any] = {}
+        for part in set_clause.split(","):
+            if "=" not in part:
+                continue
+            column, value_expr = part.split("=", 1)
+            column = column.strip()
+            value_expr = value_expr.strip()
+            lowered = value_expr.lower()
+            if lowered == "now()":
+                assignments[column] = datetime.now(tz=UTC)
+            elif lowered.startswith("$"):
+                index = int(lowered[1:]) - 1
+                assignments[column] = args[index]
+            elif value_expr.startswith("'") and value_expr.endswith("'"):
+                assignments[column] = value_expr.strip("'")
+            else:
+                assignments[column] = value_expr
+        assignments.setdefault("updated_at", datetime.now(tz=UTC))
+        return assignments
+
+    def _serialise_payload(self, payload: dict[str, Any]) -> dict[str, Any]:
+        serialised: dict[str, Any] = {}
+        for key, value in payload.items():
+            if value is None:
+                continue
+            if isinstance(value, datetime):
+                serialised[key] = value.astimezone(UTC).isoformat()
+            elif isinstance(value, date):
+                serialised[key] = value.isoformat()
+            elif isinstance(value, UUID):
+                serialised[key] = str(value)
+            else:
+                serialised[key] = value
+        return serialised
+
+    async def _request(
+        self,
+        method: str,
+        resource: str,
+        *,
+        params: dict[str, Any] | None = None,
+        json_payload: Any | None = None,
+        prefer: str | None = None,
+    ) -> Any:
+        headers = dict(self._headers)
+        if prefer:
+            headers["Prefer"] = prefer
+        url = f"{self._base_url}/{resource}"
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            response = await client.request(
+                method,
+                url,
+                params=params,
+                json=json_payload,
+                headers=headers,
+            )
+        try:
+            response.raise_for_status()
+        except httpx.HTTPStatusError as exc:  # pragma: no cover - network errors handled at runtime
+            self._logger.error(
+                "Supabase REST request failed",
+                extra={
+                    "method": method,
+                    "url": url,
+                    "status_code": exc.response.status_code,
+                    "body": exc.response.text,
+                },
+            )
+            raise
+        if not response.content:
+            return None
+        if response.headers.get("content-type", "").startswith("application/json"):
+            return response.json()
+        return None
+
 class Database:
     """Async connection manager backed by :mod:`asyncpg`."""
 
@@ -198,7 +380,16 @@ class Database:
         self._settings = settings
         self._pool: Optional[asyncpg.Pool] = None
         self._lock = asyncio.Lock()
-        self._mock_store: _InMemoryStore | None = None
+        self._fallback_store: _BaseStore | None = None
+
+    def _should_use_supabase_rest(self) -> bool:
+        service_role = (self._settings.supabase_service_role_key or "").strip()
+        supabase_url = str(self._settings.supabase_url)
+        return (
+            bool(service_role)
+            and service_role.lower() != "service-role-placeholder"
+            and "example.supabase.co" not in supabase_url
+        )
 
     async def connect(self) -> None:
         """Create the connection pool if it has not been initialised."""
@@ -209,9 +400,13 @@ class Database:
         async with self._lock:
             if self._pool is None:
                 if not self._settings.database_url:
-                    if self._mock_store is None:
-                        self._mock_store = _InMemoryStore()
-                    logger.warning("Database URL is not configured. Running in mock mode.")
+                    if self._fallback_store is None:
+                        if self._should_use_supabase_rest():
+                            logger.warning("Database URL missing. Using Supabase REST fallback store.")
+                            self._fallback_store = _SupabaseRestStore(self._settings)
+                        else:
+                            logger.warning("Database URL is not configured. Running in mock mode.")
+                            self._fallback_store = _InMemoryStore()
                     return
                 self._pool = await asyncpg.create_pool(
                     dsn=self._settings.database_url,
@@ -239,9 +434,9 @@ class Database:
             await self.connect()
 
         if self._pool is None:
-            if self._mock_store is None:
+            if self._fallback_store is None:
                 raise RuntimeError("Database is not configured. Cannot establish connection.")
-            yield _MockConnection(self._mock_store)
+            yield _MockConnection(self._fallback_store)
             return
 
         connection = await self._pool.acquire()
@@ -254,8 +449,8 @@ class Database:
     async def transaction(self) -> AsyncIterator[asyncpg.Connection]:
         """Acquire a connection and wrap calls in a transaction."""
 
-        if self._pool is None and self._mock_store is not None:
-            async with _MockConnection(self._mock_store).transaction() as connection:
+        if self._pool is None and self._fallback_store is not None:
+            async with _MockConnection(self._fallback_store).transaction() as connection:
                 yield connection
             return
 

@@ -44,11 +44,33 @@ class UserProfileUpdate(BaseModel):
     avatar_url: Optional[str] = None
 
 
-class OnboardingSurvey(BaseModel):
+class OnboardingDetails(BaseModel):
+    """Structured answers captured during onboarding."""
+
+    primary_goal: Optional[str] = None
+    interests: list[str] | None = None
+    experience_level: Optional[str] = None
+    usage_frequency: Optional[str] = None
+    other_notes: Optional[str] = None
+
+
+class OnboardingSurvey(UserProfileUpdate):
     """Onboarding metadata submitted by the user."""
 
     survey_completed: bool = True
-    onboarding_responses: dict
+    onboarding: OnboardingDetails | dict | None = None
+    onboarding_responses: dict | None = None
+
+    def resolved_onboarding_responses(self) -> dict:
+        """Return the onboarding answers as a serialisable dictionary."""
+
+        if self.onboarding_responses is not None:
+            return self.onboarding_responses
+        if self.onboarding is None:
+            return {}
+        if isinstance(self.onboarding, dict):
+            return self.onboarding
+        return self.onboarding.model_dump(exclude_none=True)
 
 
 class DeleteAccountResponse(BaseModel):
