@@ -328,10 +328,11 @@ class _SupabaseRestStore:
 
         now = datetime.now(tz=UTC)
         if existing:
-            values.pop("created_at", None)
-            values.pop("id", None)
-            values["updated_at"] = now
-            payload = self._serialise_payload(values)
+            update_values = dict(values)
+            update_values.pop("created_at", None)
+            update_values.pop("id", None)
+            update_values["updated_at"] = now
+            payload = self._serialise_payload(update_values)
             payload = {k: v for k, v in payload.items() if v is not None}
             await self._request(
                 "PATCH",
@@ -342,16 +343,40 @@ class _SupabaseRestStore:
             )
             return
 
-        values.setdefault("created_at", now)
-        values.setdefault("updated_at", now)
-        payload = self._serialise_payload(values)
+        insert_values = dict(values)
+        insert_values.setdefault("created_at", now)
+        insert_values.setdefault("updated_at", now)
+        payload = self._serialise_payload(insert_values)
         payload = {k: v for k, v in payload.items() if v is not None}
-        await self._request(
-            "POST",
-            "profiles",
-            json_payload=payload,
-            prefer="return=minimal",
-        )
+
+        try:
+            await self._request(
+                "POST",
+                "profiles",
+                json_payload=payload,
+                prefer="return=minimal",
+            )
+        except httpx.HTTPStatusError as exc:
+            if user_uuid and self._should_retry_as_update(exc):
+                self._logger.info(
+                    "Supabase profile insert detected duplicate. Retrying with PATCH.",
+                    extra={"user_id": str(user_uuid)},
+                )
+                update_values = dict(values)
+                update_values.pop("created_at", None)
+                update_values.pop("id", None)
+                update_values["updated_at"] = datetime.now(tz=UTC)
+                update_payload = self._serialise_payload(update_values)
+                update_payload = {k: v for k, v in update_payload.items() if v is not None}
+                await self._request(
+                    "PATCH",
+                    "profiles",
+                    params={"id": f"eq.{user_uuid}"},
+                    json_payload=update_payload,
+                    prefer="return=minimal",
+                )
+                return
+            raise
 
     async def _handle_update(self, query: str, *args: Any) -> dict[str, Any] | None:
         user_id = args[0]
@@ -414,6 +439,28 @@ class _SupabaseRestStore:
             else:
                 serialised[key] = value
         return serialised
+
+    def _should_retry_as_update(self, exc: httpx.HTTPStatusError) -> bool:
+        if exc.response is None:
+            return False
+        if exc.response.status_code not in {400, 409}:
+            return False
+        try:
+            data = exc.response.json()
+        except ValueError:
+            message = exc.response.text.lower()
+            return "duplicate key value" in message or "already exists" in message
+
+        def _normalise(value: Any) -> str:
+            return str(value or "").lower()
+
+        code = _normalise(data.get("code"))
+        message = _normalise(data.get("message"))
+        details = _normalise(data.get("details"))
+        combined = " ".join(part for part in (message, details) if part)
+        if code in {"23505", "pgrst204"}:
+            return True
+        return "duplicate key value" in combined or "already exists" in combined
 
     async def _request(
         self,

@@ -6,6 +6,8 @@ from uuid import UUID
 
 import pytest
 
+httpx = pytest.importorskip("httpx")
+
 from app.core.config import Settings
 from app.core.database import _SupabaseRestStore
 
