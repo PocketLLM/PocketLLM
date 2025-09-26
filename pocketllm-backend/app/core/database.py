@@ -315,19 +315,42 @@ class _SupabaseRestStore:
         columns_section = query.split("(", 1)[1].split(")", 1)[0]
         column_names = [column.strip() for column in columns_section.split(",") if column.strip()]
         values = dict(zip(column_names, args))
-        payload = self._serialise_payload(values)
-        user_id = payload.get("id")
+        user_id = values.get("id")
+        existing: dict[str, Any] | None = None
         if user_id:
-            existing = await self._get_profile(UUID(str(user_id)))
-            if existing and payload.get("full_name") is None:
-                payload.pop("full_name", None)
+            user_uuid = UUID(str(user_id))
+            existing = await self._get_profile(user_uuid)
+        else:
+            user_uuid = None
+
+        if existing and values.get("full_name") is None and existing.get("full_name"):
+            values.pop("full_name", None)
+
+        now = datetime.now(tz=UTC)
+        if existing:
+            values.pop("created_at", None)
+            values.pop("id", None)
+            values["updated_at"] = now
+            payload = self._serialise_payload(values)
+            payload = {k: v for k, v in payload.items() if v is not None}
+            await self._request(
+                "PATCH",
+                "profiles",
+                params={"id": f"eq.{user_uuid}"},
+                json_payload=payload,
+                prefer="return=minimal",
+            )
+            return
+
+        values.setdefault("created_at", now)
+        values.setdefault("updated_at", now)
+        payload = self._serialise_payload(values)
         payload = {k: v for k, v in payload.items() if v is not None}
         await self._request(
             "POST",
             "profiles",
-            params={"on_conflict": "id"},
-            json_payload=[payload],
-            prefer="resolution=merge-duplicates",
+            json_payload=payload,
+            prefer="return=minimal",
         )
 
     async def _handle_update(self, query: str, *args: Any) -> dict[str, Any] | None:
