@@ -36,11 +36,8 @@ class ProvidersService:
         self._catalogue = catalogue or ProviderModelCatalogue(settings)
 
     async def list_providers(self, user_id: UUID) -> list[ProviderConfiguration]:
-        records = await self._database.fetch(
-            "SELECT * FROM public.providers WHERE user_id = $1 ORDER BY created_at DESC",
-            user_id,
-        )
-        return [ProviderRecord.from_mapping(dict(record)).to_schema() for record in records]
+        records = await self._fetch_provider_records(user_id)
+        return [record.to_schema() for record in records]
 
     async def activate_provider(
         self,
@@ -112,8 +109,22 @@ class ProvidersService:
         if affected == 0:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Provider not found")
 
-    async def get_provider_models(self, provider: str) -> list[ProviderModel]:
-        return await self._catalogue.list_models_for_provider(provider)
+    async def get_provider_models(
+        self,
+        user_id: UUID,
+        provider: str | None = None,
+    ) -> list[ProviderModel]:
+        records = await self._fetch_provider_records(user_id)
+        if provider is None:
+            return await self._catalogue.list_all_models(records)
+        return await self._catalogue.list_models_for_provider(provider, records)
+
+    async def _fetch_provider_records(self, user_id: UUID) -> list[ProviderRecord]:
+        records = await self._database.fetch(
+            "SELECT * FROM public.providers WHERE user_id = $1 ORDER BY created_at DESC",
+            user_id,
+        )
+        return [ProviderRecord.from_mapping(dict(record)) for record in records]
 
 
 __all__ = ["ProvidersService"]

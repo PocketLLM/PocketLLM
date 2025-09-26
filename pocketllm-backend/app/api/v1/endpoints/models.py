@@ -19,7 +19,7 @@ from app.schemas.models import (
 )
 from app.schemas.providers import ProviderModel
 from app.services.models import ModelsService
-from app.services.providers import ProviderModelCatalogue
+from app.services.provider_configs import ProvidersService
 
 router = APIRouter(prefix="/models", tags=["models"])
 
@@ -28,10 +28,10 @@ router = APIRouter(prefix="/models", tags=["models"])
 async def list_models(
     user: TokenPayload = Depends(get_current_request_user),
     settings=Depends(get_settings_dependency),
+    database=Depends(get_database_dependency),
 ) -> list[ProviderModel]:
-    _ = user  # ensure dependency is enforced even if unused
-    catalogue = ProviderModelCatalogue(settings)
-    return await catalogue.list_all_models()
+    service = ProvidersService(settings=settings, database=database)
+    return await service.get_provider_models(user.sub)
 
 
 @router.get("/saved", response_model=list[ModelConfiguration], summary="List saved models")

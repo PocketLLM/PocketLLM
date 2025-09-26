@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 import logging
 from abc import ABC, abstractmethod
-from typing import Any
+from typing import Any, Mapping
 
 import httpx
 
@@ -26,17 +26,29 @@ class ProviderClient(ABC):
         self,
         settings: Settings,
         *,
+        base_url: str | None = None,
+        api_key: str | None = None,
+        metadata: Mapping[str, Any] | None = None,
         transport: httpx.AsyncBaseTransport | None = None,
     ) -> None:
         self._settings = settings
         self._transport = transport
         self._logger = logging.getLogger(f"app.services.providers.{self.provider}")
+        self._base_url_override = base_url
+        self._api_key_override = api_key
+        self._metadata: dict[str, Any] = dict(metadata or {})
 
     @property
     def base_url(self) -> str:
         """Return the base URL for the provider API."""
 
-        return self.default_base_url
+        return self._base_url_override or self.default_base_url
+
+    @property
+    def metadata(self) -> Mapping[str, Any]:
+        """Return metadata associated with the provider configuration."""
+
+        return self._metadata
 
     def _build_headers(self) -> dict[str, str] | None:
         """Return HTTP headers for the provider request."""
@@ -102,9 +114,10 @@ class ProviderClient(ABC):
 
         return {}
 
-    @abstractmethod
     def _get_api_key(self) -> str | None:
         """Return the provider API key if configured."""
+
+        return self._api_key_override
 
     @abstractmethod
     def _parse_models(self, payload: Any) -> list[ProviderModel]:
