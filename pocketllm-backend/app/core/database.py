@@ -28,7 +28,7 @@ class _ProfileRecord:
     """In-memory representation of a row in ``public.profiles``."""
 
     id: UUID
-    email: str
+    email: str = ""
     full_name: str | None = None
     username: str | None = None
     bio: str | None = None
@@ -121,7 +121,7 @@ class _InMemoryStore:
     async def execute(self, query: str, *args: Any) -> str:
         normalised = _normalise_query(query)
         if normalised.startswith("insert into public.profiles"):
-            await self._upsert_profile(*args)
+            await self._upsert_profile(query, *args)
             return "INSERT 0 1"
         if normalised.startswith("update public.profiles set"):
             await self._handle_profiles_update(query, *args)
@@ -129,16 +129,27 @@ class _InMemoryStore:
         logger.warning("Mock database received unsupported execute query: %s", query)
         return ""
 
-    async def _upsert_profile(self, user_id: UUID, email: str, full_name: str | None) -> None:
+    async def _upsert_profile(self, query: str, *args: Any) -> None:
+        columns_section = query.split("(", 1)[1].split(")", 1)[0]
+        column_names = [column.strip() for column in columns_section.split(",") if column.strip()]
+        values = dict(zip(column_names, args))
+        user_id: UUID = values["id"]
         now = datetime.now(tz=UTC)
         record = self._profiles.get(user_id)
         if record is None:
-            record = _ProfileRecord(id=user_id, email=email, full_name=full_name)
+            record = _ProfileRecord(
+                id=user_id,
+                email=values.get("email", ""),
+                full_name=values.get("full_name"),
+            )
+            record.created_at = now
+            record.updated_at = now
             self._profiles[user_id] = record
         else:
-            record.email = email
-            if full_name is not None:
-                record.full_name = full_name
+            if "email" in values and values["email"]:
+                record.email = values["email"]
+            if "full_name" in values and values["full_name"] is not None:
+                record.full_name = values["full_name"]
             record.updated_at = now
 
     async def _handle_profiles_update(self, query: str, *args: Any) -> dict[str, Any] | None:
