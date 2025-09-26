@@ -1,9 +1,7 @@
 """Core application infrastructure modules."""
 
-from .config import Settings, get_settings
-from .database import Database, close_database, connect_to_database, get_database
-from .logging import configure_logging
-from .middleware import LoggingMiddleware, RequestContextMiddleware
+from importlib import import_module
+from typing import Any
 
 __all__ = [
     "Settings",
@@ -16,3 +14,24 @@ __all__ = [
     "LoggingMiddleware",
     "RequestContextMiddleware",
 ]
+
+
+_ATTR_TO_MODULE = {
+    "Settings": "app.core.config",
+    "get_settings": "app.core.config",
+    "Database": "app.core.database",
+    "get_database": "app.core.database",
+    "connect_to_database": "app.core.database",
+    "close_database": "app.core.database",
+    "configure_logging": "app.core.logging",
+    "LoggingMiddleware": "app.core.middleware",
+    "RequestContextMiddleware": "app.core.middleware",
+}
+
+
+def __getattr__(name: str) -> Any:
+    module_name = _ATTR_TO_MODULE.get(name)
+    if module_name is None:
+        raise AttributeError(f"module {__name__} has no attribute {name}")
+    module = import_module(module_name)
+    return getattr(module, name)

@@ -6,11 +6,15 @@ import asyncio
 import logging
 from contextlib import asynccontextmanager
 from functools import partial
-from typing import Any, AsyncIterator, Callable, Dict, Iterable, List, Optional
+from typing import TYPE_CHECKING, Any, AsyncIterator, Callable, Dict, Iterable, List, Optional
 from uuid import UUID
 
-from app.core.config import Settings, get_settings
-from app.database import SupabaseDatabase, db
+if TYPE_CHECKING:  # pragma: no cover - typing helper
+    from app.core.config import Settings
+    from app.database.connection import SupabaseDatabase
+else:  # pragma: no cover - fallback for runtime without config dependency
+    Settings = Any  # type: ignore[misc,assignment]
+    SupabaseDatabase = Any  # type: ignore[misc,assignment]
 
 logger = logging.getLogger(__name__)
 
@@ -18,9 +22,9 @@ logger = logging.getLogger(__name__)
 class Database:
     """Async wrapper that delegates all operations to Supabase."""
 
-    def __init__(self, settings: Settings, supabase: SupabaseDatabase | None = None) -> None:
+    def __init__(self, settings: "Settings", supabase: "SupabaseDatabase" | None = None) -> None:
         self._settings = settings
-        self._supabase = supabase or db
+        self._supabase = _resolve_supabase(supabase)
 
     # ------------------------------------------------------------------
     # Lifecycle management
@@ -144,13 +148,16 @@ class Database:
 _database_instance: Database | None = None
 
 
-def get_database(settings: Settings | None = None) -> Database:
+def get_database(settings: "Settings" | None = None) -> Database:
     """Return a singleton :class:`Database` instance."""
 
     global _database_instance
     if _database_instance is None:
-        resolved = settings or get_settings()
-        _database_instance = Database(resolved)
+        if settings is None:
+            from app.core.config import get_settings
+
+            settings = get_settings()
+        _database_instance = Database(settings)
     return _database_instance
 
 
@@ -172,6 +179,18 @@ async def run_db_task(task: Callable[["Database"], Any]) -> Any:
     database = get_database()
     await database.connect()
     return await task(database)
+
+
+def _load_supabase_default() -> "SupabaseDatabase":
+    from app.database import db
+
+    return db
+
+
+def _resolve_supabase(supabase: "SupabaseDatabase" | None) -> "SupabaseDatabase":
+    if supabase is not None:
+        return supabase
+    return _load_supabase_default()
 
 
 __all__ = [

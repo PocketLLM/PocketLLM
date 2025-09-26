@@ -15,6 +15,8 @@ from dotenv import load_dotenv
 from postgrest.exceptions import APIError
 from supabase import Client, create_client
 
+from app.utils.serializers import serialize_dates_for_json
+
 logger = logging.getLogger(__name__)
 
 # Load environment variables from a `.env` file if present so that runtime
@@ -126,8 +128,9 @@ class SupabaseDatabase:
             payload = {
                 "id": user_id,
                 **profile_data,
-                "updated_at": datetime.utcnow().isoformat(),
+                "updated_at": datetime.utcnow(),
             }
+            payload = self._serialise_for_supabase(payload)
             result = (
                 self.client
                 .table("profiles")
@@ -175,11 +178,12 @@ class SupabaseDatabase:
         self._log_operation("update_profile", "profiles", data=updates, filters={"user_id": user_id})
 
         try:
-            updates = {**updates, "updated_at": datetime.utcnow().isoformat()}
+            payload = {**updates, "updated_at": datetime.utcnow()}
+            payload = self._serialise_for_supabase(payload)
             result = (
                 self.client
                 .table("profiles")
-                .update(updates)
+                .update(payload)
                 .eq("id", user_id)
                 .execute()
             )
@@ -228,9 +232,11 @@ class SupabaseDatabase:
         self._log_operation("select", table, filters=filters)
 
         try:
+            serialised_filters = self._serialise_for_supabase(filters) if filters else None
+
             query = self.client.table(table).select(columns)
             if filters:
-                for key, value in filters.items():
+                for key, value in serialised_filters.items():
                     query = query.eq(key, value)
 
             for column, descending in self._normalise_order(order_by):
@@ -250,14 +256,15 @@ class SupabaseDatabase:
         self._log_operation("insert", table, data=data)
 
         try:
-            result = self.client.table(table).insert(data).execute()
+            payload = self._serialise_for_supabase(data)
+            result = self.client.table(table).insert(payload).execute()
             if not result.data:
                 logger.critical("❌ CRITICAL: Insert failed for %s - no data returned", table)
                 raise RuntimeError(f"Insert operation failed for {table}")
 
             records = result.data
-            if isinstance(data, dict) and "id" in data:
-                self._verify_persistence(table, data["id"])
+            if isinstance(payload, dict) and "id" in payload:
+                self._verify_persistence(table, payload["id"])
             logger.info("✅ VERIFIED: Inserted %s records into %s", len(records), table)
             return records
         except Exception as exc:
@@ -274,8 +281,11 @@ class SupabaseDatabase:
         self._log_operation("update", table, data=data, filters=filters)
 
         try:
-            query = self.client.table(table).update(data)
-            for key, value in filters.items():
+            payload = self._serialise_for_supabase(data)
+            serialised_filters = self._serialise_for_supabase(filters)
+
+            query = self.client.table(table).update(payload)
+            for key, value in serialised_filters.items():
                 query = query.eq(key, value)
             result = query.execute()
             logger.info("✅ Updated %s records in %s", len(result.data or []), table)
@@ -294,7 +304,8 @@ class SupabaseDatabase:
         self._log_operation("upsert", table, data=data)
 
         try:
-            query = self.client.table(table).upsert(data)
+            payload = self._serialise_for_supabase(data)
+            query = self.client.table(table).upsert(payload)
             if on_conflict:
                 query = query.on_conflict(on_conflict)
             result = query.execute()
@@ -311,8 +322,10 @@ class SupabaseDatabase:
         self._log_operation("delete", table, filters=filters)
 
         try:
+            serialised_filters = self._serialise_for_supabase(filters)
+
             query = self.client.table(table)
-            for key, value in filters.items():
+            for key, value in serialised_filters.items():
                 query = query.eq(key, value)
             result = query.delete().execute()
             logger.info("✅ Deleted records from %s", table)
@@ -362,6 +375,11 @@ class SupabaseDatabase:
             if column:
                 normalised.append((column, descending))
         return normalised
+
+    def _serialise_for_supabase(self, value: Any) -> Any:
+        if value is None:
+            return None
+        return serialize_dates_for_json(value)
 
 
 db = SupabaseDatabase()
