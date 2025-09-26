@@ -348,13 +348,15 @@ class _SupabaseRestStore:
         insert_values.setdefault("updated_at", now)
         payload = self._serialise_payload(insert_values)
         payload = {k: v for k, v in payload.items() if v is not None}
+        prefer_header = "resolution=merge-duplicates,return=minimal"
 
         try:
             await self._request(
                 "POST",
                 "profiles",
+                params={"on_conflict": "id"},
                 json_payload=payload,
-                prefer="return=minimal",
+                prefer=prefer_header,
             )
         except httpx.HTTPStatusError as exc:
             if user_uuid and self._should_retry_as_update(exc):

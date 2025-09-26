@@ -49,8 +49,8 @@ async def test_upsert_profile_creates_new_record(monkeypatch):
     assert captured["method"] == "POST"
     assert captured["resource"] == "profiles"
     kwargs = captured["kwargs"]
-    assert kwargs["prefer"] == "return=minimal"
-    assert kwargs.get("params") is None
+    assert kwargs["prefer"] == "resolution=merge-duplicates,return=minimal"
+    assert kwargs.get("params") == {"on_conflict": "id"}
     payload = kwargs["json_payload"]
     assert payload["id"] == str(user_id)
     assert payload["email"] == "user@example.com"
@@ -150,6 +150,9 @@ async def test_upsert_profile_retries_after_duplicate_error(monkeypatch):
 
     assert len(calls) == 2
     assert calls[0]["method"] == "POST"
+    post_kwargs = calls[0]["kwargs"]
+    assert post_kwargs["prefer"] == "resolution=merge-duplicates,return=minimal"
+    assert post_kwargs["params"] == {"on_conflict": "id"}
     assert calls[1]["method"] == "PATCH"
     patch_kwargs = calls[1]["kwargs"]
     assert patch_kwargs["params"] == {"id": f"eq.{user_id}"}
