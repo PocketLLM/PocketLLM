@@ -154,13 +154,12 @@ Fetch provider specific model catalogue.
 ## Models
 
 ### `GET /v1/models`
-List stored model configurations.
-- **Response:** `ModelConfiguration[]`
+Aggregate model catalogues from every configured provider.
+- **Response:** `ProviderModel[]`
 
-### `POST /v1/models`
-Create a new model configuration.
-- **Body:** `ModelCreateRequest`
-- **Response:** `ModelConfiguration`
+### `GET /v1/models/saved`
+List stored model configurations for the authenticated user.
+- **Response:** `ModelConfiguration[]`
 
 ### `POST /v1/models/import`
 Bulk import provider models.
@@ -169,11 +168,6 @@ Bulk import provider models.
 
 ### `GET /v1/models/{modelId}`
 Retrieve model details.
-- **Response:** `ModelConfiguration`
-
-### `PUT /v1/models/{modelId}`
-Update configuration details.
-- **Body:** `ModelUpdateRequest`
 - **Response:** `ModelConfiguration`
 
 ### `DELETE /v1/models/{modelId}`

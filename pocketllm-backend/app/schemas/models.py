@@ -39,27 +39,6 @@ class ModelConfiguration(BaseModel):
     updated_at: datetime
 
 
-class ModelCreateRequest(BaseModel):
-    """Create a custom model configuration."""
-
-    provider: str
-    model: str
-    name: str
-    display_name: Optional[str] = None
-    description: Optional[str] = None
-    settings: ModelSettings = Field(default_factory=ModelSettings)
-
-
-class ModelUpdateRequest(BaseModel):
-    """Update an existing model configuration."""
-
-    name: Optional[str] = None
-    display_name: Optional[str] = None
-    description: Optional[str] = None
-    settings: Optional[ModelSettings] = None
-    is_active: Optional[bool] = None
-
-
 class ModelImportRequest(BaseModel):
     """Import provider models."""
 
@@ -77,8 +56,6 @@ class ModelDefaultRequest(BaseModel):
 __all__ = [
     "ModelSettings",
     "ModelConfiguration",
-    "ModelCreateRequest",
-    "ModelUpdateRequest",
     "ModelImportRequest",
     "ModelDefaultRequest",
 ]

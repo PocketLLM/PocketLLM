@@ -13,7 +13,8 @@ from app.schemas.providers import (
     ProviderModel,
     ProviderUpdateRequest,
 )
-from app.services.providers import ProvidersService
+from app.services.provider_configs import ProvidersService
+from app.services.providers import ProviderModelCatalogue
 
 router = APIRouter(prefix="/providers", tags=["providers"])
 
@@ -68,5 +69,5 @@ async def list_provider_models(
     settings=Depends(get_settings_dependency),
     database=Depends(get_database_dependency),
 ) -> list[ProviderModel]:
-    service = ProvidersService(settings=settings, database=database)
-    return await service.get_provider_models(provider)
+    catalogue = ProviderModelCatalogue(settings)
+    return await catalogue.list_models_for_provider(provider)
