@@ -645,26 +645,22 @@ class _AuthPageState extends State<AuthPage> {
   }
 
   Widget _buildComingSoonButtons() {
-    final options = <({String label, Widget icon, Color background})>[
+    final options = <({String label, Widget icon})>[
       (
         label: 'Google',
         icon: Image.asset('assets/google.png', height: 28),
-        background: Colors.white,
       ),
       (
         label: 'Facebook',
-        icon: const Icon(Icons.facebook, color: Colors.white, size: 28),
-        background: const Color(0xFF1877F2),
+        icon: const Icon(Icons.facebook, color: Color(0xFF1877F2), size: 28),
       ),
       (
         label: 'GitHub',
-        icon: const Icon(Icons.code, color: Colors.white, size: 26),
-        background: const Color(0xFF24292F),
+        icon: const Icon(Icons.code, color: Color(0xFF24292F), size: 26),
       ),
       (
         label: 'Phone',
-        icon: const Icon(Icons.phone_android, color: Colors.white, size: 26),
-        background: const Color(0xFF6D28D9),
+        icon: const Icon(Icons.phone, color: Color(0xFF6D28D9), size: 26),
       ),
     ];
 
@@ -689,23 +685,9 @@ class _AuthPageState extends State<AuthPage> {
           children: [
             Tooltip(
               message: '${option.label} coming soon',
-              child: Container(
-                width: 72,
-                height: 72,
-                decoration: BoxDecoration(
-                  color: option.background,
-                  borderRadius: BorderRadius.circular(20),
-                  border: Border.all(color: Colors.grey[200]!),
-                  boxShadow: const [
-                    BoxShadow(
-                      color: Color(0x11000000),
-                      blurRadius: 12,
-                      offset: Offset(0, 6),
-                    ),
-                  ],
-                ),
-                alignment: Alignment.center,
-                child: option.icon,
+              child: SizedBox(
+                height: 48,
+                child: Center(child: option.icon),
               ),
             ),
             const SizedBox(height: 8),
@@ -736,15 +718,18 @@ class _AuthPageState extends State<AuthPage> {
 
     return LayoutBuilder(
       builder: (context, constraints) {
-        final isCompact = constraints.maxWidth < 420;
-        final spacing = isCompact ? 20.0 : 32.0;
+        final horizontalPadding = constraints.maxWidth >= 480 ? 12.0 : 8.0;
 
-        return Wrap(
-          alignment: WrapAlignment.center,
-          spacing: spacing,
-          runSpacing: spacing,
+        return Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            for (int index = 0; index < options.length; index++) buildOption(index),
+            for (int index = 0; index < options.length; index++)
+              Expanded(
+                child: Padding(
+                  padding: EdgeInsets.symmetric(horizontal: horizontalPadding / 2),
+                  child: buildOption(index),
+                ),
+              ),
           ],
         );
       },
