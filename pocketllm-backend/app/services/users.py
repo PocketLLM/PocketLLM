@@ -27,17 +27,14 @@ class UsersService:
         self._database = database
 
     async def _get_profile_record(self, user_id: UUID):
-        record = await self._database.fetchrow(
-            "SELECT * FROM public.profiles WHERE id = $1",
-            user_id,
-        )
+        record = await self._database.get_profile(user_id)
         if not record:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Profile not found")
         return record
 
     async def get_profile(self, user_id: UUID) -> UserProfile:
         record = await self._get_profile_record(user_id)
-        return UserProfile.model_validate(dict(record))
+        return UserProfile.model_validate(record)
 
     async def get_profile_by_id(self, user_id: UUID) -> UserProfile:
         """Fetch a profile by identifier."""
@@ -49,19 +46,11 @@ class UsersService:
         if not update_columns:
             return await self.get_profile(user_id)
 
-        set_clauses = ", ".join(f"{column} = ${idx}" for idx, column in enumerate(update_columns, start=2))
-        query = f"""
-        UPDATE public.profiles
-        SET {set_clauses}, updated_at = NOW()
-        WHERE id = $1
-        RETURNING *
-        """
-        values = [user_id, *update_columns.values()]
         logger.debug("Updating profile", extra={"user_id": str(user_id), "fields": list(update_columns.keys())})
-        record = await self._database.fetchrow(query, *values)
+        record = await self._database.update_profile(user_id, update_columns)
         if not record:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Profile not found")
-        updated_profile = UserProfile.model_validate(dict(record))
+        updated_profile = UserProfile.model_validate(record)
         logger.info(
             "Profile updated",
             extra={"user_id": str(user_id), "username": updated_profile.username},
@@ -75,16 +64,6 @@ class UsersService:
         )
         update_columns["survey_completed"] = payload.survey_completed
         update_columns["onboarding_responses"] = payload.resolved_onboarding_responses()
-        set_clauses = ", ".join(
-            f"{column} = ${idx}" for idx, column in enumerate(update_columns, start=2)
-        )
-        query = f"""
-        UPDATE public.profiles
-        SET {set_clauses}, updated_at = NOW()
-        WHERE id = $1
-        RETURNING *
-        """
-        values = [user_id, *update_columns.values()]
         logger.debug(
             "Completing onboarding",
             extra={
@@ -93,10 +72,10 @@ class UsersService:
                 "fields": list(update_columns.keys()),
             },
         )
-        record = await self._database.fetchrow(query, *values)
+        record = await self._database.update_profile(user_id, update_columns)
         if not record:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Profile not found")
-        profile = UserProfile.model_validate(dict(record))
+        profile = UserProfile.model_validate(record)
         logger.info(
             "Onboarding completed",
             extra={"user_id": str(user_id), "survey_completed": profile.survey_completed},
@@ -105,42 +84,35 @@ class UsersService:
 
     async def schedule_deletion(self, user_id: UUID, days_until_delete: int = 30) -> DeleteAccountResponse:
         schedule_for = datetime.now(tz=UTC) + timedelta(days=days_until_delete)
-        record = await self._database.fetchrow(
-            """
-            UPDATE public.profiles
-            SET deletion_status = 'pending',
-                deletion_requested_at = NOW(),
-                deletion_scheduled_for = $2,
-                updated_at = NOW()
-            WHERE id = $1
-            RETURNING deletion_requested_at, deletion_scheduled_for
-            """,
+        record = await self._database.update_profile(
             user_id,
-            schedule_for,
+            {
+                "deletion_status": "pending",
+                "deletion_requested_at": datetime.now(tz=UTC).isoformat(),
+                "deletion_scheduled_for": schedule_for.isoformat(),
+            },
         )
         if not record:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Profile not found")
         return DeleteAccountResponse(
-            deletion_requested_at=record["deletion_requested_at"],
-            deletion_scheduled_for=record["deletion_scheduled_for"],
+            deletion_requested_at=record.get("deletion_requested_at"),
+            deletion_scheduled_for=record.get("deletion_scheduled_for"),
         )
 
     async def cancel_deletion(self, user_id: UUID) -> CancelDeletionResponse:
         """Cancel a pending deletion request, if present."""
 
         existing = await self._get_profile_record(user_id)
-        record = await self._database.fetchrow(
-            """
-            UPDATE public.profiles
-            SET deletion_status = 'active',
-                deletion_requested_at = NULL,
-                deletion_scheduled_for = NULL,
-                updated_at = NOW()
-            WHERE id = $1
-            RETURNING *
-            """,
+        record = await self._database.update_profile(
             user_id,
+            {
+                "deletion_status": "active",
+                "deletion_requested_at": None,
+                "deletion_scheduled_for": None,
+            },
         )
+        if not record:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Profile not found")
         return CancelDeletionResponse(
             canceled=existing["deletion_status"] == "pending",
             previous_deletion_requested_at=existing["deletion_requested_at"]
@@ -149,7 +121,7 @@ class UsersService:
             previous_deletion_scheduled_for=existing["deletion_scheduled_for"]
             if existing["deletion_status"] == "pending"
             else None,
-            profile=UserProfile.model_validate(dict(record)),
+            profile=UserProfile.model_validate(record),
         )
 
     async def cancel_deletion_if_pending(self, user_id: UUID) -> CancelDeletionResponse:
@@ -161,26 +133,24 @@ class UsersService:
                 canceled=False,
                 previous_deletion_requested_at=None,
                 previous_deletion_scheduled_for=None,
-                profile=UserProfile.model_validate(dict(existing)),
+                profile=UserProfile.model_validate(existing),
             )
 
-        record = await self._database.fetchrow(
-            """
-            UPDATE public.profiles
-            SET deletion_status = 'active',
-                deletion_requested_at = NULL,
-                deletion_scheduled_for = NULL,
-                updated_at = NOW()
-            WHERE id = $1
-            RETURNING *
-            """,
+        record = await self._database.update_profile(
             user_id,
+            {
+                "deletion_status": "active",
+                "deletion_requested_at": None,
+                "deletion_scheduled_for": None,
+            },
         )
+        if not record:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Profile not found")
         return CancelDeletionResponse(
             canceled=True,
             previous_deletion_requested_at=existing["deletion_requested_at"],
             previous_deletion_scheduled_for=existing["deletion_scheduled_for"],
-            profile=UserProfile.model_validate(dict(record)),
+            profile=UserProfile.model_validate(record),
         )
 
 

@@ -40,8 +40,9 @@ Refer to [`API_DOCUMENTATION.md`](API_DOCUMENTATION.md) for the full list of opt
 
 ### 3. Initialise the database schema
 
-Run the SQL statements in [`app/DB/schema.sql`](app/DB/schema.sql) against your Supabase/Postgres instance. The schema is designed
-to work with Supabase's row-level security policies.
+Run the SQL statements in [`database/schema.sql`](database/schema.sql) against your Supabase/Postgres instance. The schema ships
+with primary keys, foreign keys, row-level security, triggers, and indexes tailored for PocketLLM's services, and can be applied
+multiple times safely.
 
 ### 4. Launch the API
 
@@ -66,7 +67,7 @@ app/
   schemas/           # Pydantic models grouped by domain
   services/          # Business logic interacting with Supabase
   utils/             # Shared helpers
-  DB/                # Database schema and migrations
+database/            # Database schema
 main.py              # Application entrypoint
 requirements.txt     # Python dependencies
 tests/               # Pytest-based regression tests

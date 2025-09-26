@@ -32,17 +32,15 @@ class JobWorker:
         self._tasks: set[asyncio.Task[Any]] = set()
 
     async def enqueue_image_generation(self, user_id: UUID, payload: JobCreateRequest) -> JobCreateResponse:
-        record = await self.database.fetchrow(
-            """
-            INSERT INTO public.jobs (user_id, job_type, status, input_data, metadata)
-            VALUES ($1, $2, $3, $4, $5)
-            RETURNING *
-            """,
-            user_id,
-            payload.job_type,
-            JobStatus.pending.value,
-            payload.input_data,
-            payload.metadata,
+        record = await self.database.insert(
+            "jobs",
+            {
+                "user_id": str(user_id),
+                "job_type": payload.job_type,
+                "status": JobStatus.pending.value,
+                "input_data": payload.input_data or {},
+                "metadata": payload.metadata or {},
+            },
         )
         if not record:
             raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to create job")
@@ -55,29 +53,25 @@ class JobWorker:
 
     async def _process_image_job(self, job_id: UUID) -> None:
         try:
-            await self.database.execute(
-                "UPDATE public.jobs SET status = $2, updated_at = NOW() WHERE id = $1",
-                job_id,
-                JobStatus.processing.value,
+            await self.database.update(
+                "jobs",
+                {"status": JobStatus.processing.value},
+                filters={"id": str(job_id)},
             )
             await asyncio.sleep(0.1)
-            await self.database.execute(
-                """
-                UPDATE public.jobs
-                SET status = $2,
-                    output_data = jsonb_build_object('result', 'pending-delivery'),
-                    updated_at = NOW()
-                WHERE id = $1
-                """,
-                job_id,
-                JobStatus.completed.value,
+            await self.database.update(
+                "jobs",
+                {
+                    "status": JobStatus.completed.value,
+                    "output_data": {"result": "pending-delivery"},
+                },
+                filters={"id": str(job_id)},
             )
         except Exception as exc:  # pragma: no cover - best effort logging
-            await self.database.execute(
-                "UPDATE public.jobs SET status = $2, error_log = $3, updated_at = NOW() WHERE id = $1",
-                job_id,
-                JobStatus.failed.value,
-                str(exc),
+            await self.database.update(
+                "jobs",
+                {"status": JobStatus.failed.value, "error_log": str(exc)},
+                filters={"id": str(job_id)},
             )
 
 
@@ -90,21 +84,22 @@ class JobsService:
         self._worker = JobWorker(database=database, settings=settings)
 
     async def list_jobs(self, user_id: UUID) -> list[Job]:
-        records = await self._database.fetch(
-            "SELECT * FROM public.jobs WHERE user_id = $1 ORDER BY created_at DESC",
-            user_id,
+        records = await self._database.select(
+            "jobs",
+            filters={"user_id": str(user_id)},
+            order_by=[("created_at", True)],
         )
-        return [Job.model_validate(dict(record)) for record in records]
+        return [Job.model_validate(record) for record in records]
 
     async def get_job(self, user_id: UUID, job_id: UUID) -> Job:
-        record = await self._database.fetchrow(
-            "SELECT * FROM public.jobs WHERE user_id = $1 AND id = $2",
-            user_id,
-            job_id,
+        records = await self._database.select(
+            "jobs",
+            filters={"user_id": str(user_id), "id": str(job_id)},
+            limit=1,
         )
-        if not record:
+        if not records:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Job not found")
-        return Job.model_validate(dict(record))
+        return Job.model_validate(records[0])
 
     async def create_image_job(self, user_id: UUID, payload: JobCreateRequest) -> JobCreateResponse:
         if payload.job_type != "image_generation":
@@ -112,13 +107,11 @@ class JobsService:
         return await self._worker.enqueue_image_generation(user_id, payload)
 
     async def delete_job(self, user_id: UUID, job_id: UUID) -> None:
-        result = await self._database.execute(
-            "DELETE FROM public.jobs WHERE id = $1 AND user_id = $2",
-            job_id,
-            user_id,
+        deleted = await self._database.delete(
+            "jobs",
+            filters={"id": str(job_id), "user_id": str(user_id)},
         )
-        affected = int(result.split()[-1]) if result else 0
-        if affected == 0:
+        if not deleted:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Job not found")
 
     async def retry_job(self, user_id: UUID, job_id: UUID) -> JobCreateResponse:

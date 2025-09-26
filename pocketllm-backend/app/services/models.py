@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from typing import Any
 from uuid import UUID
 
 from fastapi import HTTPException, status
@@ -24,30 +23,29 @@ class ModelsService:
         self._database = database
 
     async def list_models(self, user_id: UUID) -> list[ModelConfiguration]:
-        records = await self._database.fetch(
-            "SELECT * FROM public.model_configs WHERE user_id = $1 ORDER BY created_at DESC",
-            user_id,
+        records = await self._database.select(
+            "model_configs",
+            filters={"user_id": str(user_id)},
+            order_by=[("created_at", True)],
         )
         return [self._record_to_model(record) for record in records]
 
     async def get_model(self, user_id: UUID, model_id: UUID) -> ModelConfiguration:
-        record = await self._database.fetchrow(
-            "SELECT * FROM public.model_configs WHERE user_id = $1 AND id = $2",
-            user_id,
-            model_id,
+        records = await self._database.select(
+            "model_configs",
+            filters={"user_id": str(user_id), "id": str(model_id)},
+            limit=1,
         )
-        if not record:
+        if not records:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Model not found")
-        return self._record_to_model(record)
+        return self._record_to_model(records[0])
 
     async def delete_model(self, user_id: UUID, model_id: UUID) -> None:
-        result = await self._database.execute(
-            "DELETE FROM public.model_configs WHERE user_id = $1 AND id = $2",
-            user_id,
-            model_id,
+        deleted = await self._database.delete(
+            "model_configs",
+            filters={"user_id": str(user_id), "id": str(model_id)},
         )
-        affected = int(result.split()[-1]) if result else 0
-        if affected == 0:
+        if not deleted:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Model not found")
 
     async def import_models(self, user_id: UUID, payload: ModelImportRequest) -> list[ModelConfiguration]:
@@ -69,27 +67,21 @@ class ModelsService:
         return created_models
 
     async def set_default_model(self, user_id: UUID, model_id: UUID, payload: ModelDefaultRequest) -> ModelConfiguration:
-        await self._database.execute(
-            "UPDATE public.model_configs SET is_default = FALSE WHERE user_id = $1",
-            user_id,
+        await self._database.update(
+            "model_configs",
+            {"is_default": False},
+            filters={"user_id": str(user_id)},
         )
-        record = await self._database.fetchrow(
-            """
-            UPDATE public.model_configs
-            SET is_default = $3,
-                updated_at = NOW()
-            WHERE user_id = $1 AND id = $2
-            RETURNING *
-            """,
-            user_id,
-            model_id,
-            payload.is_default,
+        updated = await self._database.update(
+            "model_configs",
+            {"is_default": payload.is_default},
+            filters={"user_id": str(user_id), "id": str(model_id)},
         )
-        if not record:
+        if not updated:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Model not found")
-        return self._record_to_model(record)
+        return self._record_to_model(updated[0])
 
-    def _record_to_model(self, record: Any) -> ModelConfiguration:
+    def _record_to_model(self, record: dict[str, object]) -> ModelConfiguration:
         data = dict(record)
         model_record = ModelConfigRecord.from_mapping(data)
         return model_record.to_schema()
@@ -105,26 +97,23 @@ class ModelsService:
         description: str | None,
         settings: ModelSettings,
     ) -> ModelConfiguration:
-        record = await self._database.fetchrow(
-            """
-            INSERT INTO public.model_configs (user_id, provider, model, name, display_name, description, settings)
-            VALUES ($1, $2, $3, $4, $5, $6, $7)
-            RETURNING *
-            """,
-            user_id,
-            provider,
-            model,
-            name,
-            display_name,
-            description,
-            settings.model_dump(),
-        )
-        if not record:
+        payload = {
+            "user_id": str(user_id),
+            "provider": provider,
+            "model": model,
+            "name": name,
+            "display_name": display_name,
+            "description": description,
+            "settings": settings.model_dump(),
+            "is_active": True,
+        }
+        records = await self._database.insert_many("model_configs", [payload])
+        if not records:
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 detail="Failed to create model configuration",
             )
-        return self._record_to_model(record)
+        return self._record_to_model(records[0])
 
 
 __all__ = ["ModelsService"]
