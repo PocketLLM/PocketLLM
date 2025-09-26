@@ -1,6 +1,5 @@
-"""Tests for the in-memory database fallback used in mock mode."""
-
-from __future__ import annotations
+import types
+import uuid
 
 import types
 import uuid
@@ -8,101 +7,101 @@ import uuid
 import pytest
 
 from app.core.config import Settings
-from app.core.database import Database, _SupabaseRestStore
+from app.core.database import Database
 
 
-INSERT_PROFILE_QUERY = """
-INSERT INTO public.profiles (id, email, full_name)
-VALUES ($1, $2, $3)
-ON CONFLICT (id) DO UPDATE SET
-    email = EXCLUDED.email,
-    full_name = COALESCE(EXCLUDED.full_name, public.profiles.full_name),
-    updated_at = NOW()
-"""
+class StubSupabase:
+    def __init__(self) -> None:
+        self.client = object()
+        self.test_connection_calls = 0
+        self.upsert_profile_calls: list[tuple[str, dict[str, object]]] = []
+        self.update_profile_calls: list[tuple[str, dict[str, object]]] = []
+        self.select_calls: list[tuple[str, object, object, object]] = []
+        self.insert_calls: list[tuple[str, dict[str, object]]] = []
+        self.update_calls: list[tuple[str, dict[str, object], dict[str, object]]] = []
+        self.delete_calls: list[tuple[str, dict[str, object]]] = []
 
-SELECT_PROFILE_QUERY = "SELECT * FROM public.profiles WHERE id = $1"
+    def test_connection(self) -> bool:
+        self.test_connection_calls += 1
+        return True
 
-COMPLETE_ONBOARDING_QUERY = """
-UPDATE public.profiles
-SET survey_completed = $2,
-    onboarding_responses = $3,
-    updated_at = NOW()
-WHERE id = $1
-RETURNING *
-"""
+    def upsert_profile(self, user_id: str, payload: dict[str, object]) -> dict[str, object]:
+        self.upsert_profile_calls.append((user_id, dict(payload)))
+        return {"id": user_id, **payload}
+
+    def get_profile(self, user_id: str) -> dict[str, object] | None:
+        return {"id": user_id, "email": "user@example.com"}
+
+    def update_profile(self, user_id: str, payload: dict[str, object]) -> dict[str, object]:
+        self.update_profile_calls.append((user_id, dict(payload)))
+        return {"id": user_id, **payload}
+
+    def select(self, table: str, **kwargs) -> list[dict[str, object]]:
+        self.select_calls.append((table, kwargs.get("filters"), kwargs.get("limit"), kwargs.get("order_by")))
+        return [{"id": "123"}]
+
+    def insert(self, table: str, data: dict[str, object] | list[dict[str, object]]) -> list[dict[str, object]]:
+        if isinstance(data, list):
+            payloads = [dict(item) for item in data]
+        else:
+            payloads = [dict(data)]
+        self.insert_calls.append((table, payloads[0]))
+        return payloads
+
+    def update(self, table: str, data: dict[str, object], *, filters: dict[str, object]) -> list[dict[str, object]]:
+        self.update_calls.append((table, dict(data), dict(filters)))
+        return [{**filters, **data}]
+
+    def upsert(self, table: str, data: dict[str, object], *, on_conflict: str | None = None) -> list[dict[str, object]]:
+        return [dict(data)]
+
+    def delete(self, table: str, *, filters: dict[str, object]) -> list[dict[str, object]]:
+        self.delete_calls.append((table, dict(filters)))
+        return [{"id": filters.get("id", "123")}] 
+
+
+@pytest.fixture()
+def database(monkeypatch: pytest.MonkeyPatch) -> tuple[Database, StubSupabase]:
+    stub = StubSupabase()
+    settings = Settings()
+    db = Database(settings=settings, supabase=stub)
+
+    async def immediate_run(self: Database, func, *args, **kwargs):
+        return func(*args, **kwargs)
+
+    monkeypatch.setattr(db, "_run", types.MethodType(immediate_run, db))
+    return db, stub
 
 
 @pytest.mark.asyncio
-async def test_mock_database_upsert_and_fetch_profile() -> None:
-    settings = Settings(database_url=None)
-    database = Database(settings=settings)
+async def test_upsert_profile_invokes_supabase(database: tuple[Database, StubSupabase]) -> None:
+    db, stub = database
     user_id = uuid.uuid4()
 
-    await database.execute(INSERT_PROFILE_QUERY, user_id, "user@example.com", "Test User")
-    record = await database.fetchrow(SELECT_PROFILE_QUERY, user_id)
+    await db.upsert_profile(user_id, {"email": "user@example.com"})
 
-    assert record is not None
-    assert record["email"] == "user@example.com"
-    assert record["full_name"] == "Test User"
-    assert record["survey_completed"] is False
+    assert stub.upsert_profile_calls
+    call_user_id, payload = stub.upsert_profile_calls[0]
+    assert call_user_id == str(user_id)
+    assert payload["email"] == "user@example.com"
 
 
 @pytest.mark.asyncio
-async def test_mock_database_updates_onboarding_fields() -> None:
-    settings = Settings(database_url=None)
-    database = Database(settings=settings)
-    user_id = uuid.uuid4()
+async def test_select_passes_filters(database: tuple[Database, StubSupabase]) -> None:
+    db, stub = database
 
-    await database.execute(INSERT_PROFILE_QUERY, user_id, "user@example.com", "Test User")
-    await database.fetchrow(COMPLETE_ONBOARDING_QUERY, user_id, True, {"step": "done"})
+    await db.select("chats", filters={"user_id": uuid.uuid4()})
 
-    record = await database.fetchrow(SELECT_PROFILE_QUERY, user_id)
-    assert record is not None
-    assert record["survey_completed"] is True
-    assert record["onboarding_responses"] == {"step": "done"}
+    assert stub.select_calls
+    table, filters, _, _ = stub.select_calls[0]
+    assert table == "chats"
+    assert isinstance(filters, dict)
 
 
 @pytest.mark.asyncio
-async def test_supabase_rest_upsert_uses_on_conflict(monkeypatch: pytest.MonkeyPatch) -> None:
-    settings = Settings(
-        supabase_service_role_key="service-role-test",
-        database_url=None,
-    )
-    store = _SupabaseRestStore(settings)
+async def test_connect_validates_connection(database: tuple[Database, StubSupabase]) -> None:
+    db, stub = database
 
-    calls: list[dict[str, object]] = []
+    await db.connect()
 
-    async def fake_request(
-        self,
-        method: str,
-        resource: str,
-        *,
-        params: dict[str, object] | None = None,
-        json_payload: object | None = None,
-        prefer: str | None = None,
-    ) -> list[dict[str, object]]:
-        calls.append(
-            {
-                "method": method,
-                "resource": resource,
-                "params": params,
-                "json_payload": json_payload,
-                "prefer": prefer,
-            }
-        )
-        if method == "GET":
-            return []
-        return []
-
-    monkeypatch.setattr(
-        store,
-        "_request",
-        types.MethodType(fake_request, store),
-    )
-
-    user_id = uuid.uuid4()
-    await store._upsert_profile(INSERT_PROFILE_QUERY, user_id, "user@example.com", "Test User")
-
-    post_calls = [call for call in calls if call["method"] == "POST"]
-    assert post_calls, "POST request was not recorded"
-    assert post_calls[0]["params"] == {"on_conflict": "id"}
+    assert stub.test_connection_calls == 1
