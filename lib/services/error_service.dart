@@ -1,3 +1,8 @@
+/// File Overview:
+/// - Purpose: Centralized error logging with local persistence and recovery
+///   hints.
+/// - Backend Migration: Keep but forward logs to backend observability instead
+///   of storing solely in shared preferences.
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';

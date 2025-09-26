@@ -1,3 +1,8 @@
+/// File Overview:
+/// - Purpose: Client-side orchestration layer for model CRUD operations that
+///   mixes backend calls with cached fallbacks.
+/// - Backend Migration: Simplify to a pure data access wrapper once backend
+///   persists models and selection state.
 import 'dart:convert';
 
 import 'package:flutter/foundation.dart';

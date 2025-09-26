@@ -1,3 +1,8 @@
+/// File Overview:
+/// - Purpose: Dialog for configuring search providers and storing credentials
+///   locally.
+/// - Backend Migration: Keep UI but route save/test actions through backend
+///   search proxy APIs to avoid exposing keys.
 import 'package:flutter/material.dart';
 import '../services/search_service.dart';
 

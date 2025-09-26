@@ -1,3 +1,8 @@
+/// File Overview:
+/// - Purpose: Shared data models used across the frontend, including message
+///   history and provider metadata with some hardcoded defaults.
+/// - Backend Migration: Review all classes; many fields (e.g., provider lists,
+///   static enums) should align with backend contracts instead of local copies.
 import '../services/model_service.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';

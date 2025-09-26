@@ -1,3 +1,8 @@
+/// File Overview:
+/// - Purpose: Data model representing Ollama catalog entries with hardcoded
+///   metadata.
+/// - Backend Migration: Replace the static catalog with backend-provided model
+///   metadata to avoid shipping outdated lists.
 import 'package:flutter/material.dart';
 
 class OllamaModel {

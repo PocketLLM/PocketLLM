@@ -1,3 +1,8 @@
+/// File Overview:
+/// - Purpose: Thin wrapper around `AuthState` used by the onboarding survey to
+///   populate a user profile.
+/// - Backend Migration: Keep as coordinator but ensure it calls real backend
+///   survey/profile endpoints instead of local state once available.
 import 'package:meta/meta.dart';
 
 import 'auth_state.dart';

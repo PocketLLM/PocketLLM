@@ -1,3 +1,7 @@
+/// File Overview:
+/// - Purpose: Data models representing onboarding survey questions, options,
+///   and responses.
+/// - Backend Migration: Keep but ensure schema mirrors backend survey payloads.
 import 'package:equatable/equatable.dart';
 
 class SurveyQuestion extends Equatable {

@@ -1,3 +1,8 @@
+/// File Overview:
+/// - Purpose: Routes chat requests from the UI directly to various model
+///   providers with provider-specific HTTP implementations.
+/// - Backend Migration: Deprecate once all chat generation flows are proxied
+///   through backend orchestration.
 import 'dart:convert';
 import 'dart:async';
 import 'package:flutter/material.dart';

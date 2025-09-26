@@ -1,3 +1,6 @@
+/// File Overview:
+/// - Purpose: Visual indicator for onboarding survey progress.
+/// - Backend Migration: Keep; no backend dependency.
 import 'package:flutter/material.dart';
 
 class SurveyProgressIndicator extends StatelessWidget {

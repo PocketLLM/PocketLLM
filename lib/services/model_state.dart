@@ -1,3 +1,8 @@
+/// File Overview:
+/// - Purpose: Observable state container that keeps track of available models,
+///   selection, and health checks for client-side decision making.
+/// - Backend Migration: Reduce scope once backend delivers curated model lists
+///   and health telemetry so the frontend only consumes summarized states.
 import 'dart:async';
 import 'dart:io';
 import 'package:flutter/foundation.dart';

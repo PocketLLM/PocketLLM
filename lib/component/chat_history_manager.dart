@@ -1,3 +1,8 @@
+/// File Overview:
+/// - Purpose: Legacy helper that persists single-conversation history in local
+///   shared preferences.
+/// - Backend Migration: Remove when chat transcripts are synchronized via
+///   backend storage.
 import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'models.dart';

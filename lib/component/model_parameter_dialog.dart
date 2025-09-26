@@ -1,3 +1,6 @@
+/// File Overview:
+/// - Purpose: UI dialog for selecting Ollama model variants and features.
+/// - Backend Migration: Keep UI but feed it with backend-sourced metadata.
 import 'package:flutter/material.dart';
 import 'ollama_model.dart';
 

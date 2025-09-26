@@ -1,3 +1,7 @@
+/// File Overview:
+/// - Purpose: First onboarding slide introducing the product.
+/// - Backend Migration: Keep but consider hosting animations locally to avoid
+///   runtime network dependency.
 import 'package:flutter/material.dart';
 import 'package:lottie/lottie.dart';
 

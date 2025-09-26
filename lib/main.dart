@@ -1,3 +1,9 @@
+/// File Overview:
+/// - Purpose: Entry point that wires up lifecycle, theming, authentication, and
+///   bootstrapping so the Flutter shell can render the chat experience.
+/// - Backend Migration: Keep this file but plan to remove direct API key
+///   initialization and inline fallback flows once the backend exposes managed
+///   configuration endpoints.
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'component/splash_screen.dart';
