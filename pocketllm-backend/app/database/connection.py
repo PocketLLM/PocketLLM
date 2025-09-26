@@ -11,10 +11,18 @@ import os
 from datetime import datetime
 from typing import Any, Dict, List, Optional, Sequence, Union
 
+from dotenv import load_dotenv
 from postgrest.exceptions import APIError
 from supabase import Client, create_client
 
 logger = logging.getLogger(__name__)
+
+# Load environment variables from a `.env` file if present so that runtime
+# processes (including the development server reloader) have access to the
+# Supabase credentials before the singleton initialises.
+_ENV_LOADED = load_dotenv(override=False)
+if _ENV_LOADED:
+    logger.info("✅ Loaded environment variables from .env file")
 
 
 class SupabaseDatabase:
