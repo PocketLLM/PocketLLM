@@ -2,12 +2,13 @@
 
 from __future__ import annotations
 
+import types
 import uuid
 
 import pytest
 
 from app.core.config import Settings
-from app.core.database import Database
+from app.core.database import Database, _SupabaseRestStore
 
 
 INSERT_PROFILE_QUERY = """
@@ -59,3 +60,49 @@ async def test_mock_database_updates_onboarding_fields() -> None:
     assert record is not None
     assert record["survey_completed"] is True
     assert record["onboarding_responses"] == {"step": "done"}
+
+
+@pytest.mark.asyncio
+async def test_supabase_rest_upsert_uses_on_conflict(monkeypatch: pytest.MonkeyPatch) -> None:
+    settings = Settings(
+        supabase_service_role_key="service-role-test",
+        database_url=None,
+    )
+    store = _SupabaseRestStore(settings)
+
+    calls: list[dict[str, object]] = []
+
+    async def fake_request(
+        self,
+        method: str,
+        resource: str,
+        *,
+        params: dict[str, object] | None = None,
+        json_payload: object | None = None,
+        prefer: str | None = None,
+    ) -> list[dict[str, object]]:
+        calls.append(
+            {
+                "method": method,
+                "resource": resource,
+                "params": params,
+                "json_payload": json_payload,
+                "prefer": prefer,
+            }
+        )
+        if method == "GET":
+            return []
+        return []
+
+    monkeypatch.setattr(
+        store,
+        "_request",
+        types.MethodType(fake_request, store),
+    )
+
+    user_id = uuid.uuid4()
+    await store._upsert_profile(INSERT_PROFILE_QUERY, user_id, "user@example.com", "Test User")
+
+    post_calls = [call for call in calls if call["method"] == "POST"]
+    assert post_calls, "POST request was not recorded"
+    assert post_calls[0]["params"] == {"on_conflict": "id"}

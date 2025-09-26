@@ -65,7 +65,7 @@ class Settings(BaseSettings):
 
     # Logging configuration
     log_level: str = Field(default="INFO", validation_alias="LOG_LEVEL")
-    log_json: bool = Field(default=True, validation_alias="LOG_JSON", json_schema_extra={"example": True})
+    log_json: bool = Field(default=False, validation_alias="LOG_JSON", json_schema_extra={"example": False})
 
     # Storage configuration
     storage_bucket_models: str = "model-artifacts"
