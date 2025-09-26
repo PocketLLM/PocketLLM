@@ -2,7 +2,7 @@
 
 ## Base URL
 ```
-http://localhost:8000/v1
+https://pocket-llm-api.vercel.app/v1
 ```
 
 For the hosted demo deployment you can target:
@@ -29,7 +29,7 @@ Follow these steps to prepare the NestJS backend before exercising the API colle
    ```bash
    npm run start:dev
    ```
-   The REST API will be available at `http://localhost:8000/v1` and Swagger documentation at `http://localhost:8000/api/docs` (aliased at `http://localhost:8000/docs`).
+   The REST API will be available at `https://pocket-llm-api.vercel.app/v1` and Swagger documentation at `https://pocket-llm-api.vercel.app/api/docs` (aliased at `https://pocket-llm-api.vercel.app/docs`).
    In production (Vercel demo) the docs are published at `https://pocket-llm-api.vercel.app/docs` (legacy path `https://pocket-llm-api.vercel.app/api/docs`).
 4. **Authenticate requests**
    Use `POST /v1/auth/signin` to obtain an access token and send it in the `Authorization: Bearer <token>` header when calling protected routes. The Users, Chats, and Jobs controllers are guarded by the Supabase JWT so every request must include a valid token. You can always call `GET /v1` to verify routing and to see the currently active documentation links exposed by the server.
@@ -136,7 +136,7 @@ All API responses follow this standardized format:
 
 ### POST /v1/auth/signup
 **Group:** auth  
-**URL:** `http://localhost:8000/v1/auth/signup`
+**URL:** `https://pocket-llm-api.vercel.app/v1/auth/signup`
 
 **Body (JSON):**
 ```json
@@ -166,7 +166,7 @@ All API responses follow this standardized format:
 
 ### POST /v1/auth/signin
 **Group:** auth  
-**URL:** `http://localhost:8000/v1/auth/signin`
+**URL:** `https://pocket-llm-api.vercel.app/v1/auth/signin`
 
 **Body (JSON):**
 ```json
@@ -204,7 +204,7 @@ All API responses follow this standardized format:
 
 ### GET /v1/users/profile
 **Group:** users  
-**URL:** `http://localhost:8000/v1/users/profile`
+**URL:** `https://pocket-llm-api.vercel.app/v1/users/profile`
 
 **Headers:**
 ```
@@ -244,7 +244,7 @@ Authorization: Bearer <access_token>
 
 ### PUT /v1/users/profile
 **Group:** users  
-**URL:** `http://localhost:8000/v1/users/profile`
+**URL:** `https://pocket-llm-api.vercel.app/v1/users/profile`
 
 **Headers:**
 ```
@@ -307,7 +307,7 @@ Authorization: Bearer <access_token>
 
 ### POST /v1/users/profile/onboarding
 **Group:** users
-**URL:** `http://localhost:8000/v1/users/profile/onboarding`
+**URL:** `https://pocket-llm-api.vercel.app/v1/users/profile/onboarding`
 
 **Headers:**
 ```
@@ -367,7 +367,7 @@ Authorization: Bearer <access_token>
 
 ### DELETE /v1/users/profile
 **Group:** users  
-**URL:** `http://localhost:8000/v1/users/profile`
+**URL:** `https://pocket-llm-api.vercel.app/v1/users/profile`
 
 **Headers:**
 ```
@@ -389,7 +389,7 @@ Authorization: Bearer <access_token>
 
 ### GET /v1/chats
 **Group:** chats  
-**URL:** `http://localhost:8000/v1/chats`
+**URL:** `https://pocket-llm-api.vercel.app/v1/chats`
 
 **Headers:**
 ```
@@ -422,7 +422,7 @@ Authorization: Bearer <access_token>
 
 ### POST /v1/chats
 **Group:** chats  
-**URL:** `http://localhost:8000/v1/chats`
+**URL:** `https://pocket-llm-api.vercel.app/v1/chats`
 
 **Headers:**
 ```
@@ -468,7 +468,7 @@ Authorization: Bearer <access_token>
 
 ### GET /v1/chats/{chatId}
 **Group:** chats  
-**URL:** `http://localhost:8000/v1/chats/uuid-here`
+**URL:** `https://pocket-llm-api.vercel.app/v1/chats/uuid-here`
 
 **Headers:**
 ```
@@ -495,7 +495,7 @@ Authorization: Bearer <access_token>
 
 ### PUT /v1/chats/{chatId}
 **Group:** chats  
-**URL:** `http://localhost:8000/v1/chats/uuid-here`
+**URL:** `https://pocket-llm-api.vercel.app/v1/chats/uuid-here`
 
 **Headers:**
 ```
@@ -536,7 +536,7 @@ Authorization: Bearer <access_token>
 
 ### DELETE /v1/chats/{chatId}
 **Group:** chats  
-**URL:** `http://localhost:8000/v1/chats/uuid-here`
+**URL:** `https://pocket-llm-api.vercel.app/v1/chats/uuid-here`
 
 **Headers:**
 ```
@@ -555,7 +555,7 @@ Authorization: Bearer <access_token>
 
 ### POST /v1/chats/{chatId}/messages
 **Group:** chats
-**URL:** `http://localhost:8000/v1/chats/uuid-here/messages`
+**URL:** `https://pocket-llm-api.vercel.app/v1/chats/uuid-here/messages`
 
 **Headers:**
 ```
@@ -602,7 +602,7 @@ Authorization: Bearer <access_token>
 
 ### GET /v1/chats/{chatId}/messages
 **Group:** chats
-**URL:** `http://localhost:8000/v1/chats/uuid-here/messages?limit=50&offset=0`
+**URL:** `https://pocket-llm-api.vercel.app/v1/chats/uuid-here/messages?limit=50&offset=0`
 
 **Headers:**
 ```
@@ -642,7 +642,7 @@ Authorization: Bearer <access_token>
 
 ### GET /v1/jobs
 **Group:** jobs
-**URL:** `http://localhost:8000/v1/jobs?status=completed&limit=10`
+**URL:** `https://pocket-llm-api.vercel.app/v1/jobs?status=completed&limit=10`
 
 **Headers:**
 ```
@@ -686,7 +686,7 @@ Authorization: Bearer <access_token>
 
 ### POST /v1/jobs/image-generation
 **Group:** jobs
-**URL:** `http://localhost:8000/v1/jobs/image-generation`
+**URL:** `https://pocket-llm-api.vercel.app/v1/jobs/image-generation`
 
 **Headers:**
 ```
@@ -730,7 +730,7 @@ Authorization: Bearer <access_token>
 
 ### GET /v1/jobs/{jobId}
 **Group:** jobs
-**URL:** `http://localhost:8000/v1/jobs/uuid-here`
+**URL:** `https://pocket-llm-api.vercel.app/v1/jobs/uuid-here`
 
 **Headers:**
 ```
@@ -765,7 +765,7 @@ Authorization: Bearer <access_token>
 
 ### DELETE /v1/jobs/{jobId}
 **Group:** jobs
-**URL:** `http://localhost:8000/v1/jobs/uuid-here`
+**URL:** `https://pocket-llm-api.vercel.app/v1/jobs/uuid-here`
 
 **Headers:**
 ```
@@ -784,7 +784,7 @@ Authorization: Bearer <access_token>
 
 ### POST /v1/jobs/{jobId}/retry
 **Group:** jobs
-**URL:** `http://localhost:8000/v1/jobs/uuid-here/retry`
+**URL:** `https://pocket-llm-api.vercel.app/v1/jobs/uuid-here/retry`
 
 **Headers:**
 ```
@@ -805,7 +805,7 @@ Authorization: Bearer <access_token>
 
 ### GET /v1/jobs/image-generation/models
 **Group:** jobs
-**URL:** `http://localhost:8000/v1/jobs/image-generation/models`
+**URL:** `https://pocket-llm-api.vercel.app/v1/jobs/image-generation/models`
 
 **Headers:**
 ```
@@ -846,7 +846,7 @@ Authorization: Bearer <access_token>
 
 ### POST /v1/jobs/image-generation/estimate-cost
 **Group:** jobs
-**URL:** `http://localhost:8000/v1/jobs/image-generation/estimate-cost`
+**URL:** `https://pocket-llm-api.vercel.app/v1/jobs/image-generation/estimate-cost`
 
 **Headers:**
 ```
@@ -887,7 +887,7 @@ Authorization: Bearer <access_token>
 
 ### GET /v1/models
 **Group:** models
-**URL:** `http://localhost:8000/v1/models`
+**URL:** `https://pocket-llm-api.vercel.app/v1/models`
 
 **Headers:**
 ```
@@ -918,7 +918,7 @@ Authorization: Bearer <access_token>
 
 ### POST /v1/models/import
 **Group:** models
-**URL:** `http://localhost:8000/v1/models/import`
+**URL:** `https://pocket-llm-api.vercel.app/v1/models/import`
 
 **Headers:**
 ```
@@ -961,7 +961,7 @@ Content-Type: application/json
 
 ### GET /v1/models/{modelId}
 **Group:** models
-**URL:** `http://localhost:8000/v1/models/{modelId}`
+**URL:** `https://pocket-llm-api.vercel.app/v1/models/{modelId}`
 
 **Headers:**
 ```
@@ -985,7 +985,7 @@ Authorization: Bearer <access_token>
 
 ### DELETE /v1/models/{modelId}
 **Group:** models
-**URL:** `http://localhost:8000/v1/models/{modelId}`
+**URL:** `https://pocket-llm-api.vercel.app/v1/models/{modelId}`
 
 **Headers:**
 ```
@@ -1004,7 +1004,7 @@ Authorization: Bearer <access_token>
 
 ### POST /v1/models/{modelId}/default
 **Group:** models
-**URL:** `http://localhost:8000/v1/models/{modelId}/default`
+**URL:** `https://pocket-llm-api.vercel.app/v1/models/{modelId}/default`
 
 **Headers:**
 ```
@@ -1027,7 +1027,7 @@ Authorization: Bearer <access_token>
 
 ### GET /v1/providers
 **Group:** providers
-**URL:** `http://localhost:8000/v1/providers`
+**URL:** `https://pocket-llm-api.vercel.app/v1/providers`
 
 **Headers:**
 ```
@@ -1054,7 +1054,7 @@ Authorization: Bearer <access_token>
 
 ### POST /v1/providers/activate
 **Group:** providers
-**URL:** `http://localhost:8000/v1/providers/activate`
+**URL:** `https://pocket-llm-api.vercel.app/v1/providers/activate`
 
 **Headers:**
 ```
@@ -1088,7 +1088,7 @@ Content-Type: application/json
 
 ### PATCH /v1/providers/{provider}
 **Group:** providers
-**URL:** `http://localhost:8000/v1/providers/{provider}`
+**URL:** `https://pocket-llm-api.vercel.app/v1/providers/{provider}`
 
 **Headers:**
 ```
@@ -1106,7 +1106,7 @@ Content-Type: application/json
 
 ### DELETE /v1/providers/{provider}
 **Group:** providers
-**URL:** `http://localhost:8000/v1/providers/{provider}`
+**URL:** `https://pocket-llm-api.vercel.app/v1/providers/{provider}`
 
 **Headers:**
 ```
@@ -1125,7 +1125,7 @@ Authorization: Bearer <access_token>
 
 ### GET /v1/providers/{provider}/models
 **Group:** providers
-**URL:** `http://localhost:8000/v1/providers/{provider}/models`
+**URL:** `https://pocket-llm-api.vercel.app/v1/providers/{provider}/models`
 
 **Headers:**
 ```

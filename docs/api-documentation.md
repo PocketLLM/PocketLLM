@@ -15,19 +15,12 @@ The backend is structured as a NestJS application with the following key modules
 ## 🌐 Base URL
 
 ```
-http://localhost:8000/v1
-```
-
-For production deployments, replace `localhost:8000` with your server address.
-
-Production demo:
-
-```
 https://pocket-llm-api.vercel.app/v1
 ```
 
-Swagger UI is available locally at `http://localhost:8000/api/docs` (also aliased at `http://localhost:8000/docs`) and in the hosted demo at
-`https://pocket-llm-api.vercel.app/docs` (legacy path `https://pocket-llm-api.vercel.app/api/docs`) unless disabled via `ENABLE_SWAGGER_DOCS`. The root endpoint (`GET /`) echoes
+For self-hosted deployments, replace the base URL with your server address.
+
+Swagger UI for the managed deployment is available at `https://pocket-llm-api.vercel.app/docs` (legacy path `https://pocket-llm-api.vercel.app/api/docs`) unless disabled via `ENABLE_SWAGGER_DOCS`. The root endpoint (`GET /`) echoes
 the active docs path for quick verification.
 
 ## 🔐 Authentication
@@ -926,7 +919,7 @@ For testing the API, you can use:
 
 1. **Postman**: Import the collection from [POSTMAN_API_GUIDE.md](../pocketllm-backend/POSTMAN_API_GUIDE.md)
 2. **curl**: Command-line HTTP client
-3. **Swagger UI**: Available at `http://localhost:8000/api/docs` when the server is running
+3. **Swagger UI**: Available at `https://pocket-llm-api.vercel.app/api/docs` when the server is running
 
 ## 📚 Additional Resources
 

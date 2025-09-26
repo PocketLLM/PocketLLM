@@ -160,24 +160,19 @@ class BackendApiService {
           ...primaryEnvironmentCandidates,
           ...fallbackEnvironmentCandidates,
           ApiEndpoints.defaultBackendBaseUrl,
-          'http://localhost:8000',
-          'http://127.0.0.1:8000',
         },
       ),
     );
 
     int weight(String url) {
       final lower = url.toLowerCase();
-      if (lower.contains('localhost') || lower.contains('127.0.0.1')) {
+      if (lower.contains('pocket-llm-api.vercel.app')) {
         return -1;
       }
-      if (lower.contains('pocket-llm-api.vercel.app')) {
+      if (url.startsWith('https://')) {
         return 0;
       }
-      if (url.startsWith('https://')) {
-        return 1;
-      }
-      return 2;
+      return 1;
     }
 
     merged.sort((a, b) {

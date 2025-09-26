@@ -49,7 +49,7 @@ to work with Supabase's row-level security policies.
 uvicorn main:app --reload --port 8000
 ```
 
-The API will be available at `http://localhost:8000`. OpenAPI documentation is exposed at `/docs`.
+The hosted API is available at `https://pocket-llm-api.vercel.app`. OpenAPI documentation is exposed at `/docs`.
 
 ### 5. Run tests
 
