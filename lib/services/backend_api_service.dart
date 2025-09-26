@@ -4,6 +4,8 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:http/http.dart' as http;
 
+import 'api_endpoints.dart';
+
 typedef _RequestInvoker = Future<http.Response> Function(String baseUrl);
 
 class BackendApiService {
@@ -140,21 +142,6 @@ class BackendApiService {
 
   static List<String> _resolveBaseUrls() {
     final suffix = _resolveApiSuffix();
-    final urls = <String>[];
-    final seen = <String>{};
-
-    void addCandidate(String raw) {
-      final normalized = _normalizeBaseUrl(raw);
-      if (normalized == null) {
-        return;
-      }
-
-      final cleaned = _stripSuffix(normalized, suffix);
-      if (seen.add(cleaned)) {
-        urls.add(cleaned);
-      }
-    }
-
     const primaryEnvironmentCandidates = [
       String.fromEnvironment('POCKETLLM_BACKEND_URL', defaultValue: ''),
       String.fromEnvironment('POCKETLLM_BACKEND_BASE_URL', defaultValue: ''),
@@ -162,49 +149,38 @@ class BackendApiService {
       String.fromEnvironment('BACKEND_BASE_URL', defaultValue: ''),
     ];
 
-    const builtInPrimaryCandidates = [
-      'http://localhost:8000',
-      'http://127.0.0.1:8000',
-      'https://pocket-llm-lemon.vercel.app',
-      'https://pocketllm.onrender.com',
-    ];
-
     const fallbackEnvironmentCandidates = [
       String.fromEnvironment('POCKETLLM_FALLBACK_BACKEND_URL', defaultValue: ''),
       String.fromEnvironment('FALLBACK_BACKEND_URL', defaultValue: ''),
     ];
 
-    for (final candidate in primaryEnvironmentCandidates) {
-      addCandidate(candidate);
-    }
+    final merged = List.of(
+      ApiEndpoints.mergeBaseUrls(
+        <String>{
+          ...primaryEnvironmentCandidates,
+          ...fallbackEnvironmentCandidates,
+          ApiEndpoints.defaultBackendBaseUrl,
+          'http://localhost:8000',
+          'http://127.0.0.1:8000',
+        },
+      ),
+    );
 
-    for (final candidate in builtInPrimaryCandidates) {
-      addCandidate(candidate);
-    }
-
-    for (final candidate in fallbackEnvironmentCandidates) {
-      addCandidate(candidate);
-    }
-
-    if (urls.isEmpty) {
-      addCandidate('https://pocket-llm-lemon.vercel.app');
-    }
-
-    urls.sort((a, b) {
-      int weight(String url) {
-        final lower = url.toLowerCase();
-        if (lower.contains('localhost') || lower.contains('127.0.0.1')) {
-          return -1;
-        }
-        if (lower.contains('pocket-llm-lemon.vercel.app')) {
-          return 0;
-        }
-        if (url.startsWith('https://')) {
-          return 1;
-        }
-        return 2;
+    int weight(String url) {
+      final lower = url.toLowerCase();
+      if (lower.contains('localhost') || lower.contains('127.0.0.1')) {
+        return -1;
       }
+      if (lower.contains('pocket-llm-api.vercel.app')) {
+        return 0;
+      }
+      if (url.startsWith('https://')) {
+        return 1;
+      }
+      return 2;
+    }
 
+    merged.sort((a, b) {
       final diff = weight(a) - weight(b);
       if (diff != 0) {
         return diff;
@@ -212,40 +188,20 @@ class BackendApiService {
       return a.compareTo(b);
     });
 
-    debugPrint('Resolved backend URLs: $urls');
-
-    return List.unmodifiable(urls);
-  }
-
-  static String _resolveApiSuffix() {
-    const suffixCandidates = [
-      String.fromEnvironment('POCKETLLM_BACKEND_SUFFIX', defaultValue: ''),
-      String.fromEnvironment('POCKETLLM_BACKEND_API_SUFFIX', defaultValue: ''),
-      String.fromEnvironment('BACKEND_API_SUFFIX', defaultValue: ''),
-    ];
-
-    for (final candidate in suffixCandidates) {
-      final trimmed = candidate.trim();
-      if (trimmed.isNotEmpty) {
-        return trimmed;
+    final ordered = <String>[];
+    final seen = <String>{};
+    for (final candidate in merged) {
+      final cleaned = _stripSuffix(candidate, suffix);
+      if (seen.add(cleaned)) {
+        ordered.add(cleaned);
       }
     }
 
-    return 'v1';
+    debugPrint('Resolved backend URLs: $ordered');
+    return List.unmodifiable(ordered);
   }
 
-  static String? _normalizeBaseUrl(String value) {
-    final trimmed = value.trim();
-    if (trimmed.isEmpty) {
-      return null;
-    }
-
-    var normalized = trimmed;
-    while (normalized.endsWith('/')) {
-      normalized = normalized.substring(0, normalized.length - 1);
-    }
-    return normalized;
-  }
+  static String _resolveApiSuffix() => ApiEndpoints.defaultApiSuffix;
 
   static String _stripSuffix(String baseUrl, String suffix) {
     var sanitizedSuffix = suffix.trim();

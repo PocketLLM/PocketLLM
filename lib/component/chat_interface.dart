@@ -23,6 +23,7 @@ import '../services/chat_history_service.dart';
 import 'appbar/chat_history.dart';
 import '../services/error_service.dart';
 import '../services/search_service.dart';
+import '../services/pocket_llm_service.dart';
 import '../pages/search_settings_page.dart';
 
 class ChatInterface extends StatefulWidget {
@@ -58,7 +59,7 @@ class ChatInterfaceState extends State<ChatInterface> {
   
   // Restore missing variables
   final String apiKey = 'ddc-m4qlvrgpt1W1E4ZXc4bvm5T5Z6CRFLeXRCx9AbRuQOcGpFFrX2';
-  final String apiUrl = 'https://api.sree.shop/v1/chat/completions';
+  final String apiUrl = '${PocketLLMService.baseUrl}/chat/completions';
   final TavilyService _tavilyService = TavilyService();
   bool _isOnline = false;
 

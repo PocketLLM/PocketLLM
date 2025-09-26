@@ -9,6 +9,28 @@ import 'user_survey_page.dart';
 
 enum _AuthMode { signIn, signUp }
 
+class _StaggeredCurve extends Curve {
+  const _StaggeredCurve({
+    required this.delayFraction,
+    this.curve = Curves.easeOutCubic,
+  });
+
+  final double delayFraction;
+  final Curve curve;
+
+  @override
+  double transform(double t) {
+    if (delayFraction >= 1) {
+      return curve.transform(1);
+    }
+    if (t <= delayFraction) {
+      return 0;
+    }
+    final normalized = ((t - delayFraction) / (1 - delayFraction)).clamp(0.0, 1.0);
+    return curve.transform(normalized);
+  }
+}
+
 class AuthPage extends StatefulWidget {
   final ValueChanged<String>? onLoginSuccess;
   final bool showAppBar;
@@ -695,9 +717,10 @@ class _AuthPageState extends State<AuthPage> {
             padding: EdgeInsets.only(top: index == 0 ? 0 : 12),
             child: TweenAnimationBuilder<double>(
               tween: Tween(begin: 0, end: 1),
-              duration: const Duration(milliseconds: 320),
-              curve: Curves.easeOutCubic,
-              delay: Duration(milliseconds: index * 70),
+              duration: const Duration(milliseconds: 420),
+              curve: _StaggeredCurve(
+                delayFraction: (index * 0.08).clamp(0.0, 0.7),
+              ),
               builder: (context, value, child) => Opacity(
                 opacity: value,
                 child: Transform.translate(

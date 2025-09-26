@@ -96,7 +96,7 @@ http://localhost:8000/api/docs (or http://localhost:8000/docs)
 
 Production demo:
 ```
-https://pocket-llm-lemon.vercel.app/docs (legacy path https://pocket-llm-lemon.vercel.app/api/docs)
+https://pocket-llm-api.vercel.app/docs (legacy path https://pocket-llm-api.vercel.app/api/docs)
 ```
 
 To view the latest documentation:
