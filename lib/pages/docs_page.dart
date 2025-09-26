@@ -1,3 +1,7 @@
+/// File Overview:
+/// - Purpose: Fullscreen documentation view duplicating the app bar docs tabs.
+/// - Backend Migration: Replace hardcoded markdown with backend-served
+///   documentation sources.
 import 'package:flutter/material.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
 import 'package:url_launcher/url_launcher.dart';

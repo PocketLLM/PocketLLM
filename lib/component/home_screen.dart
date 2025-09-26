@@ -1,3 +1,7 @@
+/// File Overview:
+/// - Purpose: Main application shell combining app bar, sidebar, and chat body.
+/// - Backend Migration: Keep; ensure actions trigger backend-aware flows once
+///   chat/state become server-driven.
 import 'package:flutter/material.dart';
 import 'custom_app_bar.dart';
 import 'chat_interface.dart';

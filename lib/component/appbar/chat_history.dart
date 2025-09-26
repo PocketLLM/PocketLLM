@@ -1,3 +1,8 @@
+/// File Overview:
+/// - Purpose: Drawer-style chat history manager that reads/writes local
+///   conversations.
+/// - Backend Migration: Keep UI but rewire to backend chat history service when
+///   available.
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 

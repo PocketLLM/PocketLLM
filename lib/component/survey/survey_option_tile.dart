@@ -1,3 +1,6 @@
+/// File Overview:
+/// - Purpose: Stateless UI tile used in onboarding surveys to select options.
+/// - Backend Migration: Keep; purely visual component.
 import 'package:flutter/material.dart';
 
 class SurveyOptionTile extends StatelessWidget {

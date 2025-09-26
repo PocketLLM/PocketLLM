@@ -1,3 +1,8 @@
+/// File Overview:
+/// - Purpose: Reusable text field widget that exposes a built-in clear action
+///   to simplify form inputs across the UI.
+/// - Backend Migration: Keep; this is purely presentation logic and can remain
+///   unchanged when backend-driven data is introduced.
 import 'package:flutter/material.dart';
 
 class ClearTextField extends StatefulWidget {

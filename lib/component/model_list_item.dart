@@ -1,3 +1,7 @@
+/// File Overview:
+/// - Purpose: Visual representation of a model configuration with actions to
+///   edit, select, or delete.
+/// - Backend Migration: Keep UI but rely on backend-managed models for data.
 import 'package:flutter/material.dart';
 import '../component/models.dart';
 import 'model_config_dialog.dart';

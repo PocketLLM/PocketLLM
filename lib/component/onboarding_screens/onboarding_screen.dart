@@ -1,3 +1,7 @@
+/// File Overview:
+/// - Purpose: Hosts the onboarding pager and transitions to authentication.
+/// - Backend Migration: Keep but update completion flow once backend dictates
+///   whether onboarding is required.
 import 'package:flutter/material.dart';
 import 'package:smooth_page_indicator/smooth_page_indicator.dart';
 import 'package:shared_preferences/shared_preferences.dart';

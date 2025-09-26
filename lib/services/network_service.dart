@@ -1,3 +1,8 @@
+/// File Overview:
+/// - Purpose: Tracks connectivity status and queues outbound messages while
+///   offline.
+/// - Backend Migration: Keep but integrate with backend sync signals so queuing
+///   semantics align with server expectations.
 import 'dart:async';
 import 'dart:io';
 import 'package:flutter/foundation.dart';

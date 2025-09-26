@@ -1,3 +1,8 @@
+/// File Overview:
+/// - Purpose: Interactive UI widget that renders model selection controls with
+///   optional health indicators.
+/// - Backend Migration: Keep UI but ensure data is sourced from backend-driven
+///   model state rather than local caches.
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'models.dart';

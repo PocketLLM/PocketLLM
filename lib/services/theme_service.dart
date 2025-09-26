@@ -1,3 +1,8 @@
+/// File Overview:
+/// - Purpose: Centralized theme manager that persists color preferences and
+///   exposes Material `ThemeData` configurations to the app.
+/// - Backend Migration: Keep; consider allowing the backend to push branding
+///   metadata instead of forcing local defaults.
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';

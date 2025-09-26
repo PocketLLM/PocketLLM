@@ -1,3 +1,8 @@
+/// File Overview:
+/// - Purpose: Coordinates service initialization order and tracks lifecycle
+///   state transitions for the Flutter shell.
+/// - Backend Migration: Keep but ensure initialization list reflects backend
+///   driven services instead of legacy client-only helpers.
 import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';

@@ -1,3 +1,8 @@
+/// File Overview:
+/// - Purpose: Drawer navigation housing chat history shortcuts and links to
+///   other pages.
+/// - Backend Migration: Keep but update data sources (history, docs) to use
+///   backend services.
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';

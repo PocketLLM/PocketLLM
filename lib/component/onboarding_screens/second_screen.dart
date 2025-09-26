@@ -1,3 +1,7 @@
+/// File Overview:
+/// - Purpose: Second onboarding slide focused on model customization messaging.
+/// - Backend Migration: Keep; revise copy once backend-managed model catalog is
+///   live.
 import 'package:flutter/material.dart';
 import 'package:lottie/lottie.dart';
 

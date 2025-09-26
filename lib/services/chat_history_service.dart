@@ -1,3 +1,8 @@
+/// File Overview:
+/// - Purpose: Manages chat conversations locally using shared preferences and
+///   exposes notifiers for UI updates.
+/// - Backend Migration: Replace persistence with backend conversation APIs so
+///   history is synchronized across devices.
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';

@@ -1,3 +1,7 @@
+/// File Overview:
+/// - Purpose: Utility for normalizing backend URLs and building endpoint URIs.
+/// - Backend Migration: Keep until backend provides generated API client; then
+///   consolidate to avoid duplicated string handling.
 import 'package:flutter/foundation.dart';
 
 class ApiEndpoints {

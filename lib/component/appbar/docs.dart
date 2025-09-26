@@ -1,3 +1,8 @@
+/// File Overview:
+/// - Purpose: In-app documentation tabs for Termux and Ollama setup rendered
+///   directly in the Flutter client.
+/// - Backend Migration: Replace hardcoded markdown with backend-served content
+///   or deep links to official docs.
 import 'package:flutter/material.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
 import 'package:url_launcher/url_launcher.dart';

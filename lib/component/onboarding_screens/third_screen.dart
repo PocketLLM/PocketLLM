@@ -1,3 +1,7 @@
+/// File Overview:
+/// - Purpose: Third onboarding slide that highlights web search integration.
+/// - Backend Migration: Keep; update messaging when backend delivers unified
+///   search proxy.
 import 'package:flutter/material.dart';
 import 'package:lottie/lottie.dart';
 

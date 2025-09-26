@@ -1,3 +1,8 @@
+/// File Overview:
+/// - Purpose: Frontend wrapper around the backend `/providers` and `/models`
+///   endpoints that keeps UI state in sync with remote model configuration.
+/// - Backend Migration: Keep but slim down; this layer should become a thin
+///   data access client once backend covers all provider/model logic.
 import 'package:flutter/foundation.dart';
 import '../component/models.dart';
 import 'backend_api_service.dart';

@@ -1,3 +1,8 @@
+/// File Overview:
+/// - Purpose: Frontend library for browsing and installing Ollama models with
+///   direct device commands and hardcoded catalog entries.
+/// - Backend Migration: Replace with backend-managed marketplace data and
+///   server-triggered installs; much of this logic should move off-device.
 import 'package:flutter/material.dart';
 import '../component/models.dart';
 import 'dart:ui';

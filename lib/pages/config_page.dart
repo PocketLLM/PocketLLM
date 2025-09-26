@@ -1,3 +1,8 @@
+/// File Overview:
+/// - Purpose: Device configuration checklist that inspects Termux installation
+///   and hardware stats locally.
+/// - Backend Migration: Reevaluate necessity; backend onboarding may make this
+///   redundant or require sanitized telemetry reporting instead of direct checks.
 import 'package:flutter/material.dart';
 import 'dart:io';
 import 'dart:ui';

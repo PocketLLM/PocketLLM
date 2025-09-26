@@ -1,3 +1,10 @@
+/// File Overview:
+/// - Purpose: Legacy client-side service that stores API keys locally and
+///   performs direct HTTP calls to PocketLLM endpoints with hardcoded fallback
+///   models and responses.
+/// - Backend Migration: Mark for removal once backend-managed authentication,
+///   model discovery, and chat completion endpoints are wired through a single
+///   gateway.
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
