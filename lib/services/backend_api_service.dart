@@ -252,27 +252,50 @@ class BackendApiService {
         lastError = error;
         lastStackTrace = stackTrace;
 
+        // Provide more specific error messages
+        String errorMessage = error.toString();
+        if (error is http.ClientException && 
+            errorMessage.contains('Failed host lookup')) {
+          errorMessage = 'Unable to connect to server. Please check your internet connection.';
+        }
+
         if (!isLastAttempt) {
           debugPrint(
-            'BackendApiService: Request to $baseUrl failed ($error). Trying fallback backend.',
+            'BackendApiService: Request to $baseUrl failed ($errorMessage). Trying fallback backend.',
           );
           continue;
         }
 
         if (lastResponse != null) {
-          return lastResponse!;
+          return lastResponse;
         }
 
-        Error.throwWithStackTrace(error, stackTrace);
+        // Throw a more user-friendly error
+        Error.throwWithStackTrace(
+          Exception(errorMessage),
+          stackTrace,
+        );
       }
     }
 
     if (lastResponse != null) {
-      return lastResponse!;
+      return lastResponse;
     }
 
     if (lastError != null && lastStackTrace != null) {
-      Error.throwWithStackTrace(lastError!, lastStackTrace!);
+      // Provide a more user-friendly error for network issues
+      String errorMessage = lastError.toString();
+      if (errorMessage.contains('Failed host lookup') || 
+          errorMessage.contains('SocketException')) {
+        errorMessage = 'Unable to connect to the server. Please check your internet connection.';
+      } else if (errorMessage.contains('500')) {
+        errorMessage = 'Server error. Please try again later.';
+      }
+      
+      Error.throwWithStackTrace(
+        Exception(errorMessage),
+        lastStackTrace,
+      );
     }
 
     throw StateError('No backend URL configured.');
@@ -290,14 +313,37 @@ class BackendApiService {
     try {
       final rawBody = response.body;
       final hasBody = rawBody.isNotEmpty && rawBody.trim().isNotEmpty;
-      final decoded = hasBody ? jsonDecode(rawBody) : <String, dynamic>{};
-      if (response.statusCode >= 200 && response.statusCode < 300) {
-        // Return the entire response data, not just the 'data' field
-        return decoded;
-      }
+      
+      // Check if response is valid JSON
+      if (hasBody) {
+        try {
+          final decoded = jsonDecode(rawBody);
+          if (response.statusCode >= 200 && response.statusCode < 300) {
+            // Return the entire response data, not just the 'data' field
+            return decoded;
+          }
 
-      final errorMessage = _extractErrorMessage(decoded) ?? response.reasonPhrase;
-      throw BackendApiException(response.statusCode, errorMessage ?? 'Unknown error');
+          final errorMessage = _extractErrorMessage(decoded) ?? response.reasonPhrase;
+          throw BackendApiException(response.statusCode, errorMessage ?? 'Unknown error');
+        } catch (e) {
+          // Handle non-JSON responses (like plain text error messages)
+          if (e is! FormatException) rethrow;
+          
+          // If it's a format exception, treat the raw body as the error message
+          final errorMessage = hasBody ? rawBody : response.reasonPhrase;
+          if (response.statusCode >= 200 && response.statusCode < 300) {
+            // For successful responses that aren't valid JSON, return as is
+            return rawBody;
+          }
+          throw BackendApiException(response.statusCode, errorMessage ?? 'Unknown error');
+        }
+      } else {
+        // No response body
+        if (response.statusCode >= 200 && response.statusCode < 300) {
+          return <String, dynamic>{}; // Return empty map for successful responses with no body
+        }
+        throw BackendApiException(response.statusCode, response.reasonPhrase ?? 'Unknown error');
+      }
     } catch (e) {
       if (e is BackendApiException) {
         throw e;

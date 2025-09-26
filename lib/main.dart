@@ -172,6 +172,11 @@ class _ErrorScreenState extends State<ErrorScreen> {
   Widget build(BuildContext context) {
     final summary = widget.appLifecycleService.getInitializationSummary();
     
+    // Check if the error is specifically related to network connectivity
+    bool isNetworkError = widget.error.contains('Failed host lookup') || 
+                         widget.error.contains('SocketException') ||
+                         widget.error.contains('Unable to connect');
+    
     return Scaffold(
       body: SafeArea(
         child: Padding(
@@ -179,18 +184,24 @@ class _ErrorScreenState extends State<ErrorScreen> {
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              const Icon(Icons.error_outline, color: Colors.red, size: 64),
+              Icon(
+                isNetworkError ? Icons.wifi_off : Icons.error_outline, 
+                color: isNetworkError ? Colors.orange : Colors.red, 
+                size: 64
+              ),
               const SizedBox(height: 16),
-              const Text(
-                'Initialization Error',
-                style: TextStyle(
+              Text(
+                isNetworkError ? 'Network Connection Required' : 'Initialization Error',
+                style: const TextStyle(
                   fontSize: 20,
                   fontWeight: FontWeight.bold,
                 ),
               ),
               const SizedBox(height: 8),
               Text(
-                'The app encountered errors during initialization. Some features may not work properly.',
+                isNetworkError 
+                  ? 'Some features require an internet connection. You can still use local models offline.'
+                  : 'The app encountered errors during initialization. Some features may not work properly.',
                 textAlign: TextAlign.center,
                 style: TextStyle(color: Colors.grey[600]),
               ),
@@ -208,7 +219,7 @@ class _ErrorScreenState extends State<ErrorScreen> {
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        Text('Services Initialized:'),
+                        const Text('Services Initialized:'),
                         Text('${summary['successfulServices']}/${summary['totalServices']}'),
                       ],
                     ),
@@ -216,10 +227,42 @@ class _ErrorScreenState extends State<ErrorScreen> {
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        Text('Failed Services:'),
+                        const Text('Failed Services:'),
                         Text('${summary['failedServices']}', 
-                             style: TextStyle(color: Colors.red)),
+                             style: const TextStyle(color: Colors.red)),
                       ],
+                    ),
+                  ],
+                ),
+              ),
+              
+              const SizedBox(height: 16),
+              
+              // Additional information about offline mode
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: isNetworkError ? Colors.orange[50] : Colors.blue[50],
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Column(
+                  children: [
+                    Text(
+                      isNetworkError ? 'Offline Mode Available' : 'Offline Mode',
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        color: isNetworkError ? Colors.orange : Colors.blue,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      isNetworkError
+                        ? 'You can still use PocketLLM with local models like Ollama even when offline. '
+                          'Connect to the internet and try again to access remote features.'
+                        : 'You can still use PocketLLM with local models. '
+                          'Some features may be limited until the initialization issues are resolved.',
+                      style: TextStyle(color: isNetworkError ? Colors.orange[800] : Colors.blue[800]),
+                      textAlign: TextAlign.center,
                     ),
                   ],
                 ),
@@ -253,7 +296,7 @@ class _ErrorScreenState extends State<ErrorScreen> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text(
+                          const Text(
                             'Initialization Details:',
                             style: TextStyle(fontWeight: FontWeight.bold),
                           ),
@@ -272,7 +315,7 @@ class _ErrorScreenState extends State<ErrorScreen> {
                                   Expanded(
                                     child: Text(
                                       '${result['service']}: ${result['success'] ? 'Success' : result['error'] ?? 'Failed'} (${result['timeMs']}ms)',
-                                      style: TextStyle(fontSize: 12),
+                                      style: const TextStyle(fontSize: 12),
                                     ),
                                   ),
                                 ],
@@ -317,7 +360,7 @@ class _ErrorScreenState extends State<ErrorScreen> {
                           ),
                         );
                       },
-                      child: const Text('Continue Anyway'),
+                      child: const Text('Continue Offline'),
                     ),
                   ),
                 ],

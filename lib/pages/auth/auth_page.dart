@@ -885,9 +885,25 @@ class _AuthPageState extends State<AuthPage> {
   void _showSnackBar(BuildContext context, String message, {bool success = false}) {
     final messenger = ScaffoldMessenger.of(context);
     messenger.hideCurrentSnackBar();
+    
+    // Provide more user-friendly error messages
+    String displayMessage = message;
+    if (!success) {
+      if (message.contains('Failed to parse backend response') || 
+          message.contains('Unexpected character')) {
+        displayMessage = 'Server error. Please try again later.';
+      } else if (message.contains('SocketException') || 
+                 message.contains('Failed host lookup') ||
+                 message.contains('Unable to reach')) {
+        displayMessage = 'Please check your internet connection and try again.';
+      } else if (message.contains('500')) {
+        displayMessage = 'Server error. Please try again later.';
+      }
+    }
+    
     messenger.showSnackBar(
       SnackBar(
-        content: Text(message),
+        content: Text(displayMessage),
         backgroundColor: success ? const Color(0xFF8B5CF6) : Colors.redAccent,
       ),
     );

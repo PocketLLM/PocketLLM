@@ -1094,17 +1094,39 @@ class AuthStateNotifier extends ChangeNotifier {
       rethrow;
     } on BackendApiException catch (error) {
       debugPrint('Backend API error: ${error.statusCode} - ${error.message}');
+      
+      // Provide more user-friendly error messages
+      String userMessage = error.message;
+      if (error.statusCode == 500) {
+        userMessage = 'Server error. Please try again later.';
+      } else if (error.message.contains('Failed to parse backend response')) {
+        userMessage = 'Server is not responding correctly. Please try again later.';
+      } else if (error.message.contains('Unexpected character')) {
+        userMessage = 'Server error. Please try again later.';
+      }
+      
       if (error.statusCode == 401 && requiresAuth) {
         await _clearSession();
       }
-      throw AuthException(error.message, statusCode: error.statusCode);
+      throw AuthException(userMessage, statusCode: error.statusCode);
     } on SocketException {
       _serviceAvailable = false;
       notifyListeners();
       throw const AuthException('Unable to reach the PocketLLM service. Check your internet connection.');
     } catch (error) {
       debugPrint('Request error: $error');
-      throw AuthException(error.toString());
+      
+      // Provide more user-friendly error messages for common issues
+      String userMessage = error.toString();
+      if (userMessage.contains('Failed to parse backend response') || 
+          userMessage.contains('Unexpected character')) {
+        userMessage = 'Server error. Please try again later.';
+      } else if (userMessage.contains('SocketException') || 
+                 userMessage.contains('Failed host lookup')) {
+        userMessage = 'Unable to reach the PocketLLM service. Check your internet connection.';
+      }
+      
+      throw AuthException(userMessage);
     }
   }
 

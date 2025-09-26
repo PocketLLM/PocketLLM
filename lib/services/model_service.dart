@@ -31,7 +31,11 @@ class ModelService {
         await _refreshCache();
       } catch (e) {
         debugPrint('Remote model fetch failed, using cached data: $e');
+        // Check if we have cached models to use
         if (_cachedModels.isEmpty) {
+          // Show a more informative message to the user
+          debugPrint('No cached models available. The app will attempt to create default local models.');
+          // We'll let the calling code handle creating defaults if needed
           rethrow;
         }
       }
@@ -452,8 +456,17 @@ class ModelService {
   }
 
   Future<void> _refreshCache() async {
-    final models = await _remoteModelService.getModels();
-    await _applyCache(models);
+    try {
+      final models = await _remoteModelService.getModels();
+      await _applyCache(models);
+    } catch (e) {
+      // Provide a more user-friendly error message
+      if (e.toString().contains('Failed host lookup') || 
+          e.toString().contains('SocketException')) {
+        debugPrint('Unable to connect to the model server. Using local models only.');
+      }
+      rethrow;
+    }
   }
 
   Future<void> _applyCache(List<ModelConfig> models) async {

@@ -154,13 +154,20 @@ class ModelState extends ChangeNotifier {
       debugPrint('ModelState: Enhanced initialization complete');
       
     } catch (e, stackTrace) {
+      // Provide more specific error messages
+      String userFriendlyError = e.toString();
+      if (userFriendlyError.contains('Failed host lookup') || 
+          userFriendlyError.contains('SocketException')) {
+        userFriendlyError = 'Unable to connect to the model server. The app will use local models only.';
+      }
+      
       await _errorService.logError(
-        'ModelState initialization failed: $e',
+        'ModelState initialization failed: $userFriendlyError',
         stackTrace,
         type: ErrorType.initialization,
         context: 'ModelState.init',
       );
-      debugPrint('ModelState: Error initializing: $e');
+      debugPrint('ModelState: Error initializing: $userFriendlyError');
     }
   }
 
@@ -182,10 +189,18 @@ class ModelState extends ChangeNotifier {
       
       debugPrint('ModelState: Loaded ${models.length} available models');
     } catch (e, stackTrace) {
+      // Provide more specific error messages
+      String userFriendlyError = e.toString();
+      if (userFriendlyError.contains('Failed host lookup') || 
+          userFriendlyError.contains('SocketException')) {
+        userFriendlyError = 'Unable to load remote models. Using local models only.';
+      }
+      
       await _errorService.logError(
-        'Failed to load available models: $e',
+        'Failed to load available models: $userFriendlyError',
         stackTrace,
         type: ErrorType.unknown,
+        severity: ErrorSeverity.medium,
         context: 'ModelState._loadAvailableModels',
       );
     }
