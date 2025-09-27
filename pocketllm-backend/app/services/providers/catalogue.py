@@ -117,34 +117,40 @@ class ProviderModelCatalogue:
         providers: Sequence[object] | None,
     ) -> dict[str, _ProviderConfig]:
         configs: dict[str, _ProviderConfig] = {}
-        if providers:
-            for item in providers:
-                provider = getattr(item, "provider", None)
-                if not provider:
-                    continue
-                is_active = bool(getattr(item, "is_active", False))
-                if not is_active:
-                    continue
-                provider_key = str(provider).lower()
-                base_url = getattr(item, "base_url", None)
-                metadata_obj = getattr(item, "metadata", None)
-                metadata: Mapping[str, Any] | None = None
-                if isinstance(metadata_obj, Mapping):
-                    metadata = metadata_obj
-                api_key: str | None = None
-                direct_key = getattr(item, "api_key", None)
-                if isinstance(direct_key, str) and direct_key:
-                    api_key = direct_key
-                elif metadata:
-                    candidate = metadata.get("api_key") or metadata.get("token")
-                    if isinstance(candidate, str) and candidate:
-                        api_key = candidate
-                configs[provider_key] = _ProviderConfig(
-                    provider=provider_key,
-                    base_url=base_url,
-                    api_key=api_key,
-                    metadata=metadata,
+        if not providers:
+            return configs
+
+        for item in providers:
+            provider = getattr(item, "provider", None)
+            if not provider:
+                continue
+
+            provider_key = str(provider).lower()
+            is_active = bool(getattr(item, "is_active", False))
+            if not is_active:
+                self._logger.debug("Skipping provider %s because it is inactive", provider_key)
+                continue
+
+            direct_key = getattr(item, "api_key", None)
+            if not isinstance(direct_key, str) or not direct_key.strip():
+                self._logger.warning(
+                    "Provider %s has no configured API key; user configuration is required to fetch models",
+                    provider_key,
                 )
+                continue
+
+            base_url = getattr(item, "base_url", None)
+            metadata_obj = getattr(item, "metadata", None)
+            metadata: Mapping[str, Any] | None = None
+            if isinstance(metadata_obj, Mapping):
+                metadata = metadata_obj
+
+            configs[provider_key] = _ProviderConfig(
+                provider=provider_key,
+                base_url=base_url,
+                api_key=direct_key.strip(),
+                metadata=metadata,
+            )
 
         return configs
 

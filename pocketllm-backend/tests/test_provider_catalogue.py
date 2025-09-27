@@ -1,15 +1,14 @@
 import asyncio
-import asyncio
 from datetime import UTC, datetime
 from types import SimpleNamespace
 from typing import Any, AsyncIterator, Iterator, Mapping
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import pytest
 
 httpx = pytest.importorskip("httpx")
 
-from app.schemas.providers import ProviderConfiguration, ProviderModel
+from app.schemas.providers import ProviderModel
 from app.services.provider_configs import ProvidersService
 from app.services.providers import (
     ProviderClient,
@@ -19,6 +18,7 @@ from app.services.providers import (
     OpenRouterProviderClient,
     ProviderModelCatalogue,
 )
+from database import ProviderRecord
 
 
 @pytest.fixture(autouse=True)
@@ -121,6 +121,34 @@ def make_settings(**overrides: Any) -> SimpleNamespace:
     return SimpleNamespace(**defaults)
 
 
+def make_provider_record(
+    *,
+    provider: str,
+    user_id: UUID | None = None,
+    api_key: str = "user-api-key",
+    base_url: str | None = None,
+    metadata: Mapping[str, Any] | None = None,
+    is_active: bool = True,
+) -> ProviderRecord:
+    user = user_id or uuid4()
+    now = datetime.now(tz=UTC)
+    return ProviderRecord(
+        id=uuid4(),
+        user_id=user,
+        provider=provider,
+        display_name=None,
+        base_url=base_url,
+        metadata=dict(metadata or {}),
+        api_key_hash="hash",
+        api_key_preview="user****key",
+        api_key_encrypted="encrypted",
+        api_key=api_key,
+        is_active=is_active,
+        created_at=now,
+        updated_at=now,
+    )
+
+
 class FakeCatalogue:
     def __init__(self, models: list[ProviderModel]) -> None:
         self._models = list(models)
@@ -219,18 +247,12 @@ async def test_catalogue_requires_active_provider_configuration():
         settings,
         client_factories={"openai": RecordingProviderClient},
     )
-    configuration = ProviderConfiguration(
-        id=uuid4(),
-        user_id=uuid4(),
+    configuration = SimpleNamespace(
         provider="openai",
-        display_name=None,
-        base_url="https://custom.openai.test",
-        metadata={"api_key": "user-key", "http_referer": "https://app.example"},
-        api_key_preview="user****key",
         is_active=True,
-        has_api_key=True,
-        created_at=datetime.now(tz=UTC),
-        updated_at=datetime.now(tz=UTC),
+        base_url="https://custom.openai.test",
+        metadata={"http_referer": "https://app.example"},
+        api_key="user-key",
     )
 
     models = await catalogue.list_all_models([configuration])
@@ -251,18 +273,12 @@ async def test_catalogue_skips_inactive_provider_configuration():
         settings,
         client_factories={"openai": RecordingProviderClient},
     )
-    inactive_configuration = ProviderConfiguration(
-        id=uuid4(),
-        user_id=uuid4(),
+    inactive_configuration = SimpleNamespace(
         provider="openai",
-        display_name=None,
-        base_url=None,
-        metadata={"api_key": "user-key"},
-        api_key_preview="user****key",
         is_active=False,
-        has_api_key=True,
-        created_at=datetime.now(tz=UTC),
-        updated_at=datetime.now(tz=UTC),
+        base_url=None,
+        metadata={},
+        api_key="user-key",
     )
 
     models = await catalogue.list_all_models([inactive_configuration])
@@ -613,8 +629,19 @@ async def test_providers_service_filters_models_by_attributes():
             metadata={"capabilities": ["moderation"]},
         ),
     ]
-    service = ProvidersService(make_settings(), database=FakeDatabase(), catalogue=FakeCatalogue(models))
+    settings = make_settings()
+    service = ProvidersService(settings, database=FakeDatabase(), catalogue=FakeCatalogue(models))
     user_id = uuid4()
+
+    provider_records = [
+        make_provider_record(provider="openai", user_id=user_id),
+        make_provider_record(provider="groq", user_id=user_id),
+    ]
+
+    async def stub_fetch(_: UUID) -> list[ProviderRecord]:
+        return provider_records
+
+    service._fetch_provider_records = stub_fetch  # type: ignore[assignment]
 
     moderation = await service.get_provider_models(user_id, query="moderation")
     assert [model.id for model in moderation] == ["llama-guard"]
@@ -633,10 +660,61 @@ async def test_providers_service_respects_provider_parameter():
         ProviderModel(provider="groq", id="llama-guard", name="LLaMA Guard"),
     ]
     catalogue = FakeCatalogue(models)
-    service = ProvidersService(make_settings(), database=FakeDatabase(), catalogue=catalogue)
+    settings = make_settings()
+    service = ProvidersService(settings, database=FakeDatabase(), catalogue=catalogue)
     user_id = uuid4()
+
+    provider_records = [make_provider_record(provider="groq", user_id=user_id, api_key="groq-key")]
+
+    async def stub_fetch(_: UUID) -> list[ProviderRecord]:
+        return provider_records
+
+    service._fetch_provider_records = stub_fetch  # type: ignore[assignment]
 
     groq_models = await service.get_provider_models(user_id, provider="groq")
 
     assert [model.provider for model in groq_models] == ["groq"]
     assert catalogue.calls and catalogue.calls[0][0] == "groq"
+
+
+@pytest.mark.asyncio
+async def test_providers_service_requires_user_configuration_for_all_models():
+    settings = make_settings()
+    service = ProvidersService(settings, database=FakeDatabase(), catalogue=FakeCatalogue([]))
+    user_id = uuid4()
+
+    async def stub_fetch(_: UUID) -> list[ProviderRecord]:
+        return []
+
+    service._fetch_provider_records = stub_fetch  # type: ignore[assignment]
+
+    with pytest.raises(Exception) as exc:
+        await service.get_provider_models(user_id)
+
+    assert getattr(exc.value, "status_code", None) == 400
+    detail = getattr(exc.value, "detail", {})
+    assert isinstance(detail, Mapping)
+    assert "No providers" in detail.get("message", "")
+
+
+@pytest.mark.asyncio
+async def test_providers_service_requires_provider_configuration_for_specific_provider():
+    settings = make_settings()
+    service = ProvidersService(settings, database=FakeDatabase(), catalogue=FakeCatalogue([]))
+    user_id = uuid4()
+
+    provider_records = [make_provider_record(provider="openai", user_id=user_id)]
+
+    async def stub_fetch(_: UUID) -> list[ProviderRecord]:
+        return provider_records
+
+    service._fetch_provider_records = stub_fetch  # type: ignore[assignment]
+
+    with pytest.raises(Exception) as exc:
+        await service.get_provider_models(user_id, provider="groq")
+
+    assert getattr(exc.value, "status_code", None) == 400
+    detail = getattr(exc.value, "detail", {})
+    assert isinstance(detail, Mapping)
+    assert detail.get("provider") == "groq"
+    assert "not configured" in detail.get("message", "")
