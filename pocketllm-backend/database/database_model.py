@@ -20,6 +20,8 @@ class ProviderRecord:
     metadata: dict | None
     api_key_hash: str | None
     api_key_preview: str | None
+    api_key_encrypted: str | None
+    api_key: str | None = None
     is_active: bool
     created_at: datetime
     updated_at: datetime
@@ -35,6 +37,8 @@ class ProviderRecord:
             metadata=dict(data.get("metadata") or {}),
             api_key_hash=data.get("api_key_hash"),
             api_key_preview=data.get("api_key_preview"),
+            api_key_encrypted=data.get("api_key_encrypted"),
+            api_key=None,
             is_active=bool(data.get("is_active", False)),
             created_at=data["created_at"],
             updated_at=data["updated_at"],
@@ -53,6 +57,7 @@ class ProviderRecord:
                 "metadata": self.metadata,
                 "api_key_preview": self.api_key_preview,
                 "is_active": self.is_active,
+                "has_api_key": bool(self.api_key),
                 "created_at": self.created_at,
                 "updated_at": self.updated_at,
             }

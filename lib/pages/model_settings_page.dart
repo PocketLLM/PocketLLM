@@ -7,6 +7,7 @@ import 'package:flutter/material.dart';
 import '../component/models.dart';
 import '../component/model_config_dialog.dart';
 import '../component/model_list_item.dart';
+import '../services/backend_api_service.dart';
 import '../services/model_service.dart';
 import 'auth/auth_page.dart';
 
@@ -476,8 +477,9 @@ class _AddModelSheetState extends State<_AddModelSheet> {
       });
     } catch (e) {
       if (!mounted) return;
+      final message = e is BackendApiException ? e.message : 'Failed to load models: $e';
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Failed to load models: $e')),
+        SnackBar(content: Text(message)),
       );
     } finally {
       if (mounted) {

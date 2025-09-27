@@ -11,6 +11,7 @@ from app.schemas.providers import (
     ProviderActivationResponse,
     ProviderConfiguration,
     ProviderModel,
+    ProviderStatus,
     ProviderUpdateRequest,
 )
 from app.services.provider_configs import ProvidersService
@@ -26,6 +27,16 @@ async def list_providers(
 ) -> list[ProviderConfiguration]:
     service = ProvidersService(settings=settings, database=database)
     return await service.list_providers(user.sub)
+
+
+@router.get("/status", response_model=list[ProviderStatus], summary="Get provider configuration status")
+async def provider_status(
+    user: TokenPayload = Depends(get_current_request_user),
+    settings=Depends(get_settings_dependency),
+    database=Depends(get_database_dependency),
+) -> list[ProviderStatus]:
+    service = ProvidersService(settings=settings, database=database)
+    return await service.list_provider_statuses(user.sub)
 
 
 @router.post("/activate", response_model=ProviderActivationResponse, summary="Activate provider")

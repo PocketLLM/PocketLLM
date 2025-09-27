@@ -108,6 +108,7 @@ create table if not exists public.providers (
     metadata jsonb not null default '{}'::jsonb,
     api_key_hash text,
     api_key_preview text,
+    api_key_encrypted text,
     is_active boolean not null default false,
     created_at timestamptz not null default timezone('utc', now()),
     updated_at timestamptz not null default timezone('utc', now()),

@@ -14,7 +14,7 @@ class RemoteModelService {
 
   final BackendApiService _api = BackendApiService();
 
-  Future<List<ProviderConnection>> getProviders() async {
+  Future<List<ProviderConnection>> getProviderConfigurations() async {
     try {
       final data = await _api.get('providers');
       final providers = (data as List?) ?? [];
@@ -25,6 +25,14 @@ class RemoteModelService {
       debugPrint('RemoteModelService.getProviders error: $e');
       rethrow;
     }
+  }
+
+  Future<List<ProviderStatusInfo>> getProviderStatuses() async {
+    final data = await _api.get('providers/status');
+    final statuses = (data as List?) ?? [];
+    return statuses
+        .map((entry) => ProviderStatusInfo.fromJson(Map<String, dynamic>.from(entry as Map)))
+        .toList();
   }
 
   Future<ProviderConnection> activateProvider({

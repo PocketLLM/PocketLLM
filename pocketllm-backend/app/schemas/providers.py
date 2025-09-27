@@ -34,6 +34,7 @@ class ProviderConfiguration(BaseModel):
     metadata: dict | None = None
     api_key_preview: Optional[str] = None
     is_active: bool
+    has_api_key: bool
     created_at: datetime
     updated_at: datetime
 
@@ -63,10 +64,23 @@ class ProviderActivationResponse(BaseModel):
     provider: ProviderConfiguration
 
 
+class ProviderStatus(BaseModel):
+    """Status information for each supported provider."""
+
+    provider: str
+    display_name: Optional[str] = None
+    configured: bool
+    is_active: bool
+    has_api_key: bool
+    api_key_preview: Optional[str] = None
+    message: str
+
+
 __all__ = [
     "ProviderModel",
     "ProviderConfiguration",
     "ProviderActivationRequest",
     "ProviderUpdateRequest",
     "ProviderActivationResponse",
+    "ProviderStatus",
 ]

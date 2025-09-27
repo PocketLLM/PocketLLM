@@ -18,8 +18,10 @@ class _ApiKeysPageState extends State<ApiKeysPage> {
   final ModelService _modelService = ModelService();
   final List<ModelProvider> _supportedProviders = const [
     ModelProvider.openAI,
+    ModelProvider.groq,
     ModelProvider.anthropic,
     ModelProvider.openRouter,
+    ModelProvider.imageRouter,
     ModelProvider.ollama,
   ];
 
@@ -55,6 +57,7 @@ class _ApiKeysPageState extends State<ApiKeysPage> {
             hasApiKey: false,
             apiKeyPreview: null,
             metadata: const {},
+            statusMessage: 'Not configured. Add an API key to enable this provider.',
           ),
         );
       }
@@ -190,6 +193,17 @@ class _ApiKeysPageState extends State<ApiKeysPage> {
               ),
             if (provider.metadata != null && provider.metadata!.isNotEmpty)
               _buildInfoRow('Metadata', provider.metadata.toString()),
+            if (provider.statusMessage != null && provider.statusMessage!.isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 4),
+                child: Text(
+                  provider.statusMessage!,
+                  style: TextStyle(
+                    color: provider.isActive ? Colors.green[700] : Colors.orange[700],
+                    fontSize: 13,
+                  ),
+                ),
+              ),
             const SizedBox(height: 8),
             Align(
               alignment: Alignment.centerRight,

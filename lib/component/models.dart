@@ -153,8 +153,10 @@ enum ModelProvider {
   pocketLLM,
   ollama,
   openAI,
-  anthropic,
+  groq,
   openRouter,
+  imageRouter,
+  anthropic,
   mistral,
   deepseek,
   lmStudio,
@@ -171,10 +173,14 @@ extension ModelProviderExtension on ModelProvider {
         return 'Ollama';
       case ModelProvider.openAI:
         return 'OpenAI';
+      case ModelProvider.groq:
+        return 'Groq';
       case ModelProvider.anthropic:
         return 'Anthropic';
       case ModelProvider.openRouter:
         return 'OpenRouter';
+      case ModelProvider.imageRouter:
+        return 'ImageRouter';
       case ModelProvider.mistral:
         return 'Mistral AI';
       case ModelProvider.deepseek:
@@ -194,10 +200,14 @@ extension ModelProviderExtension on ModelProvider {
         return 'http://localhost:11434';
       case ModelProvider.openAI:
         return 'https://api.openai.com/v1';
+      case ModelProvider.groq:
+        return 'https://api.groq.com/openai/v1';
       case ModelProvider.anthropic:
         return 'https://api.anthropic.com';
       case ModelProvider.openRouter:
         return 'https://openrouter.ai/api';
+      case ModelProvider.imageRouter:
+        return 'https://api.imagerouter.com';
       case ModelProvider.mistral:
         return 'https://api.mistral.ai/v1';
       case ModelProvider.deepseek:
@@ -217,10 +227,14 @@ extension ModelProviderExtension on ModelProvider {
         return Icons.computer;
       case ModelProvider.openAI:
         return Icons.auto_awesome;
+      case ModelProvider.groq:
+        return Icons.flash_on;
       case ModelProvider.anthropic:
         return Icons.psychology;
       case ModelProvider.openRouter:
         return Icons.route;
+      case ModelProvider.imageRouter:
+        return Icons.image;
       case ModelProvider.mistral:
         return Icons.cloud;
       case ModelProvider.deepseek:
@@ -240,10 +254,14 @@ extension ModelProviderExtension on ModelProvider {
         return Colors.blue;
       case ModelProvider.openAI:
         return Color(0xFF10A37F);
+      case ModelProvider.groq:
+        return Colors.deepOrange;
       case ModelProvider.anthropic:
         return Color(0xFFB4306A);
       case ModelProvider.openRouter:
         return Colors.deepPurple;
+      case ModelProvider.imageRouter:
+        return Colors.orangeAccent;
       case ModelProvider.mistral:
         return Colors.indigo;
       case ModelProvider.deepseek:
@@ -263,10 +281,14 @@ extension ModelProviderExtension on ModelProvider {
         return 'ollama';
       case ModelProvider.openAI:
         return 'openai';
+      case ModelProvider.groq:
+        return 'groq';
       case ModelProvider.anthropic:
         return 'anthropic';
       case ModelProvider.openRouter:
         return 'openrouter';
+      case ModelProvider.imageRouter:
+        return 'imagerouter';
       case ModelProvider.mistral:
         return 'mistral';
       case ModelProvider.deepseek:
@@ -286,10 +308,14 @@ extension ModelProviderExtension on ModelProvider {
         return ModelProvider.ollama;
       case 'openai':
         return ModelProvider.openAI;
+      case 'groq':
+        return ModelProvider.groq;
       case 'anthropic':
         return ModelProvider.anthropic;
       case 'openrouter':
         return ModelProvider.openRouter;
+      case 'imagerouter':
+        return ModelProvider.imageRouter;
       case 'mistral':
         return ModelProvider.mistral;
       case 'deepseek':
@@ -313,6 +339,7 @@ class ProviderConnection {
   final bool hasApiKey;
   final String? apiKeyPreview;
   final Map<String, dynamic>? metadata;
+  final String? statusMessage;
 
   ProviderConnection({
     required this.id,
@@ -323,6 +350,7 @@ class ProviderConnection {
     required this.hasApiKey,
     this.apiKeyPreview,
     this.metadata,
+    this.statusMessage,
   });
 
   factory ProviderConnection.fromJson(Map<String, dynamic> json) {
@@ -339,6 +367,40 @@ class ProviderConnection {
       metadata: json['metadata'] != null
           ? Map<String, dynamic>.from(json['metadata'])
           : null,
+      statusMessage: json['message'] as String?,
+    );
+  }
+}
+
+class ProviderStatusInfo {
+  final ModelProvider provider;
+  final String displayName;
+  final bool configured;
+  final bool isActive;
+  final bool hasApiKey;
+  final String? apiKeyPreview;
+  final String message;
+
+  ProviderStatusInfo({
+    required this.provider,
+    required this.displayName,
+    required this.configured,
+    required this.isActive,
+    required this.hasApiKey,
+    this.apiKeyPreview,
+    required this.message,
+  });
+
+  factory ProviderStatusInfo.fromJson(Map<String, dynamic> json) {
+    final providerId = json['provider'] as String? ?? '';
+    return ProviderStatusInfo(
+      provider: ModelProviderExtension.fromBackend(providerId),
+      displayName: json['displayName'] as String? ?? providerId,
+      configured: json['configured'] ?? false,
+      isActive: json['isActive'] ?? false,
+      hasApiKey: json['hasApiKey'] ?? false,
+      apiKeyPreview: json['apiKeyPreview'] as String?,
+      message: json['message'] as String? ?? '',
     );
   }
 }
