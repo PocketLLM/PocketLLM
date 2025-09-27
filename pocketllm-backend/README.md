@@ -23,6 +23,7 @@ source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
+direct run: `cd pocketllm-backend; venv/Scripts/activate; python -m uvicorn main:app --reload`
 ### 2. Configure environment variables
 
 Create a `.env` file (or update environment variables) with the following keys:
