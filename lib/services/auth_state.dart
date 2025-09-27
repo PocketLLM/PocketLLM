@@ -87,6 +87,7 @@ class AuthStateNotifier extends ChangeNotifier {
   static const String _tokenExpiryKey = 'auth.accessTokenExpiry';
   static const String _userIdKey = 'auth.userId';
   static const String _userEmailKey = 'auth.userEmail';
+  static const String _profileCacheKey = 'auth.profile';
   static const String _deletionInfoPrefix = 'auth.deletionInfo.';
 
   static const Set<String> _allowedProfileFields = {
@@ -133,29 +134,19 @@ class AuthStateNotifier extends ChangeNotifier {
 
   Future<void> _initialize() async {
     try {
+      await _loadStoredSession();
+      await _loadDeletionSchedule();
+      await _loadCachedProfile();
+
       _serviceAvailable = BackendApiService.baseUrls.isNotEmpty;
-      if (!_serviceAvailable) {
-        return;
+
+      if (_serviceAvailable) {
+        await _verifyBackendHealth();
       }
 
-      await _verifyBackendHealth();
-      if (!_serviceAvailable) {
-        return;
-      }
-
-      _accessToken = await _secureStorage.read(key: _accessTokenKey);
-      _refreshToken = await _secureStorage.read(key: _refreshTokenKey);
-      final expiryIso = await _secureStorage.read(key: _tokenExpiryKey);
-      if (expiryIso != null) {
-        _accessTokenExpiresAt = DateTime.tryParse(expiryIso);
-      }
-      _userId = await _secureStorage.read(key: _userIdKey);
-      _userEmail = await _secureStorage.read(key: _userEmailKey);
-
-      if (_accessToken != null && _userId != null) {
+      if (_serviceAvailable && _accessToken != null && _userId != null) {
         final hasValidSession = await _ensureFreshAccessToken(forceRefreshIfExpired: true);
         if (hasValidSession) {
-          await _loadDeletionSchedule();
           await _fetchProfile();
           await _handlePendingDeletionOnLogin();
         }
@@ -174,6 +165,49 @@ class AuthStateNotifier extends ChangeNotifier {
         _readyCompleter.complete();
       }
       notifyListeners();
+    }
+  }
+
+  Future<void> _loadStoredSession() async {
+    _accessToken = await _secureStorage.read(key: _accessTokenKey);
+    _refreshToken = await _secureStorage.read(key: _refreshTokenKey);
+    final expiryIso = await _secureStorage.read(key: _tokenExpiryKey);
+    if (expiryIso != null) {
+      _accessTokenExpiresAt = DateTime.tryParse(expiryIso);
+    } else {
+      _accessTokenExpiresAt = null;
+    }
+    _userId = await _secureStorage.read(key: _userIdKey);
+    _userEmail = await _secureStorage.read(key: _userEmailKey);
+  }
+
+  Future<void> _loadCachedProfile() async {
+    final cached = await _secureStorage.read(key: _profileCacheKey);
+    if (cached == null || cached.isEmpty) {
+      return;
+    }
+
+    try {
+      final decoded = jsonDecode(cached);
+      if (decoded is Map<String, dynamic>) {
+        _profile = UserProfile.fromMap(decoded);
+        _applyDeletionScheduleToProfile();
+      }
+    } catch (error, stackTrace) {
+      debugPrint('AuthState: Failed to restore cached profile: $error');
+      debugPrint(stackTrace.toString());
+    }
+  }
+
+  Future<void> _cacheProfile(UserProfile profile) async {
+    try {
+      await _secureStorage.write(
+        key: _profileCacheKey,
+        value: jsonEncode(profile.toMap()),
+      );
+    } catch (error, stackTrace) {
+      debugPrint('AuthState: Failed to cache profile: $error');
+      debugPrint(stackTrace.toString());
     }
   }
 
@@ -337,6 +371,10 @@ class AuthStateNotifier extends ChangeNotifier {
 
     if (profileData != null) {
       _profile = UserProfile.fromMap(_mergeProfileWithDeletion(profileData));
+      _applyDeletionScheduleToProfile();
+      if (_profile != null) {
+        await _cacheProfile(_profile!);
+      }
     } else {
       await _fetchProfile();
     }
@@ -398,6 +436,9 @@ class AuthStateNotifier extends ChangeNotifier {
       if (profileData != null) {
         _profile = UserProfile.fromMap(profileData);
         _applyDeletionScheduleToProfile();
+        if (_profile != null) {
+          await _cacheProfile(_profile!);
+        }
       } else {
         await _fetchProfile();
       }
@@ -421,6 +462,9 @@ class AuthStateNotifier extends ChangeNotifier {
       if (profileData != null) {
         _profile = UserProfile.fromMap(profileData);
         _applyDeletionScheduleToProfile();
+        if (_profile != null) {
+          await _cacheProfile(_profile!);
+        }
       } else {
         await _fetchProfile();
       }
@@ -451,6 +495,9 @@ class AuthStateNotifier extends ChangeNotifier {
     if (profileData != null) {
       _profile = UserProfile.fromMap(profileData);
       _applyDeletionScheduleToProfile();
+      if (_profile != null) {
+        await _cacheProfile(_profile!);
+      }
     } else {
       await _fetchProfile();
     }
@@ -478,6 +525,9 @@ class AuthStateNotifier extends ChangeNotifier {
         await _synchronizeDeletionSchedule(profile);
         _profile = profile;
         _applyDeletionScheduleToProfile();
+        if (_profile != null) {
+          await _cacheProfile(_profile!);
+        }
       }
     } on AuthException catch (error) {
       if (error.statusCode == 404) {
@@ -497,6 +547,10 @@ class AuthStateNotifier extends ChangeNotifier {
       final data = _extractData(response);
       if (data is Map<String, dynamic>) {
         _profile = UserProfile.fromMap(_mergeProfileWithDeletion(data));
+        _applyDeletionScheduleToProfile();
+        if (_profile != null) {
+          await _cacheProfile(_profile!);
+        }
       }
     }
 
@@ -765,6 +819,7 @@ class AuthStateNotifier extends ChangeNotifier {
     await _secureStorage.delete(key: _tokenExpiryKey);
     await _secureStorage.delete(key: _userIdKey);
     await _secureStorage.delete(key: _userEmailKey);
+    await _secureStorage.delete(key: _profileCacheKey);
     await _secureStorage.delete(key: 'supabase_access_token');
   }
 

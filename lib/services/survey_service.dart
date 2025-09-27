@@ -12,6 +12,7 @@ class SurveyPayload {
   final String fullName;
   final String username;
   final String? bio;
+  final DateTime? dateOfBirth;
   final String? profession;
   final String? heardFrom;
   final Map<String, dynamic>? onboarding;
@@ -20,6 +21,7 @@ class SurveyPayload {
     required this.fullName,
     required this.username,
     this.bio,
+    this.dateOfBirth,
     this.profession,
     this.heardFrom,
     this.onboarding,
@@ -36,7 +38,7 @@ class SurveyService {
       fullName: payload.fullName,
       username: payload.username,
       bio: payload.bio,
-      dateOfBirth: null,
+      dateOfBirth: payload.dateOfBirth,
       profession: payload.profession,
       heardFrom: payload.heardFrom,
       avatarUrl: null,

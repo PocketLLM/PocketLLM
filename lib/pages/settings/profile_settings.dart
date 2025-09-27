@@ -304,35 +304,44 @@ class _ProfileSettingsPageState extends State<ProfileSettingsPage> {
     return AnimatedBuilder(
       animation: ThemeService(),
       builder: (context, _) {
-        final colorScheme = ThemeService().colorScheme;
+        final themeService = ThemeService();
+        final colorScheme = themeService.colorScheme;
         final accent = colorScheme.primary;
         final softBackground = _tintWithSurface(accent, colorScheme.surface);
 
+        final infoChips = <Widget>[];
+        if (profile.age != null) {
+          infoChips.add(_buildInfoChip(colorScheme, Icons.cake_outlined, '${profile.age} yrs old'));
+        }
+        if (profile.profession?.isNotEmpty == true) {
+          infoChips.add(_buildInfoChip(colorScheme, Icons.work_outline, profile.profession!));
+        }
+        if (profile.heardFrom?.isNotEmpty == true) {
+          infoChips.add(_buildInfoChip(colorScheme, Icons.campaign_outlined, profile.heardFrom!));
+        }
+
         return Container(
           color: softBackground,
-          child: Center(
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 40),
-              child: ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: 460),
-                child: DecoratedBox(
+          child: CustomScrollView(
+            physics: const BouncingScrollPhysics(),
+            slivers: [
+              SliverToBoxAdapter(
+                child: Container(
                   decoration: BoxDecoration(
-                    color: colorScheme.surface,
-                    borderRadius: BorderRadius.circular(32),
-                    boxShadow: [
-                      BoxShadow(
-                        color: colorScheme.shadow.withOpacity(0.18),
-                        blurRadius: 40,
-                        offset: const Offset(0, 24),
-                      ),
-                    ],
+                    gradient: LinearGradient(
+                      colors: [accent, accent.withOpacity(0.85)],
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                    ),
+                    borderRadius: const BorderRadius.vertical(bottom: Radius.circular(32)),
                   ),
                   child: Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 32),
+                    padding: const EdgeInsets.fromLTRB(24, 32, 24, 36),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             GestureDetector(
                               onTap: _isProcessing ? null : () => _pickImage(authState),
@@ -341,10 +350,14 @@ class _ProfileSettingsPageState extends State<ProfileSettingsPage> {
                                 children: [
                                   CircleAvatar(
                                     radius: 46,
-                                    backgroundColor: colorScheme.cardBorder.withOpacity(0.3),
+                                    backgroundColor: colorScheme.onPrimary.withOpacity(0.18),
                                     backgroundImage: avatarProvider,
                                     child: avatarProvider == null
-                                        ? Icon(Icons.person, size: 48, color: colorScheme.onSurface.withOpacity(0.35))
+                                        ? Icon(
+                                            Icons.person,
+                                            size: 48,
+                                            color: colorScheme.onPrimary.withOpacity(0.7),
+                                          )
                                         : null,
                                   ),
                                   Positioned(
@@ -353,22 +366,16 @@ class _ProfileSettingsPageState extends State<ProfileSettingsPage> {
                                     child: Container(
                                       padding: const EdgeInsets.all(6),
                                       decoration: BoxDecoration(
-                                        color: accent,
+                                        color: colorScheme.onPrimary,
                                         shape: BoxShape.circle,
-                                        boxShadow: [
-                                          BoxShadow(
-                                            color: accent.withOpacity(0.35),
-                                            blurRadius: 10,
-                                          ),
-                                        ],
                                       ),
-                                      child: Icon(Icons.edit, color: colorScheme.onPrimary, size: 16),
+                                      child: Icon(Icons.edit, color: accent, size: 16),
                                     ),
                                   ),
                                 ],
                               ),
                             ),
-                            const SizedBox(width: 20),
+                            const SizedBox(width: 18),
                             Expanded(
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -376,11 +383,13 @@ class _ProfileSettingsPageState extends State<ProfileSettingsPage> {
                                   Text(
                                     profile.fullName?.isNotEmpty == true
                                         ? profile.fullName!
-                                        : (profile.username ?? 'Your profile'),
+                                        : (profile.username?.isNotEmpty == true
+                                            ? '@${profile.username}'
+                                            : 'Your profile'),
                                     style: TextStyle(
-                                      fontSize: 26,
+                                      fontSize: 28,
                                       fontWeight: FontWeight.w700,
-                                      color: colorScheme.onSurface,
+                                      color: colorScheme.onPrimary,
                                     ),
                                   ),
                                   const SizedBox(height: 6),
@@ -388,115 +397,294 @@ class _ProfileSettingsPageState extends State<ProfileSettingsPage> {
                                     profile.email,
                                     style: TextStyle(
                                       fontSize: 15,
-                                      color: colorScheme.onSurface.withOpacity(0.6),
+                                      color: colorScheme.onPrimary.withOpacity(0.85),
                                     ),
                                   ),
+                                  if (profile.username?.isNotEmpty == true &&
+                                      profile.fullName?.isNotEmpty != true) ...[
+                                    const SizedBox(height: 4),
+                                    Text(
+                                      '@${profile.username}',
+                                      style: TextStyle(
+                                        fontSize: 14,
+                                        color: colorScheme.onPrimary.withOpacity(0.7),
+                                      ),
+                                    ),
+                                  ],
                                 ],
                               ),
                             ),
                           ],
                         ),
-                        const SizedBox(height: 24),
-                        AnimatedSwitcher(
-                          duration: const Duration(milliseconds: 280),
-                          child: profile.hasPendingDeletion
-                              ? _buildPendingDeletionCard(colorScheme, authState, profile)
-                              : const SizedBox.shrink(key: ValueKey('no-deletion-card')),
-                        ),
-                        if (!profile.hasPendingDeletion) const SizedBox(height: 4),
-                        _buildMenuTile(
-                          colorScheme: colorScheme,
-                          icon: Icons.assignment_ind_outlined,
-                          title: 'Account details',
-                          subtitle: 'Update your personal information',
-                          onTap: () => _showAccountDetailsSheet(authState, profile),
-                        ),
-                        _buildMenuTile(
-                          colorScheme: colorScheme,
-                          icon: Icons.lock_outline,
-                          title: 'Change password',
-                          subtitle: 'Keep your account secure',
-                          onTap: () => _changePassword(authState),
-                        ),
-                        _buildMenuTile(
-                          colorScheme: colorScheme,
-                          icon: Icons.notifications_none_rounded,
-                          title: 'Notifications',
-                          subtitle: 'Receive important updates',
-                          trailing: _buildNotificationSwitch(colorScheme, authState, profile),
-                        ),
-                        _buildMenuTile(
-                          colorScheme: colorScheme,
-                          icon: Icons.language,
-                          title: 'Language',
-                          subtitle: _languageLabels[_resolveLanguage(profile)] ?? 'English',
-                          onTap: () => _showLanguagePicker(authState, profile),
-                        ),
-                        _buildMenuTile(
-                          colorScheme: colorScheme,
-                          icon: Icons.dark_mode_outlined,
-                          title: 'Theme mode',
-                          subtitle: 'Match PocketLLM to your preference',
-                          trailing: _buildThemeToggle(colorScheme),
-                        ),
-                        _buildMenuTile(
-                          colorScheme: colorScheme,
-                          icon: Icons.flag_outlined,
-                          title: 'Onboarding',
-                          subtitle: profile.surveyCompleted
-                              ? 'Update your onboarding answers'
-                              : 'Finish getting started',
-                          onTap: _isProcessing
-                              ? null
-                              : () async {
-                                  await Navigator.push(
-                                    context,
-                                    MaterialPageRoute(
-                                      builder: (context) => UserSurveyPage(
-                                        onComplete: () {},
-                                      ),
-                                    ),
-                                  );
-                                  if (mounted) {
-                                    await authState.refreshProfile();
-                                  }
-                                },
-                        ),
-                        const SizedBox(height: 12),
-                        Divider(color: colorScheme.cardBorder.withOpacity(0.6)),
-                        const SizedBox(height: 12),
-                        _buildMenuTile(
-                          colorScheme: colorScheme,
-                          icon: Icons.delete_outline,
-                          title: 'Delete account',
-                          subtitle: 'Schedule removal after a 30-day grace period',
-                          onTap: () => _handleDeleteAccount(authState),
-                          isDestructive: true,
-                        ),
-                        const SizedBox(height: 20),
-                        SizedBox(
-                          width: double.infinity,
-                          child: ElevatedButton.icon(
-                            onPressed: _isProcessing ? null : () => _handleSignOut(authState),
-                            icon: const Icon(Icons.logout_rounded),
-                            label: const Text('Logout'),
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: accent,
-                              foregroundColor: colorScheme.onPrimary,
-                              padding: const EdgeInsets.symmetric(vertical: 16),
-                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                        if (profile.bio?.isNotEmpty == true) ...[
+                          const SizedBox(height: 20),
+                          Text(
+                            profile.bio!,
+                            style: TextStyle(
+                              fontSize: 14,
+                              height: 1.4,
+                              color: colorScheme.onPrimary.withOpacity(0.9),
                             ),
                           ),
-                        ),
+                        ],
+                        if (infoChips.isNotEmpty) ...[
+                          const SizedBox(height: 18),
+                          Wrap(
+                            spacing: 10,
+                            runSpacing: 10,
+                            children: infoChips,
+                          ),
+                        ],
                       ],
                     ),
                   ),
                 ),
               ),
-            ),
+              SliverPadding(
+                padding: const EdgeInsets.fromLTRB(24, 20, 24, 32),
+                sliver: SliverList(
+                  delegate: SliverChildListDelegate(
+                    [
+                      if (profile.hasPendingDeletion)
+                        Padding(
+                          padding: const EdgeInsets.only(bottom: 20),
+                          child: _buildPendingDeletionCard(colorScheme, authState, profile),
+                        ),
+                      _buildSectionCard(
+                        colorScheme: colorScheme,
+                        title: 'Profile',
+                        children: [
+                          _buildActionRow(
+                            colorScheme: colorScheme,
+                            icon: Icons.assignment_ind_outlined,
+                            title: 'Account details',
+                            subtitle: 'Update your personal information',
+                            onTap: () => _showAccountDetailsSheet(authState, profile),
+                          ),
+                          _buildActionRow(
+                            colorScheme: colorScheme,
+                            icon: Icons.lock_outline,
+                            title: 'Change password',
+                            subtitle: 'Keep your account secure',
+                            onTap: () => _changePassword(authState),
+                          ),
+                        ],
+                      ),
+                      _buildSectionCard(
+                        colorScheme: colorScheme,
+                        title: 'Preferences',
+                        children: [
+                          _buildActionRow(
+                            colorScheme: colorScheme,
+                            icon: Icons.language,
+                            title: 'Language',
+                            subtitle: _languageLabels[_resolveLanguage(profile)] ?? 'English',
+                            onTap: () => _showLanguagePicker(authState, profile),
+                          ),
+                          _buildActionRow(
+                            colorScheme: colorScheme,
+                            icon: Icons.flag_outlined,
+                            title: 'Onboarding',
+                            subtitle: profile.surveyCompleted
+                                ? 'Update your onboarding answers'
+                                : 'Finish getting started',
+                            onTap: _isProcessing
+                                ? null
+                                : () async {
+                                    await Navigator.push(
+                                      context,
+                                      MaterialPageRoute(
+                                        builder: (context) => UserSurveyPage(
+                                          onComplete: () {},
+                                        ),
+                                      ),
+                                    );
+                                    if (mounted) {
+                                      await authState.refreshProfile();
+                                    }
+                                  },
+                          ),
+                        ],
+                      ),
+                      _buildSectionCard(
+                        colorScheme: colorScheme,
+                        title: 'Account control',
+                        children: [
+                          _buildActionRow(
+                            colorScheme: colorScheme,
+                            icon: Icons.delete_outline,
+                            title: 'Delete account',
+                            subtitle: 'Schedule removal after a 30-day grace period',
+                            isDestructive: true,
+                            onTap: () => _handleDeleteAccount(authState),
+                          ),
+                        ],
+                      ),
+                      SizedBox(
+                        width: double.infinity,
+                        child: ElevatedButton.icon(
+                          onPressed: _isProcessing ? null : () => _handleSignOut(authState),
+                          icon: const Icon(Icons.logout_rounded),
+                          label: const Text('Logout'),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: accent,
+                            foregroundColor: colorScheme.onPrimary,
+                            padding: const EdgeInsets.symmetric(vertical: 16),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(18),
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 24),
+                    ],
+                  ),
+                ),
+              ),
+            ],
           ),
         );
       },
+    );
+  }
+
+  Widget _buildSectionCard({
+    required AppColorScheme colorScheme,
+    required String title,
+    required List<Widget> children,
+  }) {
+    final items = <Widget>[];
+    for (var i = 0; i < children.length; i++) {
+      if (i > 0) {
+        items.add(
+          Divider(
+            height: 1,
+            thickness: 1,
+            color: colorScheme.cardBorder.withOpacity(0.6),
+          ),
+        );
+      }
+      items.add(children[i]);
+    }
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 24),
+      padding: const EdgeInsets.fromLTRB(24, 20, 24, 12),
+      decoration: BoxDecoration(
+        color: colorScheme.surface,
+        borderRadius: BorderRadius.circular(28),
+        boxShadow: [
+          BoxShadow(
+            color: colorScheme.shadow.withOpacity(0.14),
+            blurRadius: 28,
+            offset: const Offset(0, 18),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            title,
+            style: TextStyle(
+              fontSize: 17,
+              fontWeight: FontWeight.w700,
+              color: colorScheme.onSurface,
+            ),
+          ),
+          const SizedBox(height: 12),
+          ...items,
+        ],
+      ),
+    );
+  }
+
+  Widget _buildActionRow({
+    required AppColorScheme colorScheme,
+    required IconData icon,
+    required String title,
+    String? subtitle,
+    VoidCallback? onTap,
+    bool isDestructive = false,
+  }) {
+    final background = isDestructive ? Colors.red.shade50 : colorScheme.primary.withOpacity(0.12);
+    final iconColor = isDestructive ? Colors.red.shade500 : colorScheme.primary;
+    final textColor = isDestructive ? Colors.red.shade600 : colorScheme.onSurface;
+
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(20),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 12),
+        child: Row(
+          children: [
+            Container(
+              decoration: BoxDecoration(
+                color: background,
+                borderRadius: BorderRadius.circular(16),
+              ),
+              padding: const EdgeInsets.all(12),
+              child: Icon(icon, color: iconColor),
+            ),
+            const SizedBox(width: 16),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w600,
+                      color: textColor,
+                    ),
+                  ),
+                  if (subtitle != null) ...[
+                    const SizedBox(height: 4),
+                    Text(
+                      subtitle,
+                      style: TextStyle(
+                        fontSize: 13,
+                        color: isDestructive
+                            ? textColor.withOpacity(0.8)
+                            : colorScheme.onSurface.withOpacity(0.6),
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+            Icon(
+              Icons.chevron_right,
+              color: colorScheme.onSurface.withOpacity(onTap == null ? 0.25 : 0.4),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildInfoChip(AppColorScheme colorScheme, IconData icon, String label) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      decoration: BoxDecoration(
+        color: colorScheme.onPrimary.withOpacity(0.16),
+        borderRadius: BorderRadius.circular(18),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 16, color: colorScheme.onPrimary.withOpacity(0.9)),
+          const SizedBox(width: 6),
+          Text(
+            label,
+            style: TextStyle(
+              color: colorScheme.onPrimary.withOpacity(0.92),
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ],
+      ),
     );
   }
 
@@ -549,54 +737,6 @@ class _ProfileSettingsPageState extends State<ProfileSettingsPage> {
           ),
         ],
       ),
-    );
-  }
-
-  Widget _buildNotificationSwitch(AppColorScheme colorScheme, AuthState authState, UserProfile profile) {
-    final isEnabled = _readNotificationsPreference(profile);
-    return Switch(
-      value: isEnabled,
-      onChanged: _isProcessing
-          ? null
-          : (value) async {
-              setState(() => _isProcessing = true);
-              try {
-                final updatedOnboarding = Map<String, dynamic>.from(profile.onboarding ?? {});
-                updatedOnboarding['notifications_enabled'] = value;
-                await authState.updateProfileFields({'onboarding': updatedOnboarding});
-                await authState.refreshProfile();
-              } catch (e) {
-                if (!mounted) return;
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text('Unable to update notifications: $e')),
-                );
-              } finally {
-                if (mounted) setState(() => _isProcessing = false);
-              }
-            },
-      activeColor: colorScheme.primary,
-    );
-  }
-
-  Widget _buildThemeToggle(AppColorScheme colorScheme) {
-    final themeService = ThemeService();
-    final isHighContrast = themeService.colorSchemeType == ColorSchemeType.highContrast;
-    return Switch(
-      value: isHighContrast,
-      activeColor: colorScheme.primary,
-      onChanged: (value) async {
-        if (_isProcessing) return;
-        setState(() => _isProcessing = true);
-        try {
-          if (value) {
-            await themeService.setColorSchemeType(ColorSchemeType.highContrast);
-          } else {
-            await themeService.setColorSchemeType(ColorSchemeType.standard);
-          }
-        } finally {
-          if (mounted) setState(() => _isProcessing = false);
-        }
-      },
     );
   }
 
@@ -781,21 +921,6 @@ class _ProfileSettingsPageState extends State<ProfileSettingsPage> {
     return 'en';
   }
 
-  bool _readNotificationsPreference(UserProfile profile) {
-    final onboarding = profile.onboarding;
-    if (onboarding == null) {
-      return false;
-    }
-    final value = onboarding['notifications_enabled'];
-    if (value is bool) return value;
-    if (value is num) return value != 0;
-    if (value is String) {
-      final normalized = value.toLowerCase();
-      return normalized == 'true' || normalized == '1';
-    }
-    return false;
-  }
-
   String _formatDateDisplay(DateTime? date) {
     if (date == null) return '';
     final local = date.toLocal();
@@ -849,79 +974,6 @@ class _ProfileSettingsPageState extends State<ProfileSettingsPage> {
                 ),
               ),
               Icon(Icons.edit_outlined, color: colorScheme.onSurface.withOpacity(0.4), size: 20),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildMenuTile({
-    required AppColorScheme colorScheme,
-    required IconData icon,
-    required String title,
-    String? subtitle,
-    VoidCallback? onTap,
-    Widget? trailing,
-    bool isDestructive = false,
-  }) {
-    final iconBackground = colorScheme.primary.withOpacity(0.12);
-    final textColor = isDestructive ? Colors.red.shade600 : colorScheme.onSurface;
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 6.0),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(22),
-        onTap: onTap,
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 18),
-          decoration: BoxDecoration(
-            color: colorScheme.cardBackground,
-            borderRadius: BorderRadius.circular(22),
-            border: Border.all(color: colorScheme.cardBorder.withOpacity(0.7)),
-          ),
-          child: Row(
-            children: [
-              Container(
-                decoration: BoxDecoration(
-                  color: isDestructive ? Colors.red.shade50 : iconBackground,
-                  borderRadius: BorderRadius.circular(16),
-                ),
-                padding: const EdgeInsets.all(12),
-                child: Icon(
-                  icon,
-                  color: isDestructive ? Colors.red.shade500 : colorScheme.primary,
-                ),
-              ),
-              const SizedBox(width: 16),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      title,
-                      style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w600,
-                        color: textColor,
-                      ),
-                    ),
-                    if (subtitle != null) ...[
-                      const SizedBox(height: 4),
-                      Text(
-                        subtitle,
-                        style: TextStyle(
-                          fontSize: 13,
-                          color: textColor.withOpacity(0.6),
-                        ),
-                      ),
-                    ],
-                  ],
-                ),
-              ),
-              trailing ?? Icon(
-                Icons.chevron_right,
-                color: colorScheme.onSurface.withOpacity(0.4),
-              ),
             ],
           ),
         ),
