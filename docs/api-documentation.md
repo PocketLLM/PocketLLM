@@ -97,6 +97,38 @@ Authenticate a user and obtain an access token.
 }
 ```
 
+### Refresh Session
+
+**POST** `/auth/refresh`
+
+Exchange a valid refresh token for a new access token without requiring the user to re-enter credentials.
+
+**Request Body:**
+```json
+{
+  "refresh_token": "refresh_token_here"
+}
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "data": {
+    "tokens": {
+      "access_token": "new_jwt_token",
+      "refresh_token": "refresh_token_here",
+      "expires_in": 3600,
+      "token_type": "bearer"
+    },
+    "session": {
+      "session_id": "uuid",
+      "expires_at": "2023-10-27T11:00:00.000Z"
+    }
+  }
+}
+```
+
 ## 👤 Users
 
 User profile operations require authentication.

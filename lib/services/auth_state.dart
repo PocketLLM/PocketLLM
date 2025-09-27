@@ -107,6 +107,8 @@ class AuthStateNotifier extends ChangeNotifier {
   final Completer<void> _readyCompleter = Completer<void>();
 
   static const Duration _deletionGracePeriod = Duration(days: 30);
+  static const Duration _tokenRefreshWindow = Duration(minutes: 5);
+  static const Duration _tokenExpiryGrace = Duration(seconds: 30);
 
   String? _accessToken;
   String? _refreshToken;
@@ -126,6 +128,8 @@ class AuthStateNotifier extends ChangeNotifier {
   bool get isPerformingRequest => _isPerformingRequest;
   String? get currentUserEmail => _userEmail ?? _profile?.email;
   DeletionSchedule? get deletionSchedule => _deletionSchedule;
+
+  Completer<bool>? _refreshCompleter;
 
   Future<void> _initialize() async {
     try {
@@ -149,9 +153,8 @@ class AuthStateNotifier extends ChangeNotifier {
       _userEmail = await _secureStorage.read(key: _userEmailKey);
 
       if (_accessToken != null && _userId != null) {
-        if (_accessTokenExpiresAt != null && _accessTokenExpiresAt!.isBefore(DateTime.now().toUtc())) {
-          await _clearSession();
-        } else {
+        final hasValidSession = await _ensureFreshAccessToken(forceRefreshIfExpired: true);
+        if (hasValidSession) {
           await _loadDeletionSchedule();
           await _fetchProfile();
           await _handlePendingDeletionOnLogin();
@@ -528,6 +531,104 @@ class AuthStateNotifier extends ChangeNotifier {
     return merged;
   }
 
+  Future<bool> _ensureFreshAccessToken({bool forceRefreshIfExpired = false}) async {
+    if (_accessToken == null) {
+      return false;
+    }
+
+    if (_accessTokenExpiresAt == null) {
+      return true;
+    }
+
+    final now = DateTime.now().toUtc();
+    final timeUntilExpiry = _accessTokenExpiresAt!.difference(now);
+
+    if (timeUntilExpiry.isNegative || timeUntilExpiry <= _tokenExpiryGrace) {
+      final refreshed = await _tryRefreshSession();
+      if (refreshed) {
+        return true;
+      }
+
+      if (forceRefreshIfExpired || timeUntilExpiry.isNegative) {
+        await _clearSession();
+        notifyListeners();
+        return false;
+      }
+
+      return timeUntilExpiry > Duration.zero;
+    }
+
+    if (timeUntilExpiry <= _tokenRefreshWindow) {
+      await _tryRefreshSession();
+    }
+
+    return true;
+  }
+
+  Future<bool> _tryRefreshSession() async {
+    if (_refreshCompleter != null) {
+      return _refreshCompleter!.future;
+    }
+
+    final completer = Completer<bool>();
+    _refreshCompleter = completer;
+
+    final existingRefreshToken = _refreshToken ?? await _secureStorage.read(key: _refreshTokenKey);
+    if (existingRefreshToken == null || existingRefreshToken.isEmpty) {
+      completer.complete(false);
+      _refreshCompleter = null;
+      return false;
+    }
+
+    bool success = false;
+
+    try {
+      final response = await _post(
+        '/auth/refresh',
+        body: {'refresh_token': existingRefreshToken},
+      );
+
+      final data = _extractData(response);
+      final tokens = data['tokens'] as Map<String, dynamic>?;
+      final session = data['session'] as Map<String, dynamic>?;
+
+      if (tokens == null) {
+        throw const AuthException('Refresh response missing token payload.');
+      }
+
+      final credentials = _extractAccessCredentials(session, tokens);
+      if (credentials == null) {
+        throw const AuthException('Refresh response missing access token.');
+      }
+
+      final userData = data['user'] as Map<String, dynamic>?;
+      final refreshedUserId = userData?['id'] as String? ?? _userId;
+      final refreshedEmail = userData?['email'] as String? ?? _userEmail;
+
+      await _saveSession(
+        accessToken: credentials.accessToken,
+        refreshToken: credentials.refreshToken ?? existingRefreshToken,
+        expiresIn: credentials.expiresIn,
+        userId: refreshedUserId,
+        email: refreshedEmail,
+      );
+
+      success = true;
+    } on AuthException catch (error) {
+      debugPrint('AuthState: Token refresh failed: $error');
+    } catch (error, stackTrace) {
+      debugPrint('AuthState: Unexpected token refresh error: $error');
+      debugPrint(stackTrace.toString());
+    } finally {
+      if (!completer.isCompleted) {
+        completer.complete(success);
+      }
+      _refreshCompleter = null;
+    }
+
+    return success;
+  }
+
   Future<SignInResult> _authenticate({
     required String email,
     required String password,
@@ -599,12 +700,16 @@ class AuthStateNotifier extends ChangeNotifier {
     String? refreshToken,
     int? expiresIn,
     String? userId,
-    required String email,
+    String? email,
   }) async {
     _accessToken = accessToken;
     _refreshToken = refreshToken;
-    _userId = userId;
-    _userEmail = email;
+    if (userId != null) {
+      _userId = userId;
+    }
+    if (email != null) {
+      _userEmail = email;
+    }
 
     if (expiresIn != null) {
       _accessTokenExpiresAt = DateTime.now().toUtc().add(Duration(seconds: expiresIn));
@@ -614,7 +719,7 @@ class AuthStateNotifier extends ChangeNotifier {
 
     await _secureStorage.write(key: _accessTokenKey, value: _accessToken);
     await _secureStorage.write(key: 'supabase_access_token', value: _accessToken);
-    if (_refreshToken != null) {
+    if (_refreshToken != null && _refreshToken!.isNotEmpty) {
       await _secureStorage.write(key: _refreshTokenKey, value: _refreshToken);
     } else {
       await _secureStorage.delete(key: _refreshTokenKey);
@@ -626,16 +731,27 @@ class AuthStateNotifier extends ChangeNotifier {
       await _secureStorage.delete(key: _tokenExpiryKey);
     }
 
-    if (_userId != null) {
+    if (_userId != null && _userId!.isNotEmpty) {
       await _secureStorage.write(key: _userIdKey, value: _userId);
+    } else {
+      await _secureStorage.delete(key: _userIdKey);
     }
-    await _secureStorage.write(key: _userEmailKey, value: _userEmail);
+
+    if (_userEmail != null && _userEmail!.isNotEmpty) {
+      await _secureStorage.write(key: _userEmailKey, value: _userEmail);
+    } else {
+      await _secureStorage.delete(key: _userEmailKey);
+    }
   }
 
   Future<void> _clearSession() async {
     if (_userId != null) {
       await _secureStorage.delete(key: _deletionStorageKey(_userId!));
     }
+    if (_refreshCompleter != null && !_refreshCompleter!.isCompleted) {
+      _refreshCompleter!.complete(false);
+    }
+    _refreshCompleter = null;
     _accessToken = null;
     _refreshToken = null;
     _accessTokenExpiresAt = null;
@@ -1064,14 +1180,22 @@ class AuthStateNotifier extends ChangeNotifier {
     String path, {
     Map<String, dynamic>? body,
     bool requiresAuth = false,
+    bool retrying = false,
   }) async {
     if (BackendApiService.baseUrls.isEmpty) {
       _serviceAvailable = false;
       throw const AuthException('Authentication service is not configured.');
     }
 
-    if (requiresAuth && _accessToken == null) {
-      throw const AuthException('You need to be signed in to continue.', statusCode: 401);
+    if (requiresAuth) {
+      if (_accessToken == null) {
+        throw const AuthException('You need to be signed in to continue.', statusCode: 401);
+      }
+
+      final hasValidSession = await _ensureFreshAccessToken(forceRefreshIfExpired: true);
+      if (!hasValidSession || _accessToken == null) {
+        throw const AuthException('Your session has expired. Please sign in again.', statusCode: 401);
+      }
     }
 
     try {
@@ -1111,8 +1235,24 @@ class AuthStateNotifier extends ChangeNotifier {
       }
       
       if (error.statusCode == 401 && requiresAuth) {
+        if (!retrying) {
+          final refreshed = await _tryRefreshSession();
+          if (refreshed) {
+            return _request(
+              method,
+              path,
+              body: body,
+              requiresAuth: requiresAuth,
+              retrying: true,
+            );
+          }
+        }
+
         await _clearSession();
+        notifyListeners();
+        throw const AuthException('Your session has expired. Please sign in again.', statusCode: 401);
       }
+
       throw AuthException(userMessage, statusCode: error.statusCode);
     } on SocketException {
       _serviceAvailable = false;

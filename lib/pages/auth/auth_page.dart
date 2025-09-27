@@ -221,20 +221,24 @@ class _AuthPageState extends State<AuthPage> {
     required bool selected,
     required VoidCallback onTap,
   }) {
+    final colorScheme = Theme.of(context).colorScheme;
+    final primary = colorScheme.primary;
+    final selectedColor = _lightenPrimary(primary);
+    final textColor = selected ? primary : Colors.grey[700];
     return GestureDetector(
       onTap: onTap,
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 200),
         padding: const EdgeInsets.symmetric(vertical: 12),
         decoration: BoxDecoration(
-          color: selected ? const Color(0xFF8B5CF6) : Colors.transparent,
+          color: selected ? selectedColor : Colors.transparent,
           borderRadius: BorderRadius.circular(10),
         ),
         child: Center(
           child: Text(
             label,
             style: TextStyle(
-              color: selected ? Colors.white : Colors.grey[700],
+              color: textColor,
               fontSize: 16,
               fontWeight: FontWeight.w600,
             ),
@@ -242,6 +246,12 @@ class _AuthPageState extends State<AuthPage> {
         ),
       ),
     );
+  }
+
+  Color _lightenPrimary(Color color) {
+    final hsl = HSLColor.fromColor(color);
+    final lighter = hsl.withLightness((hsl.lightness + 0.35).clamp(0.0, 1.0));
+    return lighter.toColor();
   }
 
   Widget _buildAuthForm(BuildContext context, AuthState authState) {
