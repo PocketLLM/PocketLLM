@@ -21,8 +21,8 @@ class ProviderRecord:
     api_key_hash: str | None
     api_key_preview: str | None
     api_key_encrypted: str | None
-    api_key: str | None = None
     is_active: bool
+    api_key: str | None = None
     created_at: datetime
     updated_at: datetime
 
@@ -57,7 +57,12 @@ class ProviderRecord:
                 "metadata": self.metadata,
                 "api_key_preview": self.api_key_preview,
                 "is_active": self.is_active,
-                "has_api_key": bool(self.api_key),
+                "has_api_key": bool(
+                    self.api_key
+                    or self.api_key_encrypted
+                    or self.api_key_hash
+                    or self.api_key_preview
+                ),
                 "created_at": self.created_at,
                 "updated_at": self.updated_at,
             }
