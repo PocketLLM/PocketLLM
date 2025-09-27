@@ -1,135 +1,135 @@
 # PocketLLM
 
-PocketLLM is a powerful, cross-platform AI chat application built with Flutter that brings the power of large language models to your pocket. What makes PocketLLM unique is its ability to download and run AI models directly on your mobile device or connect to locally hosted models on your computer.
-<div align="center">
-  <img src="https://img.shields.io/badge/Status-Under_Development-orange?style=for-the-badge&logo=github" alt="Under Development">
-  <img src="https://img.shields.io/badge/Release-Coming_Soon-blue?style=for-the-badge&logo=github" alt="Coming Soon">
-</div>
+PocketLLM is a cross-platform assistant that pairs a Flutter application with a FastAPI backend to deliver secure, low-latency access to large language models. Users can connect their own provider accounts, browse real-time catalogues, import models, and chat across mobile and desktop targets with a shared experience.
 
 <p align="center">
-  <em>PocketLLM is currently in active development. A beta version will be released soon!</em>
+  <img src="https://img.shields.io/badge/Status-Active_Development-blue?style=for-the-badge" alt="Development Status" />
+  <img src="https://img.shields.io/badge/Framework-Flutter-02569B?style=for-the-badge&logo=flutter" alt="Flutter" />
+  <img src="https://img.shields.io/badge/Backend-FastAPI-109989?style=for-the-badge&logo=fastapi" alt="FastAPI" />
 </p>
 
-## ✨ Key Features
+## Overview
 
-- 📱 **Mobile-First LLM Integration**
-  - Download and run AI models directly on your mobile device
-  - Optimized for mobile performance and battery life
-  - Secure, private, and offline-capable operation
+PocketLLM focuses on three pillars:
 
-- 💻 **Desktop Integration**
-  - Seamless connection to locally hosted models via LLMStudio or Ollama
-  - Easy model management and switching
-  - Cross-device synchronization
+1. **Unified catalogue** – aggregate models from OpenAI, Groq, OpenRouter, and ImageRouter using official SDKs with per-user API keys.
+2. **Bring your own keys** – users activate providers securely; secrets are encrypted at rest and never fall back to environment credentials.
+3. **Consistent chat experience** – Flutter renders the same responsive interface on Android, iOS, macOS, Windows, Linux, and the web.
 
-- 🚀 **Advanced Features**
-  - Real-time chat interface with markdown support
-  - Token usage tracking and cost estimation
-  - Chat history management with local storage
-  - Dynamic model switching
-  - Clean, modern UI with dark mode support
-  - Responsive design for all screen sizes
+The backend exposes REST APIs that the Flutter client consumes. A Supabase instance stores provider configurations, encrypted secrets, and chat history.
 
-## 🤖 Supported Models
+## Key Features
 
-### Mobile-Compatible Models
-- Optimized versions of popular open-source models
-- Quantized models for efficient mobile execution
-- Various size options (7B, 13B) for different device capabilities
+| Area | Highlights |
+|------|------------|
+| **Model management** | Dynamic `/v1/models` endpoint returns live catalogues with helpful status messaging when keys are missing or filters remove all results. Users can import, favourite, and set defaults. |
+| **Provider operations** | Granular activation flows validate API keys with official SDKs, support base URL overrides, and expose a status dashboard. |
+| **Chat experience** | Streaming responses, Markdown rendering, inline code blocks, and token accounting. |
+| **Security** | Secrets encrypted using Fernet + project key, strict error messages when configuration is incomplete, and no environment fallback for user operations. |
+| **Observability** | Structured logging across services and catalogue caching with per-provider metrics. |
 
-### Desktop Integration
-- Connect to locally hosted models via:
-  - Ollama
-  - LLMStudio
-  - Custom API endpoints
+## Architecture
 
-## 🛠️ Technical Requirements
-
-### Mobile
-- Android 8.0 or later
-- iOS 13.0 or later
-- Minimum 4GB RAM recommended
-- At least 2GB free storage space
-
-### Desktop
-- Windows 10/11
-- macOS 10.15 or later
-- Linux (major distributions)
-- Ollama or LLMStudio installed (for local model hosting)
-
-## 📥 Installation
-
-### Mobile Apps
-Download from (Comming Soon):
-- [F-Droid](link-to-fdroid)
-- [GitHub Packages](link-to-github-packages)
-
-### Desktop Apps
-1. Download the latest release for your platform from the [releases page](link-to-releases)
-2. Install Ollama or LLMStudio if you want to host models locally
-3. Launch PocketLLM and connect to your local model server
-
-### Build from Source
-```bash
-# Clone the repository
-git clone https://github.com/yourusername/pocketllm.git
-cd pocketllm
-
-# Install dependencies
-flutter pub get
-
-# Run the app
-flutter run
+```
+PocketLLM
+├── lib/                     # Flutter client (Riverpod, GoRouter, Material 3)
+│   ├── component/           # Shared widgets and UI primitives
+│   ├── pages/               # Screens including Library, API Keys, Chat
+│   └── services/            # State management, API bridges, secure storage
+├── pocketllm-backend/       # FastAPI application
+│   ├── app/api/             # Versioned routes (/v1)
+│   ├── app/services/        # Provider catalogue, auth, jobs, models
+│   ├── app/utils/           # Crypto helpers, security utilities
+│   └── database/            # Dataclasses mirroring Supabase tables
+└── docs/                    # Operational guides and API references
 ```
 
-## 📱 Getting Started
+## Prerequisites
 
-1. **Mobile Setup**
-   - Launch PocketLLM
-   - Browse available models in the Model Hub
-   - Download your preferred model
-   - Start chatting immediately
+| Component | Requirement |
+|-----------|-------------|
+| Flutter   | 3.19.6 (see [`AGENTS.md`](AGENTS.md) setup script) |
+| Dart      | Included with Flutter SDK |
+| Python    | 3.11+ for FastAPI backend |
+| Node / pnpm | Optional for tooling around Supabase migrations |
+| Supabase  | Service-role key and project URL configured in `.env` |
 
-2. **Desktop Setup**
-   - Install and configure Ollama or LLMStudio
-   - Launch PocketLLM
-   - Connect to your local model server
-   - Select your model and begin chatting
+## Quick Start
 
-## 🤝 Contributing
+### Backend
 
-We welcome contributions! Please see our [Contributing Guidelines](CONTRIBUTING.md) for details.
+```bash
+cd pocketllm-backend
+python -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
 
-For AI agents and developers looking to understand the codebase structure and development workflows, see our [AGENTS.md](AGENTS.md) documentation.
+cp .env.example .env  # configure Supabase credentials and ENCRYPTION_KEY
+uvicorn main:app --reload
+```
 
-## 📚 Documentation
+Key endpoint: `GET /v1/models`
 
-For developers and contributors, we provide comprehensive documentation:
+```http
+GET /v1/models
+Authorization: Bearer <JWT>
 
-- [AGENTS.md](AGENTS.md) - AI agent development guide
-- [CONTRIBUTING.md](CONTRIBUTING.md) - Contribution guidelines
-- [Flutter Setup Guide](docs/flutter-setup-guide.md) - Complete Flutter development environment setup
-- [Project Structure](docs/project-structure.md) - Detailed codebase organization
-- [API Documentation](docs/api-documentation.md) - Comprehensive API reference
-- [API Maintenance Guide](docs/api-maintenance.md) - How to keep API documentation up-to-date
-- [Backend Guide](docs/backend-guide.md) - Backend development and deployment
+{
+  "models": [
+    {
+      "provider": "openai",
+      "id": "gpt-4o",
+      "name": "GPT-4 Omni",
+      "metadata": {"owned_by": "openai"}
+    }
+  ],
+  "message": null,
+  "configured_providers": ["openai"],
+  "missing_providers": ["groq", "openrouter", "imagerouter"]
+}
+```
 
-For API testing and integration:
-- [Postman API Guide](pocketllm-backend/POSTMAN_API_GUIDE.md) - Detailed API endpoint examples
+When no API keys are stored the endpoint responds with an empty `models` array and a descriptive `message`, enabling the Flutter UI to prompt users to add credentials.
 
-## 📸 Screenshots
-`comming soon`
+### Flutter Client
 
-## 📄 License
+```bash
+cd ..
+flutter pub get
+flutter run  # chooses a connected device or emulator
+```
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+The API Keys page surfaces provider status, preview masks, and validation results. The Model Library consumes the unified `/v1/models` response and displays grouped catalogues with filtering options.
 
-## 🙏 Acknowledgments
+## Testing
 
-- Flutter team for the amazing framework
-- Ollama project for local model hosting
-- LLMStudio for desktop integration
-- All open-source model providers
+| Layer | Command |
+|-------|---------|
+| Flutter | `flutter analyze && flutter test` |
+| Backend | `cd pocketllm-backend && pytest` |
+
+> **Note:** Some integration suites stub external SDKs; install `openai`, `groq`, and `openrouter` packages locally for full coverage.
+
+## Documentation
+
+- [`docs/api-documentation.md`](docs/api-documentation.md) – REST endpoints and schemas.
+- [`docs/backend-guide.md`](docs/backend-guide.md) – Environment variables, Supabase integration, and deployment playbooks.
+- [`docs/groq-guide.md`](docs/groq-guide.md) – Official SDK usage for catalogue, chat, audio, and reasoning APIs.
+- [`docs/frontend_cleanup_tasks.md`](docs/frontend_cleanup_tasks.md) – Outstanding UI refinements.
+
+## Contributing
+
+Contributions are welcome! Please review [`CONTRIBUTING.md`](CONTRIBUTING.md) and ensure:
+
+1. New features include unit or widget tests.
+2. Backend changes run through `pytest` with optional SDKs installed.
+3. Documentation and changelogs reflect API or workflow updates.
+4. Secrets and API keys are never committed.
+
+## License
+
+PocketLLM is released under the [MIT License](LICENSE).
 
 ---
-*Note: This project is currently in active development and open source. A beta version will be released soon! If you'd like to contribute, feel free to clone the repository and submit a pull request. Screenshots and documentation will be updated as the project progresses.*
+
+Have questions or ideas? Open an issue or join the discussion — we’d love to hear how you are using PocketLLM.

@@ -76,6 +76,15 @@ class ProviderStatus(BaseModel):
     message: str
 
 
+class ProviderModelsResponse(BaseModel):
+    """Envelope returned when listing models from configured providers."""
+
+    models: list[ProviderModel] = Field(default_factory=list)
+    message: Optional[str] = None
+    configured_providers: list[str] = Field(default_factory=list)
+    missing_providers: list[str] = Field(default_factory=list)
+
+
 __all__ = [
     "ProviderModel",
     "ProviderConfiguration",
@@ -83,4 +92,5 @@ __all__ = [
     "ProviderUpdateRequest",
     "ProviderActivationResponse",
     "ProviderStatus",
+    "ProviderModelsResponse",
 ]

@@ -16,6 +16,7 @@ from app.schemas.providers import (
     ProviderActivationResponse,
     ProviderConfiguration,
     ProviderModel,
+    ProviderModelsResponse,
     ProviderStatus,
     ProviderUpdateRequest,
 )
@@ -157,33 +158,78 @@ class ProvidersService:
         name: str | None = None,
         model_id: str | None = None,
         query: str | None = None,
-    ) -> list[ProviderModel]:
+    ) -> ProviderModelsResponse:
         records = await self._fetch_provider_records(user_id)
         active_configs = [record for record in records if record.is_active and record.api_key]
+        active_provider_keys = {record.provider.lower(): record.provider for record in active_configs}
+        configured_provider_names = [record.provider for record in active_configs]
+        missing_providers = [
+            provider_name
+            for provider_name in _SUPPORTED_PROVIDERS
+            if provider_name not in active_provider_keys
+        ]
+
         if provider is not None:
             provider_key = provider.lower()
-            active_for_provider = [record for record in active_configs if record.provider.lower() == provider_key]
+            active_for_provider = [
+                record for record in active_configs if record.provider.lower() == provider_key
+            ]
             if not active_for_provider:
-                raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail={
-                        "message": f"Provider '{provider}' is not configured. Add a valid API key to query models.",
-                        "provider": provider_key,
-                    },
+                message = (
+                    f"Provider '{provider}' is not configured. Add a valid API key to query models."
                 )
+                missing = sorted(set(missing_providers + [provider_key]))
+                return ProviderModelsResponse(
+                    models=[],
+                    message=message,
+                    configured_providers=sorted(configured_provider_names),
+                    missing_providers=missing,
+                )
+
             models = await self._catalogue.list_models_for_provider(provider, active_for_provider)
-        else:
-            if not active_configs:
-                configured = [record.provider for record in records if record.is_active]
-                raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail={
-                        "message": "No providers are configured with API keys. Add a provider API key to fetch models.",
-                        "configuredProviders": configured,
-                    },
+            filtered = self._filter_models(models, name=name, model_id=model_id, query=query)
+            message = None
+            if not filtered:
+                message = (
+                    "No models matched the supplied filters."
+                    if models
+                    else f"No models were returned by provider '{provider_key}'."
                 )
-            models = await self._catalogue.list_all_models(active_configs)
-        return self._filter_models(models, name=name, model_id=model_id, query=query)
+            remaining_missing = [p for p in missing_providers if p != provider_key]
+            return ProviderModelsResponse(
+                models=filtered,
+                message=message,
+                configured_providers=sorted(configured_provider_names),
+                missing_providers=sorted(remaining_missing),
+            )
+
+        if not active_configs:
+            configured = [record.provider for record in records if record.is_active]
+            message = (
+                "No providers are configured with API keys. Add a provider API key to fetch models."
+            )
+            return ProviderModelsResponse(
+                models=[],
+                message=message,
+                configured_providers=sorted(configured),
+                missing_providers=sorted(_SUPPORTED_PROVIDERS.keys()),
+            )
+
+        models = await self._catalogue.list_all_models(active_configs)
+        filtered = self._filter_models(models, name=name, model_id=model_id, query=query)
+        message = None
+        if not filtered:
+            message = (
+                "No models matched the supplied filters."
+                if models
+                else "No models were returned by the configured providers."
+            )
+        return ProviderModelsResponse(
+            models=filtered,
+            message=message,
+            configured_providers=sorted(configured_provider_names),
+            missing_providers=sorted(missing_providers),
+        )
 
     async def list_provider_statuses(self, user_id: UUID) -> list[ProviderStatus]:
         records = await self._fetch_provider_records(user_id)

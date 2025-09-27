@@ -10,6 +10,17 @@ Currently, the application relies heavily on local storage (`shared_preferences`
 
 This report outlines the steps and design considerations for migrating PocketLLM to a client-server architecture with a Flutter frontend and a NestJS/Node.js backend.
 
+### Unified Catalogue Workflow (FastAPI implementation)
+
+The current FastAPI backend ships with a consolidated model catalogue pipeline:
+
+1. Provider records are read from Supabase and decrypted per user request.
+2. `ProvidersService.get_provider_models` verifies an API key exists for each provider before instantiating SDK clients—environment fallbacks are intentionally disabled.
+3. `ProviderModelCatalogue` fans out to OpenAI, Groq, OpenRouter, and ImageRouter using their official Python SDKs, applying caching and structured logging.
+4. Responses are wrapped in `ProviderModelsResponse`, exposing the aggregated `models` list along with helpful `message`, `configured_providers`, and `missing_providers` fields so the Flutter UI can prompt users to add credentials when necessary.
+
+Both `GET /v1/models` and `GET /v1/providers/{provider}/models` rely on this workflow, guaranteeing consistent behaviour regardless of whether the UI requests a specific provider or the entire catalogue.
+
 ### 2. Proposed Architecture
 
 The new architecture will consist of:

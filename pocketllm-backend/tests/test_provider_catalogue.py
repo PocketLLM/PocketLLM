@@ -644,13 +644,13 @@ async def test_providers_service_filters_models_by_attributes():
     service._fetch_provider_records = stub_fetch  # type: ignore[assignment]
 
     moderation = await service.get_provider_models(user_id, query="moderation")
-    assert [model.id for model in moderation] == ["llama-guard"]
+    assert [model.id for model in moderation.models] == ["llama-guard"]
 
     gpt_match = await service.get_provider_models(user_id, name="gpt-4")
-    assert [model.id for model in gpt_match] == ["gpt-4o"]
+    assert [model.id for model in gpt_match.models] == ["gpt-4o"]
 
     guard_match = await service.get_provider_models(user_id, model_id="guard")
-    assert [model.id for model in guard_match] == ["llama-guard"]
+    assert [model.id for model in guard_match.models] == ["llama-guard"]
 
 
 @pytest.mark.asyncio
@@ -673,7 +673,7 @@ async def test_providers_service_respects_provider_parameter():
 
     groq_models = await service.get_provider_models(user_id, provider="groq")
 
-    assert [model.provider for model in groq_models] == ["groq"]
+    assert [model.provider for model in groq_models.models] == ["groq"]
     assert catalogue.calls and catalogue.calls[0][0] == "groq"
 
 
@@ -688,13 +688,11 @@ async def test_providers_service_requires_user_configuration_for_all_models():
 
     service._fetch_provider_records = stub_fetch  # type: ignore[assignment]
 
-    with pytest.raises(Exception) as exc:
-        await service.get_provider_models(user_id)
+    response = await service.get_provider_models(user_id)
 
-    assert getattr(exc.value, "status_code", None) == 400
-    detail = getattr(exc.value, "detail", {})
-    assert isinstance(detail, Mapping)
-    assert "No providers" in detail.get("message", "")
+    assert response.models == []
+    assert response.message and "No providers" in response.message
+    assert set(response.missing_providers) == {"openai", "groq", "openrouter", "imagerouter"}
 
 
 @pytest.mark.asyncio
@@ -710,11 +708,8 @@ async def test_providers_service_requires_provider_configuration_for_specific_pr
 
     service._fetch_provider_records = stub_fetch  # type: ignore[assignment]
 
-    with pytest.raises(Exception) as exc:
-        await service.get_provider_models(user_id, provider="groq")
+    response = await service.get_provider_models(user_id, provider="groq")
 
-    assert getattr(exc.value, "status_code", None) == 400
-    detail = getattr(exc.value, "detail", {})
-    assert isinstance(detail, Mapping)
-    assert detail.get("provider") == "groq"
-    assert "not configured" in detail.get("message", "")
+    assert response.models == []
+    assert response.message and "not configured" in response.message
+    assert "groq" in response.missing_providers
