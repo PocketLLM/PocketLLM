@@ -124,10 +124,10 @@ class GroqProviderClient(ProviderClient):
 
     async def list_models(self) -> list[ProviderModel]:
         if AsyncGroq is None and self._client_factory is _default_client_factory:
-            self._logger.warning(
-                "Groq SDK is not installed; falling back to direct HTTP catalogue request"
+            self._logger.error(
+                "Groq SDK is not installed; cannot list models. Install it via 'pip install groq'."
             )
-            return await super().list_models()
+            return []
 
         api_key = self._get_api_key()
         if self.requires_api_key and not api_key:
