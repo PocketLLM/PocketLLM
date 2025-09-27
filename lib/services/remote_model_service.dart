@@ -90,9 +90,36 @@ class RemoteModelService {
   }
 
   Future<List<ModelConfig>> getModels() async {
-    final data = await _api.get('models');
+    final data = await _api.get('models/saved');
     final models = (data as List?) ?? [];
     return models.map((raw) => _mapModel(Map<String, dynamic>.from(raw as Map))).toList();
+  }
+
+  Future<List<AvailableModelOption>> getAvailableModels({
+    ModelProvider? provider,
+    String? query,
+  }) async {
+    final queryParams = <String, String>{};
+    if (provider != null) {
+      queryParams['provider'] = provider.backendId;
+    }
+    if (query != null && query.trim().isNotEmpty) {
+      queryParams['query'] = query.trim();
+    }
+
+    final data = await _api.get(
+      'models',
+      query: queryParams.isEmpty ? null : queryParams,
+    );
+
+    final models = (data as List?) ?? [];
+    return models
+        .map((entry) {
+          final raw = Map<String, dynamic>.from(entry as Map);
+          final providerId = raw['provider'] as String? ?? provider?.backendId ?? '';
+          return AvailableModelOption.fromJson(raw, providerId);
+        })
+        .toList();
   }
 
   Future<List<ModelConfig>> importModels({
