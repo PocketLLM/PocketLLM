@@ -3,6 +3,7 @@ uvicorn[standard]
 pydantic
 pydantic-settings
 httpx
+groq
 asyncpg
 supabase
 passlib[bcrypt]

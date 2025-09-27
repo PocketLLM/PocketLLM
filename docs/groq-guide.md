@@ -1,299 +1,433 @@
+# Groq API Integration Guide
 
-# Groq API Guide (Extracted from API Reference)
+This document condenses Groq Cloud's official documentation into a practical handbook for PocketLLM. **Always** interact with
+Groq through the official [`groq`](https://pypi.org/project/groq/) SDK. The backend now wraps that SDK inside
+`GroqProviderClient` for catalogue aggregation and exposes high-level helpers via `GroqSDKService` for chat, responses, and
+speech workflows.
 
-> Source: Groq Cloud Docs â€” API Reference (`https://api.groq.com/openai/v1` endpoints)
+## 1. Getting Started
 
-This guide captures the endpoints and key request/response fields shown in the Groq API Reference page, organized for quick implementation.
+1. Create an API key in the [Groq Cloud dashboard](https://console.groq.com/).
+2. Export the key for local development so the SDK can read it automatically:
+   ```bash
+   export GROQ_API_KEY="<your-api-key-here>"
+   ```
+3. Install the Python SDK:
+   ```bash
+   pip install groq
+   ```
+4. Instantiate the client. The synchronous and asynchronous variants automatically pick up `GROQ_API_KEY`:
+   ```python
+   from groq import Groq, AsyncGroq
 
----
+   sync_client = Groq()
+   async_client = AsyncGroq()
+   ```
 
-## 1) Base URL and Auth
+### Third-party SDKs
 
-- **Base URL prefix**: `https://api.groq.com/openai/v1`
-- **Authentication**: Bearer token
-  - Header: `Authorization: Bearer $GROQ_API_KEY`
-  - Typical extra header: `Content-Type: application/json` (or `multipart/form-data` for file/audio uploads)
+Groq is compatible with popular orchestration layers if you prefer higher-level abstractions:
 
----
+- **Vercel AI SDK** / `@ai-sdk/groq` provider
+- **LiteLLM**
+- **LangChain**
 
-## 2) Chat Completions
+Example (Vercel AI SDK):
+```javascript
+import { groq } from '@ai-sdk/groq';
+import { generateText } from 'ai';
 
-**Endpoint**: `POST /chat/completions`
-
-Creates a model response for a chat conversation.
-
-### Request Body (selected fields)
-- `model` (string, **required**) â€” model id
-- `messages` (array, **required**) â€” list of messages (`role`, `content`)
-- `documents` (array) â€” text snippets for context
-- `response_format` (object) â€” supports `{ "type": "json_object" }` or JSON schema structured output
-- `tool_choice` (string|object) â€” `none` | `auto` | `required` or force a specific tool
-- `tools` (array) â€” function tools (up to 128) with JSON schemas
-- `stream` (boolean) â€” SSE streaming
-- `stream_options` (object) â€” options for streaming
-- `max_completion_tokens` (int) â€” cap on generated tokens
-- `temperature` (number) â€” 0..2
-- `top_p` (number) â€” 0..1
-- `stop` (string|string[]) â€” up to 4 stop sequences
-- `seed` (int) â€” best-effort determinism
-- `service_tier` (string) â€” `auto` | `on_demand` | `flex` | `performance` (default `on_demand`)
-- Reasoning-related (model-dependent):
-  - `reasoning_effort` (string) â€” allowed values depend on model
-  - `reasoning_format` (string) â€” `hidden` | `raw` | `parsed`
-  - `include_reasoning` (boolean) â€” mutually exclusive with `reasoning_format`
-- Deprecated: `functions`, `function_call`, `max_tokens`, `include_domains`, `exclude_domains` (use `search_settings` instead)
-- Not currently supported by models (present in schema): `frequency_penalty`, `presence_penalty`, `logit_bias`, `logprobs`, `top_logprobs`, `metadata`, `store`
-
-### Response (selected fields)
-- `id`, `object: "chat.completion"`, `created`, `model`, `system_fingerprint`
-- `choices[]` with `message { role, content }`, `finish_reason`
-- `usage { prompt_tokens, completion_tokens, total_tokens, ... }`
-- `usage_breakdown` for compound requests
-
-### Example (curl)
-```bash
-curl https://api.groq.com/openai/v1/chat/completions -s   -H "Content-Type: application/json"   -H "Authorization: Bearer $GROQ_API_KEY"   -d '{
-    "model": "llama-3.3-70b-versatile",
-    "messages": [{"role":"user","content":"Explain the importance of fast language models"}]
-  }'
+const { text } = await generateText({
+  model: groq('llama-3.3-70b-versatile'),
+  prompt: 'Write a vegetarian lasagna recipe for 4 people.',
+});
 ```
 
----
+### OpenAI compatibility mode
 
-## 3) Responses API (beta)
-
-**Endpoint**: `POST /responses`
-
-Generates a response given plain `input` (non-chat).
-
-### Request Body (selected fields)
-- `model` (string, **required**)
-- `input` (string|array, **required**)
-- `instructions` (string) â€” system/developer guidance
-- `max_output_tokens` (int)
-- `temperature` (number 0..2)
-- `parallel_tool_calls` (boolean, default true)
-- `reasoning` (object) â€” config for reasoning-capable models
-- `service_tier` (string, default `auto`) â€” `auto` | `default` | `flex`
-- `store` (boolean, default false)
-- `stream` (boolean, default false)
-- `text` (object) â€” response format selection
-
----
-
-## 4) Audio
-
-### 4.1 Transcription
-
-**Endpoint**: `POST /audio/transcriptions`  
-**Content-Type**: `multipart/form-data`
-
-- Typical form fields: `file` (binary), `model` (e.g., `whisper-large-v3`)
-
-**Example**
-```bash
-curl https://api.groq.com/openai/v1/audio/transcriptions   -H "Authorization: Bearer $GROQ_API_KEY"   -H "Content-Type: multipart/form-data"   -F file="@./sample_audio.m4a"   -F model="whisper-large-v3"
-```
-
-**Response**
-```json
-{
-  "text": "Your transcribed text appears here...",
-  "x_groq": {"id": "req_unique_id"}
-}
-```
-
-### 4.2 Translation
-
-**Endpoint**: `POST /audio/translations`  
-**Content-Type**: `multipart/form-data`
-
-- Typical form fields: `file` (binary), `model` (e.g., `whisper-large-v3`)
-
-**Example**
-```bash
-curl https://api.groq.com/openai/v1/audio/translations   -H "Authorization: Bearer $GROQ_API_KEY"   -H "Content-Type: multipart/form-data"   -F file="@./sample_audio.m4a"   -F model="whisper-large-v3"
-```
-
-**Response**
-```json
-{
-  "text": "Your translated text appears here...",
-  "x_groq": {"id": "req_unique_id"}
-}
-```
-
-### 4.3 Text-to-Speech
-
-**Endpoint**: `POST /audio/speech`
-
-- Selected fields: `model` (e.g., `playai-tts`), `input` (text), `voice`, `response_format` (e.g., `wav`)
-
-**Example**
-```bash
-curl https://api.groq.com/openai/v1/audio/speech   -H "Authorization: Bearer $GROQ_API_KEY"   -H "Content-Type: application/json"   -d '{
-    "model": "playai-tts",
-    "input": "I love building and shipping new features for our users!",
-    "voice": "Fritz-PlayAI",
-    "response_format": "wav"
-  }'
-```
-
-**Returns**: audio file content (e.g., WAV)
-
----
-
-## 5) Models
-
-### 5.1 List Models
-
-**Endpoint**: `GET /models`
-
-**Example response (abridged)**
-```json
-{
-  "object": "list",
-  "data": [
-    {"id":"gemma2-9b-it","object":"model","owned_by":"Google","active":true,"context_window":8192},
-    {"id":"llama3-8b-8192","object":"model","owned_by":"Meta","active":true,"context_window":8192},
-    {"id":"llama-3.1-8b-instant","object":"model","owned_by":"Meta","active":true,"context_window":131072},
-    {"id":"whisper-large-v3","object":"model","owned_by":"OpenAI","active":true,"context_window":448}
-  ]
-}
-```
-
-### 5.2 Retrieve Model
-
-**Endpoint**: `GET /models/{model}`
-
-**Returns**: `id`, `object: "model"`, `created`, `owned_by`, `active`, `context_window`, `max_completion_tokens` (when applicable)
-
----
-
-## 6) Batches
-
-### 6.1 Create Batch
-
-**Endpoint**: `POST /batches`
-
-Creates and executes a batch from a previously uploaded **JSONL** file.
-
-**Request body (selected)**
-- `endpoint` (string, **required**) â€” currently supports `/v1/chat/completions`
-- `input_file_id` (string, **required**)
-- `completion_window` (string, **required**) â€” duration `24h` to `7d`
-
-### 6.2 Retrieve Batch
-
-**Endpoint**: `GET /batches/{batch_id}`
-
-### 6.3 List Batches
-
-**Endpoint**: `GET /batches`
-
-### 6.4 Cancel Batch
-
-**Endpoint**: `POST /batches/{batch_id}/cancel`
-
-**Batch object fields (selected)**  
-`id`, `object:"batch"`, `endpoint`, `status` (`validating|failed|in_progress|finalizing|completed|expired|cancelling|cancelled`), `input_file_id`, `output_file_id`, `error_file_id`, timestamps: `in_progress_at`, `finalizing_at`, `failed_at`, `expires_at`, `expired_at`, `completed_at`, `cancelled_at`, counts: `request_counts { total, completed, failed }`, `metadata`
-
----
-
-## 7) Files
-
-### 7.1 Upload File
-
-**Endpoint**: `POST /files`  
-Use for batch inputs. **Only `.jsonl` up to 100 MB** for Batch API.
-
-**multipart fields**
-- `file` (binary, **required**)
-- `purpose` (string, **required**) â€” `batch`
-
-### 7.2 List Files
-
-**Endpoint**: `GET /files`
-
-### 7.3 Retrieve File
-
-**Endpoint**: `GET /files/{file_id}`
-
-### 7.4 Download File
-
-**Endpoint**: `GET /files/{file_id}/content`
-
-### 7.5 Delete File
-
-**Endpoint**: `DELETE /files/{file_id}`
-
-**File object fields (selected)**  
-`id`, `object:"file"`, `bytes`, `created_at`, `filename`, `purpose` (`batch|batch_output`)
-
----
-
-## 8) Fine Tuning (Closed Beta)
-
-> Endpoints exist but are gated; contact Groq for access.
-
-- **List**: `GET /v1/fine_tunings`
-- **Create**: `POST /v1/fine_tunings`
-  - Body: `input_file_id`, `name`, `type` (e.g., `"lora"`), `base_model`
-- **Get**: `GET /v1/fine_tunings/{id}`
-- **Delete**: `DELETE /v1/fine_tunings/{id}`
-
-**Objects** expose: `id`, `name`, `base_model`, `type`, `input_file_id`, `created_at`, `fine_tuned_model`
-
----
-
-## 9) Practical Notes
-
-- Streaming uses **Server-Sent Events** with `data: [DONE]` terminator.
-- Some request fields are present for forward-compatibility but not supported by current models (penalties, logprobs, etc.).
-- For JSONL batch format, follow the documented â€œLearn moreâ€ spec referenced in the batch section.
-- Reasoning controls are model-specific. Honor the allowed values indicated per model family.
-
----
-
-## 10) Minimal Client Stubs
-
-### Fetch (Node/Browser)
-```js
-async function chat(userMsg) {
-  const res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "Authorization": `Bearer ${process.env.GROQ_API_KEY}`
-    },
-    body: JSON.stringify({
-      model: "llama-3.3-70b-versatile",
-      messages: [{ role: "user", content: userMsg }]
-    })
-  });
-  if (!res.ok) throw new Error(await res.text());
-  return res.json();
-}
-```
-
-### Python (requests)
+Groq’s API is mostly OpenAI compatible. When you cannot depend on the `groq` SDK, configure the official OpenAI client with the
+Groq base URL:
 ```python
-import os, requests, json
+from openai import OpenAI
 
-url = "https://api.groq.com/openai/v1/chat/completions"
-headers = {
-    "Authorization": f"Bearer {os.environ['GROQ_API_KEY']}",
-    "Content-Type": "application/json"
-}
-payload = {
-    "model": "llama-3.3-70b-versatile",
-    "messages": [{"role":"user","content":"hello"}]
-}
-r = requests.post(url, headers=headers, data=json.dumps(payload), timeout=60)
-r.raise_for_status()
-print(r.json())
+client = OpenAI(
+    api_key=os.environ["GROQ_API_KEY"],
+    base_url="https://api.groq.com/openai/v1",
+)
+```
+Unsupported OpenAI parameters include `logprobs`, `logit_bias`, `top_logprobs`, `messages[].name`, and `N != 1`. Supplying a
+temperature of `0` coerces it to `1e-8`.
+
+## 2. Endpoint Overview & Unsupported Features
+
+Groq mirrors OpenAI’s REST layout at `https://api.groq.com/openai/v1`:
+
+| Capability            | HTTP Verb | Endpoint                         |
+|----------------------|-----------|----------------------------------|
+| Model catalogue      | GET       | `/models`                        |
+| Chat completions     | POST      | `/chat/completions`              |
+| Responses API        | POST      | `/responses`                     |
+| Audio transcription  | POST      | `/audio/transcriptions`          |
+| Audio translation    | POST      | `/audio/translations`            |
+| Text-to-speech       | POST      | `/audio/speech`                  |
+| Batch jobs           | GET/POST  | `/batches`, `/batches/{batch_id}`|
+
+Additional unsupported Responses API parameters: `previous_response_id`, `store`, `truncation`, `include`, `safety_identifier`,
+`prompt_cache_key`.
+
+## 3. Listing Models with the Official SDK
+
+`GroqProviderClient` now delegates to `AsyncGroq.models.list()` so catalogue fetches use the official SDK even when run without a
+database configuration. Minimal usage:
+
+```python
+import asyncio
+from groq import AsyncGroq
+
+async def list_models() -> None:
+    client = AsyncGroq()
+    response = await client.models.list()
+    for model in response.data:
+        print(model.id, getattr(model, "context_window", None))
+
+asyncio.run(list_models())
 ```
 
----
+Featured catalogues:
 
-This file mirrors the visible fields and examples from the referenced API Reference and is suitable as a drop-in quickstart for implementation.
+- **Production models**: `llama-3.1-8b-instant`, `llama-3.3-70b-versatile`, `openai/gpt-oss-20b`, `openai/gpt-oss-120b`,
+  Whisper models, etc.
+- **Production systems**: `groq/compound`, `groq/compound-mini`.
+- **Preview models**: `meta-llama/llama-4-*`, `moonshotai/kimi-k2-instruct-0905`, `qwen/qwen3-32b`, `playai-tts`, etc.
+
+## 4. Rate Limits & Headers
+
+Groq enforces organisation-level quotas measured in requests per minute/day (RPM/RPD), tokens per minute/day (TPM/TPD), and audio
+seconds per hour/day (ASH/ASD). Example limits:
+
+| Model                         | Tier    | RPM | TPM   | Notes                       |
+|------------------------------|---------|-----|-------|-----------------------------|
+| llama-3.3-70b-versatile      | Free    | 30  | 12K   | 100K tokens/day             |
+| openai/gpt-oss-120b          | Free    | 30  | 8K    | 200K tokens/day             |
+| moonshotai/kimi-k2-instruct  | Dev    | 60  | 10K   | 300K tokens/day             |
+| playai-tts                   | Free    | 10  | 1.2K | Text-to-speech              |
+| whisper-large-v3             | Free    | 20  | –     | 7.2K audio seconds / hour   |
+
+Rate-limit headers appear on responses:
+
+```
+retry-after: 2
+x-ratelimit-limit-requests: 14400
+x-ratelimit-remaining-requests: 14370
+x-ratelimit-limit-tokens: 18000
+x-ratelimit-remaining-tokens: 17997
+x-ratelimit-reset-requests: 2m59.56s
+x-ratelimit-reset-tokens: 7.66s
+```
+Handle 429 responses by respecting `retry-after` and backing off.
+
+## 5. Chat Completions Recipes
+
+### Basic completion
+```python
+from groq import Groq
+
+client = Groq()
+completion = client.chat.completions.create(
+    model="llama-3.3-70b-versatile",
+    messages=[{"role": "user", "content": "Explain the importance of fast language models"}],
+)
+print(completion.choices[0].message.content)
+```
+
+### Streaming
+```python
+stream = client.chat.completions.create(
+    model="llama-3.3-70b-versatile",
+    messages=[{"role": "user", "content": "Explain the importance of fast language models"}],
+    stream=True,
+)
+for chunk in stream:
+    print(chunk.choices[0].delta.content or "", end="")
+```
+
+### Stop sequences & controls
+```python
+client.chat.completions.create(
+    model="llama-3.3-70b-versatile",
+    messages=[{"role": "user", "content": "Count to 10. Start with '1, '"}],
+    stop=", 6",
+    temperature=0.5,
+    max_completion_tokens=1024,
+)
+```
+
+### Async clients & streaming
+```python
+import asyncio
+from groq import AsyncGroq
+
+async def run() -> None:
+    client = AsyncGroq()
+    chat = await client.chat.completions.create(
+        model="llama-3.3-70b-versatile",
+        messages=[{"role": "user", "content": "Explain the importance of fast language models"}],
+    )
+    print(chat.choices[0].message.content)
+
+    stream = await client.chat.completions.create(
+        model="llama-3.3-70b-versatile",
+        messages=[{"role": "user", "content": "Explain the importance of fast language models"}],
+        stream=True,
+    )
+    async for chunk in stream:
+        print(chunk.choices[0].delta.content or "", end="")
+
+asyncio.run(run())
+```
+
+## 6. Responses API & Built-in Tools
+
+Use the Responses API for multimodal inputs, tool use, or structured outputs.
+```python
+response = client.responses.create(
+    model="llama-3.3-70b-versatile",
+    input="Tell me a fun fact about the moon in one sentence.",
+)
+print(response.output_text)
+```
+
+Built-in tools:
+
+- **Code execution** (`code_interpreter`)
+- **Browser search** (`browser_search`)
+- **Model Context Protocol (MCP)** integrations
+
+Examples:
+```python
+client.responses.create(
+    model="openai/gpt-oss-20b",
+    input="What is 1312 x 3333?",
+    tool_choice="required",
+    tools=[{"type": "code_interpreter", "container": {"type": "auto"}}],
+)
+
+client.responses.create(
+    model="openai/gpt-oss-20b",
+    input="Analyse the current weather in San Francisco.",
+    tool_choice="required",
+    tools=[{"type": "browser_search"}],
+)
+
+client.responses.create(
+    model="openai/gpt-oss-120b",
+    input="What models are trending on Hugging Face?",
+    tools=[{"type": "mcp", "server_label": "Huggingface", "server_url": "https://huggingface.co/mcp"}],
+)
+```
+
+## 7. Structured Outputs & JSON
+
+Structured Outputs guarantee schema compliance:
+```python
+from typing import Literal
+
+from groq import Groq
+from pydantic import BaseModel
+
+
+class ProductReview(BaseModel):
+    product_name: str
+    rating: float
+    sentiment: Literal["positive", "negative", "neutral"]
+    key_features: list[str]
+
+client = Groq()
+response = client.chat.completions.create(
+    model="moonshotai/kimi-k2-instruct-0905",
+    messages=[
+        {"role": "system", "content": "Extract product review information"},
+        {"role": "user", "content": "I bought the UltraSound Headphones..."},
+    ],
+    response_format={
+        "type": "json_schema",
+        "json_schema": {
+            "name": "product_review",
+            "schema": ProductReview.model_json_schema(),
+        },
+    },
+)
+review = ProductReview.model_validate_json(response.choices[0].message.content)
+```
+
+Requirements:
+
+- Every property must be required.
+- Set `additionalProperties: false` on every object.
+- Union types use `anyOf` with fully specified subschemas.
+- Use `$defs`/`$ref` for reusable components; recursive `$ref: "#"` is supported.
+
+If you only need syntactically valid JSON, enable JSON object mode:
+```python
+client.chat.completions.create(
+    model="llama-3.3-70b-versatile",
+    messages=[
+        {
+            "role": "system",
+            "content": """Respond only with JSON: {\n  \"sentiment\": "
+            "positive|negative|neutral\",\n  \"summary\": "
+            "<one sentence>\"\n}""",
+        },
+        {"role": "user", "content": "I absolutely love this product!"},
+    ],
+    response_format={"type": "json_object"},
+)
+```
+
+## 8. Reasoning Workflows
+
+Supported models: `openai/gpt-oss-20b`, `openai/gpt-oss-120b`, `qwen/qwen3-32b`.
+
+Control the returned thinking process:
+
+- `reasoning_format`: `parsed`, `raw`, or `hidden` (non-GPT-OSS models only).
+- `include_reasoning`: include/exclude reasoning fields (GPT-OSS models).
+- `reasoning_effort`: `none`/`default` for Qwen; `low`/`medium`/`high` for GPT-OSS models.
+
+Example:
+```python
+from groq import Groq
+
+client = Groq()
+stream = client.chat.completions.create(
+    model="openai/gpt-oss-20b",
+    messages=[{"role": "user", "content": "How many r's are in strawberry?"}],
+    temperature=0.6,
+    max_completion_tokens=1024,
+    top_p=0.95,
+    stream=True,
+)
+for chunk in stream:
+    print(chunk.choices[0].delta.content or "", end="")
+```
+
+JavaScript example with high reasoning effort:
+```javascript
+import { Groq } from 'groq-sdk';
+
+const client = new Groq();
+const chat = await client.chat.completions.create({
+  model: 'openai/gpt-oss-20b',
+  reasoning_effort: 'high',
+  include_reasoning: true,
+  messages: [{ role: 'user', content: 'How do airplanes fly? Be concise.' }],
+});
+```
+
+Best practices:
+
+- Keep temperature between `0.5`–`0.7` for consistent reasoning.
+- Avoid few-shot prompts; place instructions directly in the user message.
+- Increase `max_completion_tokens` for complex multi-step answers.
+
+## 9. Speech-to-Text (Transcription & Translation)
+
+Endpoints:
+
+- `POST /audio/transcriptions`
+- `POST /audio/translations`
+
+Supported models:
+
+| Model                   | Description                              |
+|-------------------------|------------------------------------------|
+| `whisper-large-v3`      | Multilingual, highest accuracy           |
+| `whisper-large-v3-turbo`| Multilingual, lower cost, faster         |
+
+Constraints:
+
+- File size: 25 MB (free) / 100 MB (dev)
+- Minimum billed length: 10 seconds
+- Supported types: `flac`, `mp3`, `mp4`, `mpeg`, `mpga`, `m4a`, `ogg`, `wav`, `webm`
+- Response formats: `json`, `verbose_json`, `text`
+- Optional `timestamp_granularities`: `segment`, `word`
+
+Transcription example:
+```python
+import json, os
+from groq import Groq
+
+client = Groq()
+with open("sample.wav", "rb") as audio:
+    transcription = client.audio.transcriptions.create(
+        file=audio,
+        model="whisper-large-v3-turbo",
+        prompt="Specify context or spelling",
+        response_format="verbose_json",
+        timestamp_granularities=["word", "segment"],
+        language="en",
+        temperature=0.0,
+    )
+print(json.dumps(transcription, indent=2, default=str))
+```
+
+Translation example:
+```python
+from groq import Groq
+
+client = Groq()
+with open("sample_audio.m4a", "rb") as audio:
+    translation = client.audio.translations.create(
+        file=("sample_audio.m4a", audio.read()),
+        model="whisper-large-v3",
+        language="en",
+        response_format="json",
+        temperature=0.0,
+    )
+print(translation.text)
+```
+
+Metadata fields (from `verbose_json`) help with quality diagnostics:
+
+- `avg_logprob`: confidence (closer to 0 is better)
+- `no_speech_prob`: likelihood of silence
+- `compression_ratio`: speech cadence indicator
+- `start` / `end`: timestamps per segment
+
+## 10. Text-to-Speech
+
+Endpoint: `POST /audio/speech`
+
+Parameters:
+
+- `model`: `playai-tts` or `playai-tts-arabic`
+- `input`: text (≤10K characters)
+- `voice`: choose from 19 English options (`Fritz-PlayAI`, `Calum-PlayAI`, …) or 4 Arabic voices
+- `response_format`: defaults to `wav`
+
+Example:
+```python
+from groq import Groq
+
+client = Groq()
+result = client.audio.speech.create(
+    model="playai-tts",
+    voice="Fritz-PlayAI",
+    input="I love building and shipping new features for our users!",
+    response_format="wav",
+)
+result.write_to_file("speech.wav")
+```
+
+## 11. Operational Best Practices
+
+- Use `GroqProviderClient` to list models; it merges per-user credentials with environment fallbacks via the official SDK.
+- Prefer `GroqSDKService` helpers when building new chat, responses, or speech features—they manage client lifecycles and logging.
+- Monitor rate limit headers and implement exponential back-off on 429 responses.
+- For audio workloads, pre-process inputs (e.g., downsample to 16 kHz mono) and consider chunking long files.
+- Capture transcription metadata (`avg_logprob`, `no_speech_prob`, `compression_ratio`) to flag low-confidence segments.
+- Keep secrets out of source control—store API keys in the database with hashing plus preview masking, or rely on environment
+  variables for shared deployments.
+- Validate schema outputs when using Structured Outputs; log Groq SDK exceptions with contextual metadata for easier debugging.
+
+Refer back to Groq Cloud documentation for new models, updated limits, and SDK releases.

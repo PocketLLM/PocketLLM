@@ -102,34 +102,79 @@ class ProviderModelCatalogue:
         providers: Sequence[object] | None,
     ) -> dict[str, _ProviderConfig]:
         configs: dict[str, _ProviderConfig] = {}
-        if not providers:
-            return configs
+        if providers:
+            for item in providers:
+                provider = getattr(item, "provider", None)
+                if not provider:
+                    continue
+                is_active = bool(getattr(item, "is_active", False))
+                if not is_active:
+                    continue
+                provider_key = str(provider).lower()
+                base_url = getattr(item, "base_url", None)
+                metadata_obj = getattr(item, "metadata", None)
+                metadata: Mapping[str, Any] | None = None
+                if isinstance(metadata_obj, Mapping):
+                    metadata = metadata_obj
+                api_key: str | None = None
+                if metadata:
+                    candidate = metadata.get("api_key") or metadata.get("token")
+                    if isinstance(candidate, str) and candidate:
+                        api_key = candidate
+                configs[provider_key] = _ProviderConfig(
+                    provider=provider_key,
+                    base_url=base_url,
+                    api_key=api_key,
+                    metadata=metadata,
+                )
 
-        for item in providers:
-            provider = getattr(item, "provider", None)
-            if not provider:
+        for provider_name, fallback in self._build_fallback_configs().items():
+            if provider_name in configs:
                 continue
-            is_active = bool(getattr(item, "is_active", False))
-            if not is_active:
-                continue
-            provider_key = str(provider).lower()
-            base_url = getattr(item, "base_url", None)
-            metadata_obj = getattr(item, "metadata", None)
-            metadata: Mapping[str, Any] | None = None
-            if isinstance(metadata_obj, Mapping):
-                metadata = metadata_obj
-            api_key: str | None = None
-            if metadata:
-                candidate = metadata.get("api_key") or metadata.get("token")
-                if isinstance(candidate, str) and candidate:
-                    api_key = candidate
-            configs[provider_key] = _ProviderConfig(
-                provider=provider_key,
-                base_url=base_url,
-                api_key=api_key,
-                metadata=metadata,
+            configs[provider_name] = fallback
+            self._logger.info(
+                "Using environment fallback credentials for %s provider catalogue", provider_name
             )
         return configs
+
+    def _build_fallback_configs(self) -> dict[str, _ProviderConfig]:
+        fallbacks: dict[str, _ProviderConfig] = {}
+
+        openai_key = getattr(self._settings, "openai_api_key", None)
+        if isinstance(openai_key, str) and openai_key:
+            fallbacks["openai"] = _ProviderConfig(
+                provider="openai",
+                base_url=getattr(self._settings, "openai_api_base", None),
+                api_key=openai_key,
+                metadata=None,
+            )
+
+        groq_key = getattr(self._settings, "groq_api_key", None)
+        if isinstance(groq_key, str) and groq_key:
+            fallbacks["groq"] = _ProviderConfig(
+                provider="groq",
+                base_url=getattr(self._settings, "groq_api_base", None),
+                api_key=groq_key,
+                metadata=None,
+            )
+
+        openrouter_key = getattr(self._settings, "openrouter_api_key", None)
+        if isinstance(openrouter_key, str) and openrouter_key:
+            metadata: dict[str, Any] = {}
+            referer = getattr(self._settings, "openrouter_app_url", None)
+            if isinstance(referer, str) and referer:
+                metadata["http_referer"] = referer
+            title = getattr(self._settings, "openrouter_app_name", None)
+            if isinstance(title, str) and title:
+                metadata["x_title"] = title
+            fallbacks["openrouter"] = _ProviderConfig(
+                provider="openrouter",
+                base_url=getattr(self._settings, "openrouter_api_base", None),
+                api_key=openrouter_key,
+                metadata=metadata or None,
+            )
+
+        return fallbacks
 
     async def _gather_models(self, clients: Sequence[ProviderClient]) -> list[ProviderModel]:
         if not clients:

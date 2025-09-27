@@ -1,6 +1,7 @@
 import asyncio
 from datetime import UTC, datetime
-from typing import Any, Mapping
+from types import SimpleNamespace
+from typing import Any, AsyncIterator, Mapping
 from uuid import uuid4
 
 import httpx
@@ -11,6 +12,7 @@ from app.schemas.providers import ProviderConfiguration, ProviderModel
 from app.services.providers import (
     ProviderClient,
     GroqProviderClient,
+    GroqSDKService,
     OpenAIProviderClient,
     OpenRouterProviderClient,
     ProviderModelCatalogue,
@@ -188,6 +190,27 @@ async def test_catalogue_list_models_for_provider_requires_user_configuration(ca
 
 
 @pytest.mark.asyncio
+async def test_catalogue_uses_environment_fallback_configuration(caplog):
+    RecordingProviderClient.initialiser_calls = []
+    settings = Settings(openai_api_key="env-key", openai_api_base="https://env.openai")
+    catalogue = ProviderModelCatalogue(
+        settings,
+        client_factories={"openai": RecordingProviderClient},
+    )
+
+    with caplog.at_level("INFO"):
+        models = await catalogue.list_models_for_provider("openai", [])
+
+    assert len(models) == 1
+    assert models[0].provider == "openai"
+    assert RecordingProviderClient.initialiser_calls
+    call = RecordingProviderClient.initialiser_calls[0]
+    assert call["api_key"] == "env-key"
+    assert call["base_url"] == "https://env.openai"
+    assert "environment fallback" in caplog.text.lower()
+
+
+@pytest.mark.asyncio
 async def test_openai_provider_client_parses_response():
     async def handler(request: httpx.Request) -> httpx.Response:  # pragma: no cover - simple mock
         assert request.headers["Authorization"].startswith("Bearer test-key")
@@ -206,14 +229,185 @@ async def test_openai_provider_client_parses_response():
     assert model.context_window == 1024
 
 
+class FakeGroqModelsResource:
+    def __init__(self, payload: Any | Exception):
+        self._payload = payload
+
+    async def list(self) -> Any:
+        if isinstance(self._payload, Exception):
+            raise self._payload
+        return self._payload
+
+
+class FakeGroqClient:
+    def __init__(self, payload: Any | Exception):
+        self.models = FakeGroqModelsResource(payload)
+        self.closed = False
+
+    async def close(self) -> None:
+        self.closed = True
+
+
+class RecordingGroqClient:
+    def __init__(self, stream_chunks: list[str] | None = None) -> None:
+        self.stream_chunks = stream_chunks or []
+        self.calls: list[tuple[str, Mapping[str, Any]]] = []
+        self.chat = SimpleNamespace(
+            completions=SimpleNamespace(create=self._chat_create)
+        )
+        self.responses = SimpleNamespace(create=self._responses_create)
+        self.audio = SimpleNamespace(
+            transcriptions=SimpleNamespace(create=self._transcriptions_create),
+            translations=SimpleNamespace(create=self._translations_create),
+            speech=SimpleNamespace(create=self._speech_create),
+        )
+        self._closed = False
+
+    async def _chat_create(self, **kwargs: Any) -> Any:
+        self.calls.append(("chat", kwargs))
+        if kwargs.get("stream"):
+
+            async def _stream() -> AsyncIterator[str]:
+                for chunk in self.stream_chunks:
+                    yield chunk
+
+            return _stream()
+        return {"id": "chat", "model": kwargs.get("model")}
+
+    async def _responses_create(self, **kwargs: Any) -> Any:
+        self.calls.append(("responses", kwargs))
+        return {"id": "response", "model": kwargs.get("model")}
+
+    async def _transcriptions_create(self, **kwargs: Any) -> Any:
+        self.calls.append(("transcriptions", kwargs))
+        return {"id": "transcription"}
+
+    async def _translations_create(self, **kwargs: Any) -> Any:
+        self.calls.append(("translations", kwargs))
+        return {"id": "translation"}
+
+    async def _speech_create(self, **kwargs: Any) -> Any:
+        self.calls.append(("speech", kwargs))
+        return {"id": "speech"}
+
+    async def close(self) -> None:
+        self._closed = True
+
+
 @pytest.mark.asyncio
 async def test_groq_provider_client_requires_api_key():
+    factory_calls: list[Mapping[str, Any]] = []
+
+    def factory(**kwargs: Any) -> FakeGroqClient:
+        factory_calls.append(kwargs)
+        return FakeGroqClient({"data": []})
+
     settings = Settings()
-    client = GroqProviderClient(settings)
+    client = GroqProviderClient(settings, client_factory=factory)
 
     models = await client.list_models()
 
     assert models == []
+    assert factory_calls == []
+
+
+@pytest.mark.asyncio
+async def test_groq_provider_client_uses_sdk_payload(caplog):
+    payload = {
+        "data": [
+            {
+                "id": "llama-3.3-70b-versatile",
+                "name": "LLaMA 3.3 70B Versatile",
+                "context_window": 131072,
+                "max_output_tokens": 32768,
+                "active": True,
+                "capabilities": {"reasoning": True},
+            }
+        ]
+    }
+
+    created_clients: list[FakeGroqClient] = []
+
+    def factory(**kwargs: Any) -> FakeGroqClient:
+        created_clients.append(FakeGroqClient(payload))
+        return created_clients[-1]
+
+    settings = Settings(groq_api_key="test-key", groq_api_base="https://custom.groq")
+    client = GroqProviderClient(settings, client_factory=factory)
+
+    models = await client.list_models()
+
+    assert len(models) == 1
+    model = models[0]
+    assert model.id == "llama-3.3-70b-versatile"
+    assert model.context_window == 131072
+    assert model.max_output_tokens == 32768
+    assert model.metadata == {"capabilities": {"reasoning": True}}
+    assert created_clients and created_clients[0].closed is True
+
+
+@pytest.mark.asyncio
+async def test_groq_provider_client_handles_sdk_errors(caplog):
+    error = RuntimeError("boom")
+
+    def factory(**kwargs: Any) -> FakeGroqClient:
+        return FakeGroqClient(error)
+
+    settings = Settings(groq_api_key="test-key")
+    client = GroqProviderClient(settings, client_factory=factory)
+
+    with caplog.at_level("ERROR"):
+        models = await client.list_models()
+
+    assert models == []
+    assert "Groq SDK request failed" in caplog.text or "Unexpected error" in caplog.text
+
+
+@pytest.mark.asyncio
+async def test_groq_sdk_service_invokes_official_client():
+    created_clients: list[RecordingGroqClient] = []
+    factory_kwargs: list[Mapping[str, Any]] = []
+
+    def factory(**kwargs: Any) -> RecordingGroqClient:
+        factory_kwargs.append(kwargs)
+        client = RecordingGroqClient(stream_chunks=["chunk-1", "chunk-2"])
+        created_clients.append(client)
+        return client
+
+    settings = Settings(groq_api_key="sdk-key")
+    service = GroqSDKService(settings, client_factory=factory)
+
+    chat = await service.create_chat_completion(
+        model="llama-3.3-70b-versatile",
+        messages=[{"role": "user", "content": "Hello"}],
+    )
+    assert chat["id"] == "chat"
+
+    chunks: list[str] = []
+    async for chunk in service.stream_chat_completion(
+        model="llama-3.3-70b-versatile",
+        messages=[{"role": "user", "content": "Stream"}],
+    ):
+        chunks.append(chunk)
+    assert chunks == ["chunk-1", "chunk-2"]
+
+    response = await service.create_response(model="moonshot", input="Hi")
+    assert response["id"] == "response"
+
+    transcription = await service.transcribe_audio(file="file", model="whisper-large-v3")
+    assert transcription["id"] == "transcription"
+
+    translation = await service.translate_audio(file="file", model="whisper-large-v3")
+    assert translation["id"] == "translation"
+
+    speech = await service.synthesize_speech(
+        input_text="Hello", model="playai-tts", voice="Fritz-PlayAI"
+    )
+    assert speech["id"] == "speech"
+
+    assert all(client._closed for client in created_clients)
+    assert factory_kwargs and factory_kwargs[0]["api_key"] == "sdk-key"
+    assert any(call[0] == "chat" for call in created_clients[0].calls)
 
 
 @pytest.mark.asyncio
