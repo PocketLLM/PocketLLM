@@ -352,6 +352,16 @@ class ModelService {
           );
           return response.statusCode == 200;
 
+        case ModelProvider.groq:
+          final response = await http.get(
+            Uri.parse('${config.baseUrl}/models'),
+            headers: {
+              'Authorization': 'Bearer ${config.apiKey}',
+              'Content-Type': 'application/json',
+            },
+          );
+          return response.statusCode == 200;
+
         case ModelProvider.anthropic:
           final response = await http.get(
             Uri.parse('${config.baseUrl}/v1/models'),

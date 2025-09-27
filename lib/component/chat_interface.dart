@@ -2119,6 +2119,8 @@ class ChatInterfaceState extends State<ChatInterface> {
         return Icons.terminal;
       case ModelProvider.openAI:
         return Icons.auto_awesome;
+      case ModelProvider.groq:
+        return Icons.flash_on;
       case ModelProvider.anthropic:
         return Icons.psychology;
       case ModelProvider.lmStudio:

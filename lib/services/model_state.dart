@@ -372,6 +372,8 @@ class ModelState extends ChangeNotifier {
         return await _checkOllamaHealth(model);
       case ModelProvider.openAI:
         return await _checkOpenAIHealth(model);
+      case ModelProvider.groq:
+        return await _checkGroqHealth(model);
       case ModelProvider.anthropic:
         return await _checkAnthropicHealth(model);
       case ModelProvider.lmStudio:
@@ -411,7 +413,23 @@ class ModelState extends ChangeNotifier {
           'Content-Type': 'application/json',
         },
       ).timeout(_healthCheckTimeout);
-      
+
+      return response.statusCode == 200;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  Future<bool> _checkGroqHealth(ModelConfig model) async {
+    try {
+      final response = await http.get(
+        Uri.parse('${model.baseUrl}/models'),
+        headers: {
+          'Authorization': 'Bearer ${model.apiKey}',
+          'Content-Type': 'application/json',
+        },
+      ).timeout(_healthCheckTimeout);
+
       return response.statusCode == 200;
     } catch (e) {
       return false;

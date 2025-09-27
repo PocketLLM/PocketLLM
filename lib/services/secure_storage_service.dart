@@ -414,7 +414,12 @@ class SecureStorageService {
         return apiKey.startsWith('sk-') && apiKey.length >= 20
             ? ApiKeyValidationResult.valid
             : ApiKeyValidationResult.invalid;
-            
+
+      case ModelProvider.groq:
+        return apiKey.startsWith('gsk_') && apiKey.length >= 20
+            ? ApiKeyValidationResult.valid
+            : ApiKeyValidationResult.invalid;
+
       case ModelProvider.anthropic:
         return apiKey.startsWith('sk-ant-') && apiKey.length >= 20
             ? ApiKeyValidationResult.valid
