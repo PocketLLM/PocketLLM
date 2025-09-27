@@ -123,6 +123,12 @@ class GroqProviderClient(ProviderClient):
         return self._api_key_override or getattr(self._settings, "groq_api_key", None)
 
     async def list_models(self) -> list[ProviderModel]:
+        if AsyncGroq is None and self._client_factory is _default_client_factory:
+            self._logger.warning(
+                "Groq SDK is not installed; falling back to direct HTTP catalogue request"
+            )
+            return await super().list_models()
+
         api_key = self._get_api_key()
         if self.requires_api_key and not api_key:
             self._logger.warning("Skipping %s provider because credentials are not configured", self.provider)

@@ -120,6 +120,12 @@ class OpenAIProviderClient(ProviderClient):
         return self._api_key_override or getattr(self._settings, "openai_api_key", None)
 
     async def list_models(self) -> list[ProviderModel]:
+        if AsyncOpenAI is None and self._client_factory is _default_client_factory:
+            self._logger.warning(
+                "OpenAI SDK is not installed; falling back to direct HTTP catalogue request"
+            )
+            return await super().list_models()
+
         api_key = self._get_api_key()
         if self.requires_api_key and not api_key:
             self._logger.warning("Skipping %s provider because credentials are not configured", self.provider)
@@ -168,6 +174,18 @@ class OpenAIProviderClient(ProviderClient):
                 )
             )
         return models
+
+    def _additional_headers(self) -> dict[str, str]:
+        headers: dict[str, str] = {}
+        metadata_source = self.metadata
+        metadata = metadata_source if isinstance(metadata_source, Mapping) else {}
+        organization = metadata.get("organization")
+        project = metadata.get("project")
+        if organization:
+            headers["OpenAI-Organization"] = str(organization)
+        if project:
+            headers["OpenAI-Project"] = str(project)
+        return headers
 
     def _extract_model_entries(self, payload: Any) -> Iterable[Any]:
         if payload is None:

@@ -135,6 +135,12 @@ class OpenRouterProviderClient(ProviderClient):
         return self._api_key_override or getattr(self._settings, "openrouter_api_key", None)
 
     async def list_models(self) -> list[ProviderModel]:
+        if AsyncOpenRouter is None and self._client_factory is _default_client_factory:
+            self._logger.warning(
+                "OpenRouter SDK is not installed; falling back to direct HTTP catalogue request"
+            )
+            return await super().list_models()
+
         api_key = self._get_api_key()
         if self.requires_api_key and not api_key:
             self._logger.warning("Skipping %s provider because credentials are not configured", self.provider)
@@ -198,6 +204,21 @@ class OpenRouterProviderClient(ProviderClient):
                 )
             )
         return models
+
+    def _additional_headers(self) -> dict[str, str]:
+        headers: dict[str, str] = {}
+        metadata_source = self.metadata
+        metadata = metadata_source if isinstance(metadata_source, Mapping) else {}
+        referer = metadata.get("http_referer") or metadata.get("referer")
+        title = metadata.get("x_title") or metadata.get("app_name")
+        if referer:
+            headers["HTTP-Referer"] = str(referer)
+        if title:
+            headers["X-Title"] = str(title)
+        extra_headers = metadata.get("headers")
+        if isinstance(extra_headers, Mapping):
+            headers.update({str(key): str(value) for key, value in extra_headers.items()})
+        return headers
 
     def _extract_model_entries(self, payload: Any) -> Iterable[Any]:
         if payload is None:

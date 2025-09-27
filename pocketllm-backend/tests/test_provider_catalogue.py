@@ -7,6 +7,8 @@ from uuid import uuid4
 
 import pytest
 
+httpx = pytest.importorskip("httpx")
+
 from app.schemas.providers import ProviderConfiguration, ProviderModel
 from app.services.provider_configs import ProvidersService
 from app.services.providers import (
@@ -298,6 +300,32 @@ async def test_openai_provider_client_parses_response():
     assert factory_kwargs[0]["base_url"] == "https://custom.openai"
 
 
+@pytest.mark.asyncio
+async def test_openai_provider_client_falls_back_to_http_when_sdk_unavailable(monkeypatch, caplog):
+    monkeypatch.setattr("app.services.providers.openai.AsyncOpenAI", None, raising=False)
+    captured_requests: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        captured_requests.append(request)
+        return httpx.Response(
+            200,
+            json={"data": [{"id": "gpt-http", "name": "GPT HTTP", "context_window": 2048}]},
+        )
+
+    transport = httpx.MockTransport(handler)
+    settings = make_settings(openai_api_key="fallback-key")
+    client = OpenAIProviderClient(settings, transport=transport)
+
+    with caplog.at_level("WARNING"):
+        models = await client.list_models()
+
+    assert [model.id for model in models] == ["gpt-http"]
+    assert models[0].context_window == 2048
+    assert captured_requests and captured_requests[0].headers["Authorization"] == "Bearer fallback-key"
+    assert captured_requests[0].url.path.endswith("/models")
+    assert "falling back" in caplog.text.lower()
+
+
 class FakeGroqModelsResource:
     def __init__(self, payload: Any | Exception):
         self._payload = payload
@@ -433,6 +461,31 @@ async def test_groq_provider_client_handles_sdk_errors(caplog):
 
 
 @pytest.mark.asyncio
+async def test_groq_provider_client_falls_back_to_http_when_sdk_unavailable(monkeypatch, caplog):
+    monkeypatch.setattr("app.services.providers.groq.AsyncGroq", None, raising=False)
+    captured_requests: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        captured_requests.append(request)
+        return httpx.Response(
+            200,
+            json={"data": [{"id": "groq-http", "name": "Groq HTTP", "context_window": 131072}]},
+        )
+
+    transport = httpx.MockTransport(handler)
+    settings = make_settings(groq_api_key="groq-key")
+    client = GroqProviderClient(settings, transport=transport)
+
+    with caplog.at_level("WARNING"):
+        models = await client.list_models()
+
+    assert [model.id for model in models] == ["groq-http"]
+    assert captured_requests and captured_requests[0].headers["Authorization"] == "Bearer groq-key"
+    assert captured_requests[0].url.path.endswith("/models")
+    assert "falling back" in caplog.text.lower()
+
+
+@pytest.mark.asyncio
 async def test_groq_sdk_service_invokes_official_client():
     created_clients: list[RecordingGroqClient] = []
     factory_kwargs: list[Mapping[str, Any]] = []
@@ -506,6 +559,39 @@ async def test_openrouter_provider_client_includes_headers():
     headers = factory_kwargs[0]["default_headers"]
     assert headers["HTTP-Referer"] == "https://example.com"
     assert headers["X-Title"] == "PocketLLM"
+
+
+@pytest.mark.asyncio
+async def test_openrouter_provider_client_falls_back_to_http_when_sdk_unavailable(monkeypatch, caplog):
+    monkeypatch.setattr("app.services.providers.openrouter.AsyncOpenRouter", None, raising=False)
+    captured_requests: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        captured_requests.append(request)
+        return httpx.Response(
+            200,
+            json={"data": [{"id": "router-http", "name": "Router HTTP", "context_length": 64000}]},
+        )
+
+    transport = httpx.MockTransport(handler)
+    settings = make_settings(
+        openrouter_api_key="router-key",
+        openrouter_app_url="https://example.com",
+        openrouter_app_name="PocketLLM",
+    )
+    client = OpenRouterProviderClient(settings, transport=transport)
+
+    with caplog.at_level("WARNING"):
+        models = await client.list_models()
+
+    assert [model.id for model in models] == ["router-http"]
+    assert models[0].context_window == 64000
+    assert captured_requests
+    request = captured_requests[0]
+    assert request.headers["Authorization"] == "Bearer router-key"
+    assert request.headers["HTTP-Referer"] == "https://example.com"
+    assert request.headers["X-Title"] == "PocketLLM"
+    assert "falling back" in caplog.text.lower()
 
 
 @pytest.mark.asyncio
