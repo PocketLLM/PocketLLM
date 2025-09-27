@@ -87,28 +87,40 @@ class ProvidersService:
         return ProviderActivationResponse(provider=provider)
 
     async def update_provider(self, user_id: UUID, provider: str, payload: ProviderUpdateRequest) -> ProviderConfiguration:
-        updates: dict[str, Any] = {k: v for k, v in payload.model_dump().items() if v is not None}
-        if "api_key" in updates:
-            api_key = updates.pop("api_key")
-            try:
-                await self._validator.validate(
-                    provider,
-                    api_key,
-                    base_url=payload.base_url,
-                    metadata=payload.metadata,
+        provided_fields = payload.model_dump(exclude_unset=True)
+        updates: dict[str, Any] = {
+            key: value for key, value in payload.model_dump().items() if value is not None and key != "api_key"
+        }
+        if "api_key" in provided_fields:
+            api_key = provided_fields.get("api_key")
+            if api_key is None:
+                updates.update(
+                    {
+                        "api_key_hash": None,
+                        "api_key_preview": None,
+                        "api_key_encrypted": None,
+                    }
                 )
-            except ValueError as exc:
-                raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
-            except RuntimeError as exc:
-                raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(exc)) from exc
+            else:
+                try:
+                    await self._validator.validate(
+                        provider,
+                        api_key,
+                        base_url=payload.base_url,
+                        metadata=payload.metadata,
+                    )
+                except ValueError as exc:
+                    raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+                except RuntimeError as exc:
+                    raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(exc)) from exc
 
-            updates.update(
-                {
-                    "api_key_hash": hash_secret(api_key),
-                    "api_key_preview": mask_secret(api_key),
-                    "api_key_encrypted": encrypt_secret(api_key, self._settings),
-                }
-            )
+                updates.update(
+                    {
+                        "api_key_hash": hash_secret(api_key),
+                        "api_key_preview": mask_secret(api_key),
+                        "api_key_encrypted": encrypt_secret(api_key, self._settings),
+                    }
+                )
         if not updates:
             records = await self._database.select(
                 "providers",
