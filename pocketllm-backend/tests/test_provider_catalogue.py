@@ -2,7 +2,7 @@ import asyncio
 import asyncio
 from datetime import UTC, datetime
 from types import SimpleNamespace
-from typing import Any, AsyncIterator, Mapping
+from typing import Any, AsyncIterator, Iterator, Mapping
 from uuid import uuid4
 
 import pytest
@@ -19,6 +19,13 @@ from app.services.providers import (
     OpenRouterProviderClient,
     ProviderModelCatalogue,
 )
+
+
+@pytest.fixture(autouse=True)
+def clear_provider_catalogue_cache() -> Iterator[None]:
+    ProviderModelCatalogue.clear_cache()
+    yield
+    ProviderModelCatalogue.clear_cache()
 
 
 class StubProviderClient:
@@ -108,6 +115,7 @@ def make_settings(**overrides: Any) -> SimpleNamespace:
         "openrouter_api_base": None,
         "openrouter_app_url": None,
         "openrouter_app_name": None,
+        "provider_catalogue_cache_ttl": 0,
     }
     defaults.update(overrides)
     return SimpleNamespace(**defaults)
@@ -176,6 +184,31 @@ async def test_catalogue_handles_provider_errors(caplog):
 
     assert models == []
     assert any("openrouter" in message for message in caplog.text.splitlines())
+
+
+@pytest.mark.asyncio
+async def test_catalogue_uses_cache_for_repeated_requests():
+    class CountingClient:
+        def __init__(self) -> None:
+            self.provider = "openai"
+            self.base_url = "https://example.test"
+            self.metadata = {}
+            self.calls = 0
+
+        async def list_models(self) -> list[ProviderModel]:
+            self.calls += 1
+            await asyncio.sleep(0)
+            return [ProviderModel(provider="openai", id="cached", name="Cached Model")]
+
+    client = CountingClient()
+    settings = make_settings(provider_catalogue_cache_ttl=300)
+    catalogue = ProviderModelCatalogue(settings, clients=[client])
+
+    first = await catalogue.list_all_models()
+    second = await catalogue.list_all_models()
+
+    assert first == second
+    assert client.calls == 1
 
 
 @pytest.mark.asyncio

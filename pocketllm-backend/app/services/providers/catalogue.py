@@ -3,9 +3,12 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
+import json
 import logging
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from app.core.config import Settings
@@ -23,6 +26,12 @@ class _ProviderConfig:
     base_url: str | None
     api_key: str | None
     metadata: Mapping[str, Any] | None
+
+
+@dataclass(frozen=True)
+class _CacheEntry:
+    expires_at: datetime
+    models: list[ProviderModel]
 
 
 class ProviderModelCatalogue:
@@ -47,6 +56,12 @@ class ProviderModelCatalogue:
                 "openrouter": OpenRouterProviderClient,
             }
         )
+        self._cache_ttl_seconds = self._coerce_ttl(
+            getattr(settings, "provider_catalogue_cache_ttl", 60)
+        )
+
+    _cache: dict[str, "_CacheEntry"] = {}
+    _locks: dict[str, asyncio.Lock] = {}
 
     async def list_all_models(
         self,
@@ -187,14 +202,107 @@ class ProviderModelCatalogue:
         return models
 
     async def _safe_list_models(self, client: ProviderClient) -> list[ProviderModel]:
+        cache_key = self._build_cache_key(client)
+        cached = self._cache_lookup(cache_key)
+        if cached is not None:
+            self._logger.debug(
+                "Serving cached model catalogue for provider %s", client.provider
+            )
+            return cached
+
+        lock = self._locks.setdefault(cache_key, asyncio.Lock())
+        async with lock:
+            cached = self._cache_lookup(cache_key)
+            if cached is not None:
+                self._logger.debug(
+                    "Serving cached model catalogue for provider %s", client.provider
+                )
+                return cached
+            try:
+                models = await client.list_models()
+            except Exception:  # pragma: no cover - defensive catch-all
+                self._logger.exception(
+                    "Failed to fetch models from provider %s", client.provider
+                )
+                models = []
+            if not models:
+                self._logger.info(
+                    "Provider %s returned no models or is not configured", client.provider
+                )
+            self._store_cache(cache_key, models)
+            return list(models)
+
+    @classmethod
+    def clear_cache(cls) -> None:
+        """Reset the shared provider catalogue cache.
+
+        Primarily intended for test environments to avoid state leakage across
+        test cases.
+        """
+
+        cls._cache.clear()
+        cls._locks.clear()
+
+    def _cache_lookup(self, cache_key: str) -> list[ProviderModel] | None:
+        if self._cache_ttl_seconds <= 0:
+            return None
+        entry = self._cache.get(cache_key)
+        if entry is None:
+            return None
+        if entry.expires_at <= datetime.now(tz=timezone.utc):
+            self._cache.pop(cache_key, None)
+            return None
+        return list(entry.models)
+
+    def _store_cache(self, cache_key: str, models: list[ProviderModel]) -> None:
+        if self._cache_ttl_seconds <= 0:
+            return
+        expires_at = datetime.now(tz=timezone.utc) + timedelta(
+            seconds=self._cache_ttl_seconds
+        )
+        self._cache[cache_key] = _CacheEntry(expires_at=expires_at, models=list(models))
+
+    def _build_cache_key(self, client: ProviderClient) -> str:
+        provider = getattr(client, "provider", "unknown")
+        base_url = getattr(client, "base_url", None)
+        metadata = getattr(client, "metadata", None)
+        api_key: str | None = None
+        get_api_key = getattr(client, "_get_api_key", None)
+        if callable(get_api_key):
+            try:
+                api_key = get_api_key()
+            except Exception:  # pragma: no cover - defensive catch-all
+                api_key = None
+
+        components = [str(provider).lower()]
+        if base_url:
+            components.append(str(base_url))
+        if api_key:
+            components.append(self._hash_value(api_key))
+        if metadata:
+            components.append(self._hash_value(metadata))
+        return "|".join(components)
+
+    @staticmethod
+    def _hash_value(value: Any) -> str:
         try:
-            models = await client.list_models()
+            if isinstance(value, bytes):
+                payload = value.decode("utf-8", "ignore")
+            elif isinstance(value, str):
+                payload = value
+            else:
+                payload = json.dumps(value, sort_keys=True, default=str)
         except Exception:  # pragma: no cover - defensive catch-all
-            self._logger.exception("Failed to fetch models from provider %s", client.provider)
-            return []
-        if not models:
-            self._logger.info("Provider %s returned no models or is not configured", client.provider)
-        return models
+            payload = str(value)
+        return hashlib.sha256(payload.encode("utf-8")).hexdigest()
+
+    @staticmethod
+    def _coerce_ttl(value: Any) -> int:
+        try:
+            ttl = int(value)
+        except (TypeError, ValueError):  # pragma: no cover - defensive cast
+            return 0
+        return max(ttl, 0)
 
 
 __all__ = ["ProviderModelCatalogue"]
