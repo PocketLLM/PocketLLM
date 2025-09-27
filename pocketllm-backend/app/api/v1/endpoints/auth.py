@@ -11,6 +11,8 @@ from app.schemas.auth import (
     MagicLinkRequest,
     OAuthProviderRequest,
     PhoneOtpRequest,
+    RefreshTokenRequest,
+    RefreshTokenResponse,
     SignInRequest,
     SignInResponse,
     SignOutResponse,
@@ -52,6 +54,16 @@ async def sign_out(
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Not authenticated")
     service = AuthService(settings=settings, database=database)
     return await service.sign_out(credentials.credentials)
+
+
+@router.post("/refresh", response_model=RefreshTokenResponse, summary="Refresh access token")
+async def refresh_token(
+    payload: RefreshTokenRequest,
+    settings=Depends(get_settings_dependency),
+    database=Depends(get_database_dependency),
+) -> RefreshTokenResponse:
+    service = AuthService(settings=settings, database=database)
+    return await service.refresh_token(payload)
 
 
 @router.post(
