@@ -15,6 +15,8 @@ from app.schemas.auth import (
     AccountStatus,
     AuthTokens,
     AuthenticatedUser,
+    RefreshTokenRequest,
+    RefreshTokenResponse,
     SessionMetadata,
     SignInRequest,
     SignInResponse,
@@ -111,6 +113,46 @@ class AuthService:
             raise HTTPException(status_code=response.status_code, detail="Failed to sign out")
 
         return SignOutResponse()
+
+    async def refresh_token(self, payload: RefreshTokenRequest) -> RefreshTokenResponse:
+        """Issue a new access token using the provided refresh token."""
+
+        self._require_supabase()
+
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            response = await client.post(
+                f"{self._settings.supabase_url}/auth/v1/token?grant_type=refresh_token",
+                headers={
+                    "apikey": self._settings.supabase_anon_key,
+                    "Authorization": f"Bearer {self._settings.supabase_anon_key}",
+                },
+                json={"refresh_token": payload.refresh_token},
+            )
+
+        if response.status_code >= 400:
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid refresh token")
+
+        data = response.json()
+        user = self._map_user(data.get("user"))
+        tokens = self._map_tokens(data)
+
+        expires_in = tokens.expires_in or self._settings.access_token_expire_minutes * 60
+        expires_at = datetime.now(tz=UTC) + timedelta(seconds=expires_in)
+
+        refresh_expires_at = None
+        refresh_expiry_minutes = getattr(self._settings, "refresh_token_expire_minutes", None)
+        if refresh_expiry_minutes:
+            refresh_expires_at = datetime.now(tz=UTC) + timedelta(minutes=refresh_expiry_minutes)
+
+        session = SessionMetadata(
+            session_id=user.id,
+            expires_at=expires_at,
+            refresh_expires_at=refresh_expires_at,
+        )
+
+        await self._upsert_profile(user)
+
+        return RefreshTokenResponse(tokens=tokens, session=session)
 
     async def _upsert_profile(self, user: AuthenticatedUser, full_name: str | None = None) -> None:
         """Ensure that a profile exists for the authenticated Supabase user."""
