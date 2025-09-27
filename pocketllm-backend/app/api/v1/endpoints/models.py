@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from uuid import UUID
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 
 from app.api.deps import (
     get_current_request_user,
@@ -29,9 +29,19 @@ async def list_models(
     user: TokenPayload = Depends(get_current_request_user),
     settings=Depends(get_settings_dependency),
     database=Depends(get_database_dependency),
+    provider: str | None = Query(default=None, description="Filter models by provider identifier"),
+    name: str | None = Query(default=None, description="Case-insensitive substring filter applied to model names"),
+    model_id: str | None = Query(default=None, description="Case-insensitive substring filter applied to model identifiers"),
+    query: str | None = Query(default=None, description="Free text search across model id, name, and description"),
 ) -> list[ProviderModel]:
     service = ProvidersService(settings=settings, database=database)
-    return await service.get_provider_models(user.sub)
+    return await service.get_provider_models(
+        user.sub,
+        provider=provider,
+        name=name,
+        model_id=model_id,
+        query=query,
+    )
 
 
 @router.get("/saved", response_model=list[ModelConfiguration], summary="List saved models")

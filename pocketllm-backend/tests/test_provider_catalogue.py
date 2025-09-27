@@ -1,14 +1,14 @@
 import asyncio
+import asyncio
 from datetime import UTC, datetime
 from types import SimpleNamespace
 from typing import Any, AsyncIterator, Mapping
 from uuid import uuid4
 
-import httpx
 import pytest
 
-from app.core.config import Settings
 from app.schemas.providers import ProviderConfiguration, ProviderModel
+from app.services.provider_configs import ProvidersService
 from app.services.providers import (
     ProviderClient,
     GroqProviderClient,
@@ -44,7 +44,7 @@ class RecordingProviderClient(ProviderClient):
         base_url: str | None = None,
         api_key: str | None = None,
         metadata: Mapping[str, Any] | None = None,
-        transport: httpx.AsyncBaseTransport | None = None,
+        transport: Any | None = None,
     ) -> None:
         self.initialiser_calls.append(
             {
@@ -70,9 +70,70 @@ class RecordingProviderClient(ProviderClient):
         return []
 
 
+class RecordingOpenAIClient:
+    def __init__(self, payload: Any) -> None:
+        self._payload = payload
+        self.models = SimpleNamespace(list=self._list)
+        self.closed = False
+
+    async def _list(self) -> Any:
+        return self._payload
+
+    async def close(self) -> None:
+        self.closed = True
+
+
+class RecordingOpenRouterClient:
+    def __init__(self, payload: Any) -> None:
+        self._payload = payload
+        self.models = SimpleNamespace(list=self._list)
+        self.closed = False
+
+    async def _list(self) -> Any:
+        return self._payload
+
+    async def close(self) -> None:
+        self.closed = True
+
+
+def make_settings(**overrides: Any) -> SimpleNamespace:
+    defaults = {
+        "openai_api_key": None,
+        "openai_api_base": None,
+        "groq_api_key": None,
+        "groq_api_base": None,
+        "openrouter_api_key": None,
+        "openrouter_api_base": None,
+        "openrouter_app_url": None,
+        "openrouter_app_name": None,
+    }
+    defaults.update(overrides)
+    return SimpleNamespace(**defaults)
+
+
+class FakeCatalogue:
+    def __init__(self, models: list[ProviderModel]) -> None:
+        self._models = list(models)
+        self.calls: list[tuple[str, Any]] = []
+
+    async def list_all_models(self, providers: Any = None) -> list[ProviderModel]:
+        self.calls.append(("all", providers))
+        return list(self._models)
+
+    async def list_models_for_provider(self, provider: str, providers: Any = None) -> list[ProviderModel]:
+        self.calls.append((provider, providers))
+        provider_key = provider.lower()
+        return [model for model in self._models if model.provider.lower() == provider_key]
+
+
+class FakeDatabase:
+    async def select(self, *args: Any, **kwargs: Any) -> list[Mapping[str, Any]]:
+        return []
+
+
 @pytest.mark.asyncio
 async def test_catalogue_aggregates_models():
-    settings = Settings()
+    settings = make_settings()
     openai_model = ProviderModel(provider="openai", id="gpt-4o", name="GPT-4o")
     groq_model = ProviderModel(provider="groq", id="llama", name="Llama")
     catalogue = ProviderModelCatalogue(settings, clients=[
@@ -88,7 +149,7 @@ async def test_catalogue_aggregates_models():
 
 @pytest.mark.asyncio
 async def test_catalogue_filters_by_provider():
-    settings = Settings()
+    settings = make_settings()
     catalogue = ProviderModelCatalogue(settings, clients=[
         StubProviderClient("openai", [ProviderModel(provider="openai", id="gpt", name="GPT")]),
         StubProviderClient("groq", [ProviderModel(provider="groq", id="groq-1", name="Groq")]),
@@ -103,7 +164,7 @@ async def test_catalogue_filters_by_provider():
 
 @pytest.mark.asyncio
 async def test_catalogue_handles_provider_errors(caplog):
-    settings = Settings()
+    settings = make_settings()
     catalogue = ProviderModelCatalogue(settings, clients=[
         StubProviderClient("openrouter", error=RuntimeError("boom"))
     ])
@@ -118,7 +179,7 @@ async def test_catalogue_handles_provider_errors(caplog):
 @pytest.mark.asyncio
 async def test_catalogue_requires_active_provider_configuration():
     RecordingProviderClient.initialiser_calls = []
-    settings = Settings()
+    settings = make_settings()
     catalogue = ProviderModelCatalogue(
         settings,
         client_factories={"openai": RecordingProviderClient},
@@ -149,7 +210,7 @@ async def test_catalogue_requires_active_provider_configuration():
 @pytest.mark.asyncio
 async def test_catalogue_skips_inactive_provider_configuration():
     RecordingProviderClient.initialiser_calls = []
-    settings = Settings()
+    settings = make_settings()
     catalogue = ProviderModelCatalogue(
         settings,
         client_factories={"openai": RecordingProviderClient},
@@ -176,7 +237,7 @@ async def test_catalogue_skips_inactive_provider_configuration():
 @pytest.mark.asyncio
 async def test_catalogue_list_models_for_provider_requires_user_configuration(caplog):
     RecordingProviderClient.initialiser_calls = []
-    settings = Settings()
+    settings = make_settings()
     catalogue = ProviderModelCatalogue(
         settings,
         client_factories={"openai": RecordingProviderClient},
@@ -192,7 +253,7 @@ async def test_catalogue_list_models_for_provider_requires_user_configuration(ca
 @pytest.mark.asyncio
 async def test_catalogue_uses_environment_fallback_configuration(caplog):
     RecordingProviderClient.initialiser_calls = []
-    settings = Settings(openai_api_key="env-key", openai_api_base="https://env.openai")
+    settings = make_settings(openai_api_key="env-key", openai_api_base="https://env.openai")
     catalogue = ProviderModelCatalogue(
         settings,
         client_factories={"openai": RecordingProviderClient},
@@ -212,13 +273,18 @@ async def test_catalogue_uses_environment_fallback_configuration(caplog):
 
 @pytest.mark.asyncio
 async def test_openai_provider_client_parses_response():
-    async def handler(request: httpx.Request) -> httpx.Response:  # pragma: no cover - simple mock
-        assert request.headers["Authorization"].startswith("Bearer test-key")
-        payload = {"data": [{"id": "gpt-test", "name": "GPT Test", "context_window": 1024}]}
-        return httpx.Response(status_code=200, json=payload)
+    payload = {"data": [{"id": "gpt-test", "name": "GPT Test", "context_window": 1024}]}
+    factory_kwargs: list[Mapping[str, Any]] = []
+    created_clients: list[RecordingOpenAIClient] = []
 
-    settings = Settings(openai_api_key="test-key")
-    client = OpenAIProviderClient(settings, transport=httpx.MockTransport(handler))
+    def factory(**kwargs: Any) -> RecordingOpenAIClient:
+        factory_kwargs.append(kwargs)
+        client = RecordingOpenAIClient(payload)
+        created_clients.append(client)
+        return client
+
+    settings = make_settings(openai_api_key="test-key", openai_api_base="https://custom.openai")
+    client = OpenAIProviderClient(settings, client_factory=factory)
 
     models = await client.list_models()
 
@@ -227,6 +293,9 @@ async def test_openai_provider_client_parses_response():
     assert model.provider == "openai"
     assert model.id == "gpt-test"
     assert model.context_window == 1024
+    assert created_clients and created_clients[0].closed is True
+    assert factory_kwargs and factory_kwargs[0]["api_key"] == "test-key"
+    assert factory_kwargs[0]["base_url"] == "https://custom.openai"
 
 
 class FakeGroqModelsResource:
@@ -302,7 +371,7 @@ async def test_groq_provider_client_requires_api_key():
         factory_calls.append(kwargs)
         return FakeGroqClient({"data": []})
 
-    settings = Settings()
+    settings = make_settings()
     client = GroqProviderClient(settings, client_factory=factory)
 
     models = await client.list_models()
@@ -332,7 +401,7 @@ async def test_groq_provider_client_uses_sdk_payload(caplog):
         created_clients.append(FakeGroqClient(payload))
         return created_clients[-1]
 
-    settings = Settings(groq_api_key="test-key", groq_api_base="https://custom.groq")
+    settings = make_settings(groq_api_key="test-key", groq_api_base="https://custom.groq")
     client = GroqProviderClient(settings, client_factory=factory)
 
     models = await client.list_models()
@@ -353,7 +422,7 @@ async def test_groq_provider_client_handles_sdk_errors(caplog):
     def factory(**kwargs: Any) -> FakeGroqClient:
         return FakeGroqClient(error)
 
-    settings = Settings(groq_api_key="test-key")
+    settings = make_settings(groq_api_key="test-key")
     client = GroqProviderClient(settings, client_factory=factory)
 
     with caplog.at_level("ERROR"):
@@ -374,7 +443,7 @@ async def test_groq_sdk_service_invokes_official_client():
         created_clients.append(client)
         return client
 
-    settings = Settings(groq_api_key="sdk-key")
+    settings = make_settings(groq_api_key="sdk-key")
     service = GroqSDKService(settings, client_factory=factory)
 
     chat = await service.create_chat_completion(
@@ -412,19 +481,74 @@ async def test_groq_sdk_service_invokes_official_client():
 
 @pytest.mark.asyncio
 async def test_openrouter_provider_client_includes_headers():
-    async def handler(request: httpx.Request) -> httpx.Response:
-        assert request.headers["Authorization"].startswith("Bearer router-key")
-        assert request.headers["HTTP-Referer"] == "https://example.com"
-        assert request.headers["X-Title"] == "PocketLLM"
-        return httpx.Response(status_code=200, json={"data": []})
+    payload = {"data": []}
+    factory_kwargs: list[Mapping[str, Any]] = []
+    created_clients: list[RecordingOpenRouterClient] = []
 
-    settings = Settings(
+    def factory(**kwargs: Any) -> RecordingOpenRouterClient:
+        factory_kwargs.append(kwargs)
+        client = RecordingOpenRouterClient(payload)
+        created_clients.append(client)
+        return client
+
+    settings = make_settings(
         openrouter_api_key="router-key",
         openrouter_app_url="https://example.com",
         openrouter_app_name="PocketLLM",
     )
-    client = OpenRouterProviderClient(settings, transport=httpx.MockTransport(handler))
+    client = OpenRouterProviderClient(settings, client_factory=factory)
 
     models = await client.list_models()
 
     assert models == []
+    assert created_clients and created_clients[0].closed is True
+    assert factory_kwargs and factory_kwargs[0]["api_key"] == "router-key"
+    headers = factory_kwargs[0]["default_headers"]
+    assert headers["HTTP-Referer"] == "https://example.com"
+    assert headers["X-Title"] == "PocketLLM"
+
+
+@pytest.mark.asyncio
+async def test_providers_service_filters_models_by_attributes():
+    models = [
+        ProviderModel(
+            provider="openai",
+            id="gpt-4o",
+            name="GPT-4 Omni",
+            description="General purpose assistant",
+        ),
+        ProviderModel(
+            provider="groq",
+            id="llama-guard",
+            name="LLaMA Guard",
+            description="Moderation model",
+            metadata={"capabilities": ["moderation"]},
+        ),
+    ]
+    service = ProvidersService(make_settings(), database=FakeDatabase(), catalogue=FakeCatalogue(models))
+    user_id = uuid4()
+
+    moderation = await service.get_provider_models(user_id, query="moderation")
+    assert [model.id for model in moderation] == ["llama-guard"]
+
+    gpt_match = await service.get_provider_models(user_id, name="gpt-4")
+    assert [model.id for model in gpt_match] == ["gpt-4o"]
+
+    guard_match = await service.get_provider_models(user_id, model_id="guard")
+    assert [model.id for model in guard_match] == ["llama-guard"]
+
+
+@pytest.mark.asyncio
+async def test_providers_service_respects_provider_parameter():
+    models = [
+        ProviderModel(provider="openai", id="gpt-4o", name="GPT-4 Omni"),
+        ProviderModel(provider="groq", id="llama-guard", name="LLaMA Guard"),
+    ]
+    catalogue = FakeCatalogue(models)
+    service = ProvidersService(make_settings(), database=FakeDatabase(), catalogue=catalogue)
+    user_id = uuid4()
+
+    groq_models = await service.get_provider_models(user_id, provider="groq")
+
+    assert [model.provider for model in groq_models] == ["groq"]
+    assert catalogue.calls and catalogue.calls[0][0] == "groq"

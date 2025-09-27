@@ -102,11 +102,49 @@ class ProvidersService:
         self,
         user_id: UUID,
         provider: str | None = None,
+        *,
+        name: str | None = None,
+        model_id: str | None = None,
+        query: str | None = None,
     ) -> list[ProviderModel]:
         records = await self._fetch_provider_records(user_id)
         if provider is None:
-            return await self._catalogue.list_all_models(records)
-        return await self._catalogue.list_models_for_provider(provider, records)
+            models = await self._catalogue.list_all_models(records)
+        else:
+            models = await self._catalogue.list_models_for_provider(provider, records)
+        return self._filter_models(models, name=name, model_id=model_id, query=query)
+
+    def _filter_models(
+        self,
+        models: list[ProviderModel],
+        *,
+        name: str | None = None,
+        model_id: str | None = None,
+        query: str | None = None,
+    ) -> list[ProviderModel]:
+        if not any([name, model_id, query]):
+            return models
+
+        name_filter = name.lower() if name else None
+        id_filter = model_id.lower() if model_id else None
+        query_filter = query.lower() if query else None
+
+        def _matches(model: ProviderModel) -> bool:
+            if name_filter and name_filter not in model.name.lower():
+                return False
+            if id_filter and id_filter not in model.id.lower():
+                return False
+            if query_filter:
+                haystacks = [model.name, model.id]
+                if model.description:
+                    haystacks.append(model.description)
+                if model.metadata:
+                    haystacks.append(str(model.metadata))
+                if not any(query_filter in text.lower() for text in haystacks if isinstance(text, str)):
+                    return False
+            return True
+
+        return [model for model in models if _matches(model)]
 
     async def _fetch_provider_records(self, user_id: UUID) -> list[ProviderRecord]:
         records = await self._database.select(
