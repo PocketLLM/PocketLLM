@@ -2,7 +2,7 @@ import asyncio
 import asyncio
 from datetime import UTC, datetime
 from types import SimpleNamespace
-from typing import Any, AsyncIterator, Mapping
+from typing import Any, AsyncIterator, Iterator, Mapping
 from uuid import uuid4
 
 import pytest
@@ -19,6 +19,13 @@ from app.services.providers import (
     OpenRouterProviderClient,
     ProviderModelCatalogue,
 )
+
+
+@pytest.fixture(autouse=True)
+def clear_provider_catalogue_cache() -> Iterator[None]:
+    ProviderModelCatalogue.clear_cache()
+    yield
+    ProviderModelCatalogue.clear_cache()
 
 
 class StubProviderClient:
@@ -108,6 +115,7 @@ def make_settings(**overrides: Any) -> SimpleNamespace:
         "openrouter_api_base": None,
         "openrouter_app_url": None,
         "openrouter_app_name": None,
+        "provider_catalogue_cache_ttl": 0,
     }
     defaults.update(overrides)
     return SimpleNamespace(**defaults)
@@ -176,6 +184,31 @@ async def test_catalogue_handles_provider_errors(caplog):
 
     assert models == []
     assert any("openrouter" in message for message in caplog.text.splitlines())
+
+
+@pytest.mark.asyncio
+async def test_catalogue_uses_cache_for_repeated_requests():
+    class CountingClient:
+        def __init__(self) -> None:
+            self.provider = "openai"
+            self.base_url = "https://example.test"
+            self.metadata = {}
+            self.calls = 0
+
+        async def list_models(self) -> list[ProviderModel]:
+            self.calls += 1
+            await asyncio.sleep(0)
+            return [ProviderModel(provider="openai", id="cached", name="Cached Model")]
+
+    client = CountingClient()
+    settings = make_settings(provider_catalogue_cache_ttl=300)
+    catalogue = ProviderModelCatalogue(settings, clients=[client])
+
+    first = await catalogue.list_all_models()
+    second = await catalogue.list_all_models()
+
+    assert first == second
+    assert client.calls == 1
 
 
 @pytest.mark.asyncio
@@ -301,29 +334,24 @@ async def test_openai_provider_client_parses_response():
 
 
 @pytest.mark.asyncio
-async def test_openai_provider_client_falls_back_to_http_when_sdk_unavailable(monkeypatch, caplog):
+async def test_openai_provider_client_requires_sdk_when_unavailable(monkeypatch, caplog):
     monkeypatch.setattr("app.services.providers.openai.AsyncOpenAI", None, raising=False)
     captured_requests: list[httpx.Request] = []
 
-    def handler(request: httpx.Request) -> httpx.Response:
+    def handler(request: httpx.Request) -> httpx.Response:  # pragma: no cover - should not be called
         captured_requests.append(request)
-        return httpx.Response(
-            200,
-            json={"data": [{"id": "gpt-http", "name": "GPT HTTP", "context_window": 2048}]},
-        )
+        return httpx.Response(500)
 
     transport = httpx.MockTransport(handler)
     settings = make_settings(openai_api_key="fallback-key")
     client = OpenAIProviderClient(settings, transport=transport)
 
-    with caplog.at_level("WARNING"):
+    with caplog.at_level("ERROR"):
         models = await client.list_models()
 
-    assert [model.id for model in models] == ["gpt-http"]
-    assert models[0].context_window == 2048
-    assert captured_requests and captured_requests[0].headers["Authorization"] == "Bearer fallback-key"
-    assert captured_requests[0].url.path.endswith("/models")
-    assert "falling back" in caplog.text.lower()
+    assert models == []
+    assert captured_requests == []
+    assert "cannot list models" in caplog.text.lower()
 
 
 class FakeGroqModelsResource:
@@ -461,28 +489,24 @@ async def test_groq_provider_client_handles_sdk_errors(caplog):
 
 
 @pytest.mark.asyncio
-async def test_groq_provider_client_falls_back_to_http_when_sdk_unavailable(monkeypatch, caplog):
+async def test_groq_provider_client_requires_sdk_when_unavailable(monkeypatch, caplog):
     monkeypatch.setattr("app.services.providers.groq.AsyncGroq", None, raising=False)
     captured_requests: list[httpx.Request] = []
 
-    def handler(request: httpx.Request) -> httpx.Response:
+    def handler(request: httpx.Request) -> httpx.Response:  # pragma: no cover - should not be called
         captured_requests.append(request)
-        return httpx.Response(
-            200,
-            json={"data": [{"id": "groq-http", "name": "Groq HTTP", "context_window": 131072}]},
-        )
+        return httpx.Response(500)
 
     transport = httpx.MockTransport(handler)
     settings = make_settings(groq_api_key="groq-key")
     client = GroqProviderClient(settings, transport=transport)
 
-    with caplog.at_level("WARNING"):
+    with caplog.at_level("ERROR"):
         models = await client.list_models()
 
-    assert [model.id for model in models] == ["groq-http"]
-    assert captured_requests and captured_requests[0].headers["Authorization"] == "Bearer groq-key"
-    assert captured_requests[0].url.path.endswith("/models")
-    assert "falling back" in caplog.text.lower()
+    assert models == []
+    assert captured_requests == []
+    assert "cannot list models" in caplog.text.lower()
 
 
 @pytest.mark.asyncio
@@ -562,16 +586,13 @@ async def test_openrouter_provider_client_includes_headers():
 
 
 @pytest.mark.asyncio
-async def test_openrouter_provider_client_falls_back_to_http_when_sdk_unavailable(monkeypatch, caplog):
+async def test_openrouter_provider_client_requires_sdk_when_unavailable(monkeypatch, caplog):
     monkeypatch.setattr("app.services.providers.openrouter.AsyncOpenRouter", None, raising=False)
     captured_requests: list[httpx.Request] = []
 
-    def handler(request: httpx.Request) -> httpx.Response:
+    def handler(request: httpx.Request) -> httpx.Response:  # pragma: no cover - should not be called
         captured_requests.append(request)
-        return httpx.Response(
-            200,
-            json={"data": [{"id": "router-http", "name": "Router HTTP", "context_length": 64000}]},
-        )
+        return httpx.Response(500)
 
     transport = httpx.MockTransport(handler)
     settings = make_settings(
@@ -581,17 +602,12 @@ async def test_openrouter_provider_client_falls_back_to_http_when_sdk_unavailabl
     )
     client = OpenRouterProviderClient(settings, transport=transport)
 
-    with caplog.at_level("WARNING"):
+    with caplog.at_level("ERROR"):
         models = await client.list_models()
 
-    assert [model.id for model in models] == ["router-http"]
-    assert models[0].context_window == 64000
-    assert captured_requests
-    request = captured_requests[0]
-    assert request.headers["Authorization"] == "Bearer router-key"
-    assert request.headers["HTTP-Referer"] == "https://example.com"
-    assert request.headers["X-Title"] == "PocketLLM"
-    assert "falling back" in caplog.text.lower()
+    assert models == []
+    assert captured_requests == []
+    assert "cannot list models" in caplog.text.lower()
 
 
 @pytest.mark.asyncio
