@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 class SurveyOptionTile extends StatelessWidget {
   final String label;
   final bool selected;
+  final bool isMultiSelect;
   final VoidCallback onTap;
 
   const SurveyOptionTile({
@@ -13,7 +14,53 @@ class SurveyOptionTile extends StatelessWidget {
     required this.label,
     required this.selected,
     required this.onTap,
+    this.isMultiSelect = false,
   });
+
+  Widget _buildIndicator(ThemeData theme) {
+    if (isMultiSelect) {
+      final borderColor = selected ? theme.colorScheme.primary : Colors.grey.shade400;
+      return AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        width: 22,
+        height: 22,
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(6),
+          border: Border.all(color: borderColor, width: 2),
+          color: selected ? theme.colorScheme.primary : Colors.transparent,
+        ),
+        child: AnimatedOpacity(
+          opacity: selected ? 1 : 0,
+          duration: const Duration(milliseconds: 200),
+          child: const Icon(Icons.check, color: Colors.white, size: 14),
+        ),
+      );
+    }
+
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 200),
+      width: 20,
+      height: 20,
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        border: Border.all(
+          color: selected ? theme.colorScheme.primary : Colors.grey.shade400,
+          width: 2,
+        ),
+      ),
+      child: AnimatedScale(
+        duration: const Duration(milliseconds: 200),
+        scale: selected ? 1 : 0,
+        child: Container(
+          margin: const EdgeInsets.all(3),
+          decoration: BoxDecoration(
+            color: theme.colorScheme.primary,
+            shape: BoxShape.circle,
+          ),
+        ),
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -43,29 +90,7 @@ class SurveyOptionTile extends StatelessWidget {
                 ),
               ),
             ),
-            AnimatedContainer(
-              duration: const Duration(milliseconds: 200),
-              width: 20,
-              height: 20,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                border: Border.all(
-                  color: isSelected ? theme.colorScheme.primary : Colors.grey.shade400,
-                  width: 2,
-                ),
-              ),
-              child: AnimatedScale(
-                duration: const Duration(milliseconds: 200),
-                scale: isSelected ? 1 : 0,
-                child: Container(
-                  margin: const EdgeInsets.all(3),
-                  decoration: BoxDecoration(
-                    color: theme.colorScheme.primary,
-                    shape: BoxShape.circle,
-                  ),
-                ),
-              ),
-            ),
+            _buildIndicator(theme),
           ],
         ),
       ),
