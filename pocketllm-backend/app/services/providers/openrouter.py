@@ -138,6 +138,12 @@ class OpenRouterProviderClient(ProviderClient):
             )
             return []
 
+    async def list_models(self) -> list[ProviderModel]:
+        if AsyncOpenRouter is None and self._client_factory is _default_client_factory:
+            self._logger.error(
+                "OpenRouter SDK is not installed; cannot list models. Install it via 'pip install openrouter'."
+            )
+            return []
         api_key = self._get_api_key()
         if self.requires_api_key and not api_key:
             self._logger.warning("Skipping %s provider because credentials are not configured", self.provider)

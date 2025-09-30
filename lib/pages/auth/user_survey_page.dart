@@ -4,6 +4,7 @@
 /// - Backend Migration: Keep UI but ensure submission persists through backend
 ///   APIs; consider reducing stored demographic questions if backend changes.
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 
 import '../../component/survey/survey_option_tile.dart';
@@ -56,15 +57,16 @@ class _UserSurveyPageState extends State<UserSurveyPage> {
   String? _errorMessage;
   String? _selectedProfession;
   String? _selectedSource;
+  DateTime? _selectedDateOfBirth;
 
-  final List<String> _experienceLevels = [
+  final List<String> _experienceLevels = const [
     'Beginner',
     'Intermediate',
     'Advanced',
     'Expert'
   ];
 
-  final List<String> _usageFrequencyOptions = [
+  final List<String> _usageFrequencyOptions = const [
     'Multiple times a day',
     'Daily',
     'A few times a week',
@@ -72,7 +74,7 @@ class _UserSurveyPageState extends State<UserSurveyPage> {
     'Occasionally'
   ];
 
-  final List<String> _interestOptions = [
+  final List<String> _interestOptions = const [
     'Productivity',
     'Coding',
     'Design',
@@ -89,7 +91,7 @@ class _UserSurveyPageState extends State<UserSurveyPage> {
     _questions = [
       const SurveyQuestion(
         id: 'age_range',
-        title: 'Answer some questions about yourself to get started.',
+        title: 'Tell us about yourself',
         subtitle: 'What is your age range?',
         options: [
           SurveyOption(id: 'under_18', label: 'Under 18'),
@@ -100,7 +102,7 @@ class _UserSurveyPageState extends State<UserSurveyPage> {
       ),
       const SurveyQuestion(
         id: 'education_level',
-        title: 'Answer some questions about yourself to get started.',
+        title: 'Education background',
         subtitle: 'What is your highest level of education completed?',
         options: [
           SurveyOption(id: 'high_school', label: 'High school or less'),
@@ -111,7 +113,7 @@ class _UserSurveyPageState extends State<UserSurveyPage> {
       ),
       const SurveyQuestion(
         id: 'gender',
-        title: 'Answer some questions about yourself to get started.',
+        title: 'How do you identify?',
         subtitle: 'What is your gender?',
         options: [
           SurveyOption(id: 'male', label: 'Male'),
@@ -121,7 +123,7 @@ class _UserSurveyPageState extends State<UserSurveyPage> {
       ),
       const SurveyQuestion(
         id: 'ethnicity',
-        title: 'Answer some questions about yourself to get started.',
+        title: 'Representation matters',
         subtitle: 'What is your ethnicity or race?',
         options: [
           SurveyOption(id: 'white', label: 'Caucasian/White'),
@@ -131,7 +133,98 @@ class _UserSurveyPageState extends State<UserSurveyPage> {
           SurveyOption(id: 'other', label: 'Other / Prefer not to say'),
         ],
       ),
+      SurveyQuestion(
+        id: 'experience_level',
+        title: 'How experienced are you with AI tools?',
+        subtitle: 'Choose the option that best describes you.',
+        options: _buildOptions(_experienceLevels),
+      ),
+      SurveyQuestion(
+        id: 'usage_frequency',
+        title: 'How often will you use PocketLLM?',
+        subtitle: 'This helps us tailor guidance and reminders.',
+        options: _buildOptions(_usageFrequencyOptions),
+      ),
+      SurveyQuestion(
+        id: 'interests',
+        title: 'What are you hoping to accomplish?',
+        subtitle: 'Select all that apply.',
+        options: _buildOptions(_interestOptions),
+        isMultiSelect: true,
+      ),
     ];
+  }
+
+  List<SurveyOption> _buildOptions(List<String> labels) {
+    return labels
+        .map(
+          (label) => SurveyOption(
+            id: _normalizeOptionId(label),
+            label: label,
+          ),
+        )
+        .toList();
+  }
+
+  String _normalizeOptionId(String label) {
+    final normalized = label.toLowerCase().trim();
+    final sanitized = normalized.replaceAll(RegExp(r'[^a-z0-9]+'), '_');
+    return sanitized.replaceAll(RegExp(r'_+'), '_').replaceAll(RegExp(r'^_|_$'), '');
+  }
+
+  Future<void> _pickDateOfBirth(FormFieldState<DateTime?> field) async {
+    final now = DateTime.now();
+    final latestAllowed = DateTime(now.year - 13, now.month, now.day);
+    final earliestAllowed = DateTime(now.year - 120, now.month, now.day);
+
+    DateTime initialDate = _selectedDateOfBirth ?? DateTime(now.year - 25, now.month, now.day);
+    if (initialDate.isAfter(latestAllowed)) {
+      initialDate = latestAllowed;
+    }
+    if (initialDate.isBefore(earliestAllowed)) {
+      initialDate = earliestAllowed;
+    }
+
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: initialDate,
+      firstDate: earliestAllowed,
+      lastDate: latestAllowed,
+    );
+
+    if (picked != null) {
+      setState(() {
+        _selectedDateOfBirth = picked;
+      });
+      field.didChange(picked);
+    }
+  }
+
+  String? _validateDateOfBirth(DateTime? value) {
+    final date = value ?? _selectedDateOfBirth;
+    if (date == null) {
+      return 'Date of birth is required';
+    }
+
+    final now = DateTime.now();
+    int age = now.year - date.year;
+    final hasHadBirthday =
+        now.month > date.month || (now.month == date.month && now.day >= date.day);
+    if (!hasHadBirthday) {
+      age -= 1;
+    }
+
+    if (age < 13) {
+      return 'You must be at least 13 years old';
+    }
+    if (age > 120) {
+      return 'Please enter a valid birth date';
+    }
+    return null;
+  }
+
+  String _formatDate(DateTime date) {
+    return DateFormat('MMMM d, yyyy').format(date);
   }
 
   @override
@@ -169,7 +262,10 @@ class _UserSurveyPageState extends State<UserSurveyPage> {
 
     final question = _questions[_currentStep];
     final answer = _answers[question.id];
-    if (answer == null || (answer is List && answer.isEmpty)) {
+    final hasAnswer = question.isMultiSelect
+        ? (answer is List && answer.isNotEmpty)
+        : (answer != null && (!(answer is String) || answer.isNotEmpty));
+    if (!hasAnswer) {
       setState(() {
         _errorMessage = 'Please select an option to continue.';
       });
@@ -189,12 +285,26 @@ class _UserSurveyPageState extends State<UserSurveyPage> {
 
     final authState = context.read<AuthState>();
     final surveyService = SurveyService(authState);
-    final onboardingAnswers = {
+    final onboardingAnswers = <String, dynamic>{
       'age_range': _answers['age_range'],
       'education_level': _answers['education_level'],
       'gender': _answers['gender'],
       'ethnicity': _answers['ethnicity'],
-    }..removeWhere((key, value) => value == null);
+      'experience_level': _answers['experience_level'],
+      'usage_frequency': _answers['usage_frequency'],
+      'interests': _answers['interests'],
+    }..removeWhere((key, value) {
+        if (value == null) {
+          return true;
+        }
+        if (value is String) {
+          return value.trim().isEmpty;
+        }
+        if (value is List && value.isEmpty) {
+          return true;
+        }
+        return false;
+      });
 
     try {
       setState(() {
@@ -207,6 +317,7 @@ class _UserSurveyPageState extends State<UserSurveyPage> {
           fullName: _nameController.text.trim(),
           username: _usernameController.text.trim(),
           bio: _bioController.text.trim().isEmpty ? null : _bioController.text.trim(),
+          dateOfBirth: _selectedDateOfBirth,
           profession: _selectedProfession,
           heardFrom: _selectedSource,
           onboarding: onboardingAnswers,
@@ -240,6 +351,10 @@ class _UserSurveyPageState extends State<UserSurveyPage> {
 
   Widget _buildQuestionStep(SurveyQuestion question, ThemeData theme) {
     final selectedValue = _answers[question.id];
+    final bool isMultiSelect = question.isMultiSelect;
+    final List<String> selectedList = isMultiSelect && selectedValue is List
+        ? List<String>.from((selectedValue as List).whereType<String>())
+        : <String>[];
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -265,10 +380,23 @@ class _UserSurveyPageState extends State<UserSurveyPage> {
             padding: const EdgeInsets.only(bottom: 12),
             child: SurveyOptionTile(
               label: option.label,
-              selected: selectedValue == option.id,
+              selected: isMultiSelect
+                  ? selectedList.contains(option.id)
+                  : selectedValue == option.id,
+              isMultiSelect: isMultiSelect,
               onTap: () {
                 setState(() {
-                  _answers[question.id] = option.id;
+                  if (isMultiSelect) {
+                    final values = Set<String>.from(selectedList);
+                    if (values.contains(option.id)) {
+                      values.remove(option.id);
+                    } else {
+                      values.add(option.id);
+                    }
+                    _answers[question.id] = values.toList();
+                  } else {
+                    _answers[question.id] = option.id;
+                  }
                   _errorMessage = null;
                 });
               },
@@ -335,6 +463,30 @@ class _UserSurveyPageState extends State<UserSurveyPage> {
             ),
           ),
           const SizedBox(height: 16),
+          FormField<DateTime?>(
+            validator: (value) => _validateDateOfBirth(value ?? _selectedDateOfBirth),
+            builder: (field) {
+              final date = field.value ?? _selectedDateOfBirth;
+              final labelStyle = theme.textTheme.bodyMedium?.copyWith(
+                color: date != null ? Colors.black87 : Colors.black45,
+              );
+              return GestureDetector(
+                onTap: () => _pickDateOfBirth(field),
+                child: InputDecorator(
+                  decoration: InputDecoration(
+                    labelText: 'Date of birth',
+                    border: const OutlineInputBorder(),
+                    errorText: field.errorText,
+                  ),
+                  child: Text(
+                    date != null ? _formatDate(date) : 'Select your birth date',
+                    style: labelStyle,
+                  ),
+                ),
+              );
+            },
+          ),
+          const SizedBox(height: 16),
           DropdownButtonFormField<String>(
             value: _selectedProfession,
             decoration: const InputDecoration(
@@ -349,6 +501,12 @@ class _UserSurveyPageState extends State<UserSurveyPage> {
                   ),
                 )
                 .toList(),
+            validator: (value) {
+              if (value == null || value.isEmpty) {
+                return 'Please choose your profession';
+              }
+              return null;
+            },
             onChanged: (value) => setState(() => _selectedProfession = value),
           ),
           const SizedBox(height: 16),
@@ -366,6 +524,12 @@ class _UserSurveyPageState extends State<UserSurveyPage> {
                   ),
                 )
                 .toList(),
+            validator: (value) {
+              if (value == null || value.isEmpty) {
+                return 'Please select an option';
+              }
+              return null;
+            },
             onChanged: (value) => setState(() => _selectedSource = value),
           ),
         ],

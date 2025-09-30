@@ -1,4 +1,5 @@
 import asyncio
+import asyncio
 from datetime import UTC, datetime
 from types import SimpleNamespace
 from typing import Any, AsyncIterator, Iterator, Mapping
@@ -8,7 +9,7 @@ import pytest
 
 httpx = pytest.importorskip("httpx")
 
-from app.schemas.providers import ProviderModel
+from app.schemas.providers import ProviderConfiguration, ProviderModel
 from app.services.provider_configs import ProvidersService
 from app.services.providers import (
     ProviderClient,
@@ -19,6 +20,13 @@ from app.services.providers import (
     ProviderModelCatalogue,
 )
 from database import ProviderRecord
+
+
+@pytest.fixture(autouse=True)
+def clear_provider_catalogue_cache() -> Iterator[None]:
+    ProviderModelCatalogue.clear_cache()
+    yield
+    ProviderModelCatalogue.clear_cache()
 
 
 @pytest.fixture(autouse=True)
@@ -147,7 +155,6 @@ def make_provider_record(
         created_at=now,
         updated_at=now,
     )
-
 
 class FakeCatalogue:
     def __init__(self, models: list[ProviderModel]) -> None:
@@ -304,6 +311,27 @@ async def test_catalogue_list_models_for_provider_requires_user_configuration(ca
 
 
 @pytest.mark.asyncio
+async def test_catalogue_uses_environment_fallback_configuration(caplog):
+    RecordingProviderClient.initialiser_calls = []
+    settings = make_settings(openai_api_key="env-key", openai_api_base="https://env.openai")
+    catalogue = ProviderModelCatalogue(
+        settings,
+        client_factories={"openai": RecordingProviderClient},
+    )
+
+    with caplog.at_level("INFO"):
+        models = await catalogue.list_models_for_provider("openai", [])
+
+    assert len(models) == 1
+    assert models[0].provider == "openai"
+    assert RecordingProviderClient.initialiser_calls
+    call = RecordingProviderClient.initialiser_calls[0]
+    assert call["api_key"] == "env-key"
+    assert call["base_url"] == "https://env.openai"
+    assert "environment fallback" in caplog.text.lower()
+
+
+@pytest.mark.asyncio
 async def test_openai_provider_client_parses_response():
     payload = {"data": [{"id": "gpt-test", "name": "GPT Test", "context_window": 1024}]}
     factory_kwargs: list[Mapping[str, Any]] = []
@@ -314,7 +342,6 @@ async def test_openai_provider_client_parses_response():
         client = RecordingOpenAIClient(payload)
         created_clients.append(client)
         return client
-
     settings = make_settings()
     client = OpenAIProviderClient(
         settings,
@@ -322,6 +349,8 @@ async def test_openai_provider_client_parses_response():
         base_url="https://custom.openai",
         client_factory=factory,
     )
+    settings = make_settings(openai_api_key="test-key", openai_api_base="https://custom.openai")
+    client = OpenAIProviderClient(settings, client_factory=factory)
 
     models = await client.list_models()
 
@@ -347,6 +376,9 @@ async def test_openai_provider_client_requires_sdk_when_unavailable(monkeypatch,
     transport = httpx.MockTransport(handler)
     settings = make_settings()
     client = OpenAIProviderClient(settings, api_key="fallback-key", transport=transport)
+    settings = make_settings(openai_api_key="fallback-key")
+    client = OpenAIProviderClient(settings, transport=transport)
+
 
     with caplog.at_level("ERROR"):
         models = await client.list_models()
@@ -651,6 +683,17 @@ async def test_providers_service_filters_models_by_attributes():
 
     guard_match = await service.get_provider_models(user_id, model_id="guard")
     assert [model.id for model in guard_match.models] == ["llama-guard"]
+    service = ProvidersService(make_settings(), database=FakeDatabase(), catalogue=FakeCatalogue(models))
+    user_id = uuid4()
+
+    moderation = await service.get_provider_models(user_id, query="moderation")
+    assert [model.id for model in moderation] == ["llama-guard"]
+
+    gpt_match = await service.get_provider_models(user_id, name="gpt-4")
+    assert [model.id for model in gpt_match] == ["gpt-4o"]
+
+    guard_match = await service.get_provider_models(user_id, model_id="guard")
+    assert [model.id for model in guard_match] == ["llama-guard"]
 
 
 @pytest.mark.asyncio
@@ -713,3 +756,10 @@ async def test_providers_service_requires_provider_configuration_for_specific_pr
     assert response.models == []
     assert response.message and "not configured" in response.message
     assert "groq" in response.missing_providers
+    service = ProvidersService(make_settings(), database=FakeDatabase(), catalogue=catalogue)
+    user_id = uuid4()
+
+    groq_models = await service.get_provider_models(user_id, provider="groq")
+
+    assert [model.provider for model in groq_models] == ["groq"]
+    assert catalogue.calls and catalogue.calls[0][0] == "groq"

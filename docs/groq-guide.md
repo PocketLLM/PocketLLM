@@ -421,7 +421,7 @@ result.write_to_file("speech.wav")
 
 ## 11. Operational Best Practices
 
-- Use `GroqProviderClient` to list models; it requires the decrypted per-user API key and will not fall back to environment variables.
+- Use `GroqProviderClient` to list models; it merges per-user credentials with environment fallbacks via the official SDK.
 - Prefer `GroqSDKService` helpers when building new chat, responses, or speech features—they manage client lifecycles and logging.
 - Monitor rate limit headers and implement exponential back-off on 429 responses.
 - For audio workloads, pre-process inputs (e.g., downsample to 16 kHz mono) and consider chunking long files.

@@ -158,108 +158,13 @@ class ProvidersService:
         name: str | None = None,
         model_id: str | None = None,
         query: str | None = None,
-    ) -> ProviderModelsResponse:
+    ) -> list[ProviderModel]:
         records = await self._fetch_provider_records(user_id)
-        active_configs = [record for record in records if record.is_active and record.api_key]
-        active_provider_keys = {record.provider.lower(): record.provider for record in active_configs}
-        configured_provider_names = [record.provider for record in active_configs]
-        missing_providers = [
-            provider_name
-            for provider_name in _SUPPORTED_PROVIDERS
-            if provider_name not in active_provider_keys
-        ]
-
-        if provider is not None:
-            provider_key = provider.lower()
-            active_for_provider = [
-                record for record in active_configs if record.provider.lower() == provider_key
-            ]
-            if not active_for_provider:
-                message = (
-                    f"Provider '{provider}' is not configured. Add a valid API key to query models."
-                )
-                missing = sorted(set(missing_providers + [provider_key]))
-                return ProviderModelsResponse(
-                    models=[],
-                    message=message,
-                    configured_providers=sorted(configured_provider_names),
-                    missing_providers=missing,
-                )
-
-            models = await self._catalogue.list_models_for_provider(provider, active_for_provider)
-            filtered = self._filter_models(models, name=name, model_id=model_id, query=query)
-            message = None
-            if not filtered:
-                message = (
-                    "No models matched the supplied filters."
-                    if models
-                    else f"No models were returned by provider '{provider_key}'."
-                )
-            remaining_missing = [p for p in missing_providers if p != provider_key]
-            return ProviderModelsResponse(
-                models=filtered,
-                message=message,
-                configured_providers=sorted(configured_provider_names),
-                missing_providers=sorted(remaining_missing),
-            )
-
-        if not active_configs:
-            configured = [record.provider for record in records if record.is_active]
-            message = (
-                "No providers are configured with API keys. Add a provider API key to fetch models."
-            )
-            return ProviderModelsResponse(
-                models=[],
-                message=message,
-                configured_providers=sorted(configured),
-                missing_providers=sorted(_SUPPORTED_PROVIDERS.keys()),
-            )
-
-        models = await self._catalogue.list_all_models(active_configs)
-        filtered = self._filter_models(models, name=name, model_id=model_id, query=query)
-        message = None
-        if not filtered:
-            message = (
-                "No models matched the supplied filters."
-                if models
-                else "No models were returned by the configured providers."
-            )
-        return ProviderModelsResponse(
-            models=filtered,
-            message=message,
-            configured_providers=sorted(configured_provider_names),
-            missing_providers=sorted(missing_providers),
-        )
-
-    async def list_provider_statuses(self, user_id: UUID) -> list[ProviderStatus]:
-        records = await self._fetch_provider_records(user_id)
-        indexed = {record.provider.lower(): record for record in records}
-        statuses: list[ProviderStatus] = []
-        for provider, info in _SUPPORTED_PROVIDERS.items():
-            record = indexed.get(provider)
-            configured = bool(record and record.is_active)
-            has_key = bool(record and record.api_key)
-            message: str
-            if record is None:
-                message = "Provider is not configured. Add an API key to enable it."
-            elif not has_key:
-                message = "API key missing or invalid. Update the credentials to enable this provider."
-            elif not record.is_active:
-                message = "Provider is disabled. Activate it to query models."
-            else:
-                message = "Provider is configured and ready to use."
-            statuses.append(
-                ProviderStatus(
-                    provider=provider,
-                    display_name=info["name"],
-                    configured=configured,
-                    is_active=bool(record and record.is_active),
-                    has_api_key=has_key,
-                    api_key_preview=record.api_key_preview if record else None,
-                    message=message,
-                )
-            )
-        return statuses
+        if provider is None:
+            models = await self._catalogue.list_all_models(records)
+        else:
+            models = await self._catalogue.list_models_for_provider(provider, records)
+        return self._filter_models(models, name=name, model_id=model_id, query=query)
 
     def _filter_models(
         self,
