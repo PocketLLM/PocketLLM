@@ -20,9 +20,11 @@ class ProviderRecord:
     metadata: dict | None
     api_key_hash: str | None
     api_key_preview: str | None
+    api_key_encrypted: str | None
     is_active: bool
     created_at: datetime
     updated_at: datetime
+    api_key: str | None = None
 
     @classmethod
     def from_mapping(cls, data: Mapping[str, Any]) -> "ProviderRecord":
@@ -35,9 +37,11 @@ class ProviderRecord:
             metadata=dict(data.get("metadata") or {}),
             api_key_hash=data.get("api_key_hash"),
             api_key_preview=data.get("api_key_preview"),
+            api_key_encrypted=data.get("api_key_encrypted"),
             is_active=bool(data.get("is_active", False)),
             created_at=data["created_at"],
             updated_at=data["updated_at"],
+            api_key=None,
         )
 
     def to_schema(self):  # pragma: no cover - thin wrapper
@@ -53,6 +57,12 @@ class ProviderRecord:
                 "metadata": self.metadata,
                 "api_key_preview": self.api_key_preview,
                 "is_active": self.is_active,
+                "has_api_key": bool(
+                    self.api_key
+                    or self.api_key_encrypted
+                    or self.api_key_hash
+                    or self.api_key_preview
+                ),
                 "created_at": self.created_at,
                 "updated_at": self.updated_at,
             }

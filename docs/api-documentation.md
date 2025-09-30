@@ -762,37 +762,65 @@ All API responses follow a standardized format:
 
 Model operations require authentication. All responses follow the standard envelope documented above.
 
-### List Saved Models
+### Browse Provider Catalogues
 
 **GET** `/models`
 
-Retrieve all models imported into the authenticated user's workspace.
+Aggregate live models from every configured provider. The backend validates that API keys exist before invoking each official SDK and returns human-friendly guidance when configuration is missing.
+
+**Query Parameters:**
+
+| Parameter | Description |
+|-----------|-------------|
+| `provider` | Optional provider identifier (`openai`, `groq`, `openrouter`, `imagerouter`). |
+| `name`     | Case-insensitive substring filter applied to model names. |
+| `modelId`  | Case-insensitive substring filter applied to model identifiers. |
+| `query`    | Free-text search across id, name, description, and metadata. |
 
 **Response:**
 ```json
 {
-  "success": true,
-  "data": [
+  "models": [
     {
-      "id": "uuid",
-      "name": "GPT-4 Preview",
-      "provider": "openrouter",
-      "model": "openrouter/gpt-4o-mini",
-      "baseUrl": "https://openrouter.ai/api",
-      "isDefault": true,
+      "provider": "openai",
+      "id": "gpt-4o",
+      "name": "GPT-4 Omni",
+      "description": "General purpose assistant",
+      "context_window": 128000,
+      "max_output_tokens": null,
       "metadata": {
-        "description": "Balanced reasoning + speed"
-      },
-      "createdAt": "2024-02-15T10:00:00.000Z",
-      "updatedAt": "2024-02-18T12:00:00.000Z"
+        "owned_by": "openai"
+      }
     }
   ],
-  "error": null,
-  "metadata": {
-    "requestId": "uuid",
-    "timestamp": "2024-02-18T12:01:00.000Z"
-  }
+  "message": null,
+  "configured_providers": ["openai"],
+  "missing_providers": ["groq", "openrouter", "imagerouter"]
 }
+```
+
+If the user has not configured any API keys the `models` array is empty and `message` clarifies which providers still need credentials.
+
+### List Saved Models
+
+**GET** `/models/saved`
+
+Return the models that the user has explicitly imported into their workspace.
+
+**Response:**
+```json
+[
+  {
+    "id": "uuid",
+    "name": "GPT-4 Preview",
+    "provider": "openrouter",
+    "model": "openrouter/gpt-4o-mini",
+    "isDefault": true,
+    "description": "Balanced reasoning + speed",
+    "createdAt": "2024-02-15T10:00:00.000Z",
+    "updatedAt": "2024-02-18T12:00:00.000Z"
+  }
+]
 ```
 
 ### Import Models From a Provider
@@ -902,7 +930,26 @@ Marks the provider inactive and erases stored API key material.
 
 **GET** `/providers/{provider}/models`
 
-Fetch the catalog of available models from the remote provider configuration. Supports an optional `search` query parameter for client-side filtering.
+Fetch the catalog of available models from a specific provider. The response format mirrors `GET /models` so the UI can treat both endpoints uniformly.
+
+**Response:**
+```json
+{
+  "models": [
+    {
+      "provider": "groq",
+      "id": "llama-guard",
+      "name": "LLaMA Guard",
+      "metadata": {
+        "capabilities": ["moderation"]
+      }
+    }
+  ],
+  "message": null,
+  "configured_providers": ["groq"],
+  "missing_providers": []
+}
+```
 
 ---
 

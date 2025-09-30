@@ -116,8 +116,29 @@ class OpenAIProviderClient(ProviderClient):
         api_base = getattr(self._settings, "openai_api_base", None)
         return api_base or self.default_base_url
 
-    def _get_api_key(self) -> str | None:  # pragma: no cover - simple accessor
-        return self._api_key_override or getattr(self._settings, "openai_api_key", None)
+    async def list_models(self) -> list[ProviderModel]:
+        if AsyncOpenAI is None and self._client_factory is _default_client_factory:
+            self._logger.error(
+                "OpenAI SDK is not installed; cannot list models. Install it via 'pip install openai'."
+            )
+            return []
+
+        api_key = self._get_api_key()
+        if self.requires_api_key and not api_key:
+            self._logger.warning("Skipping %s provider because credentials are not configured", self.provider)
+            return []
+
+        client_kwargs = _build_client_kwargs(api_key, self.base_url, self.metadata)
+        try:
+            async with _client_context(self._client_factory, **client_kwargs) as client:
+                payload = await client.models.list()
+        except OpenAIError as exc:  # pragma: no cover - depends on SDK runtime
+            self._logger.error("OpenAI SDK request failed: %s", exc)
+            return []
+        except Exception:  # pragma: no cover - defensive catch-all
+            self._logger.exception("Unexpected error while fetching models from %s", self.provider)
+            return []
+        return self._parse_models(payload)
 
     async def list_models(self) -> list[ProviderModel]:
         if AsyncOpenAI is None and self._client_factory is _default_client_factory:

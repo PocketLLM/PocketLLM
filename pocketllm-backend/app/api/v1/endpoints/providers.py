@@ -10,7 +10,8 @@ from app.schemas.providers import (
     ProviderActivationRequest,
     ProviderActivationResponse,
     ProviderConfiguration,
-    ProviderModel,
+    ProviderModelsResponse,
+    ProviderStatus,
     ProviderUpdateRequest,
 )
 from app.services.provider_configs import ProvidersService
@@ -26,6 +27,16 @@ async def list_providers(
 ) -> list[ProviderConfiguration]:
     service = ProvidersService(settings=settings, database=database)
     return await service.list_providers(user.sub)
+
+
+@router.get("/status", response_model=list[ProviderStatus], summary="Get provider configuration status")
+async def provider_status(
+    user: TokenPayload = Depends(get_current_request_user),
+    settings=Depends(get_settings_dependency),
+    database=Depends(get_database_dependency),
+) -> list[ProviderStatus]:
+    service = ProvidersService(settings=settings, database=database)
+    return await service.list_provider_statuses(user.sub)
 
 
 @router.post("/activate", response_model=ProviderActivationResponse, summary="Activate provider")
@@ -62,12 +73,12 @@ async def deactivate_provider(
     await service.deactivate_provider(user.sub, provider)
 
 
-@router.get("/{provider}/models", response_model=list[ProviderModel], summary="List available provider models")
+@router.get("/{provider}/models", response_model=ProviderModelsResponse, summary="List available provider models")
 async def list_provider_models(
     provider: str,
     user: TokenPayload = Depends(get_current_request_user),
     settings=Depends(get_settings_dependency),
     database=Depends(get_database_dependency),
-) -> list[ProviderModel]:
+) -> ProviderModelsResponse:
     service = ProvidersService(settings=settings, database=database)
     return await service.get_provider_models(user.sub, provider)

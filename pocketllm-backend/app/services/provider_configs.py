@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import logging
+from dataclasses import replace
 from typing import Any
 from uuid import UUID
 
@@ -9,16 +11,20 @@ from fastapi import HTTPException, status
 
 from app.core.config import Settings
 from app.core.database import Database
-from database import ProviderRecord
 from app.schemas.providers import (
     ProviderActivationRequest,
     ProviderActivationResponse,
     ProviderConfiguration,
     ProviderModel,
+    ProviderModelsResponse,
+    ProviderStatus,
     ProviderUpdateRequest,
 )
+from app.services.api_keys import APIKeyValidationService
 from app.services.providers import ProviderModelCatalogue
+from app.utils import decrypt_secret, encrypt_secret
 from app.utils.security import hash_secret, mask_secret
+from database import ProviderRecord
 
 
 class ProvidersService:
@@ -34,6 +40,8 @@ class ProvidersService:
         self._settings = settings
         self._database = database
         self._catalogue = catalogue or ProviderModelCatalogue(settings)
+        self._validator = APIKeyValidationService(settings)
+        self._logger = logging.getLogger("app.services.provider_configs")
 
     async def list_providers(self, user_id: UUID) -> list[ProviderConfiguration]:
         records = await self._fetch_provider_records(user_id)
@@ -44,8 +52,21 @@ class ProvidersService:
         user_id: UUID,
         payload: ProviderActivationRequest,
     ) -> ProviderActivationResponse:
+        try:
+            await self._validator.validate(
+                payload.provider,
+                payload.api_key,
+                base_url=payload.base_url,
+                metadata=payload.metadata,
+            )
+        except ValueError as exc:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+        except RuntimeError as exc:
+            raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(exc)) from exc
+
         api_key_hash = hash_secret(payload.api_key)
         api_key_preview = mask_secret(payload.api_key)
+        api_key_encrypted = encrypt_secret(payload.api_key, self._settings)
         provider_payload = {
             "user_id": str(user_id),
             "provider": payload.provider,
@@ -53,6 +74,7 @@ class ProvidersService:
             "metadata": payload.metadata or {},
             "api_key_hash": api_key_hash,
             "api_key_preview": api_key_preview,
+            "api_key_encrypted": api_key_encrypted,
             "is_active": True,
         }
         records = await self._database.upsert(
@@ -66,10 +88,40 @@ class ProvidersService:
         return ProviderActivationResponse(provider=provider)
 
     async def update_provider(self, user_id: UUID, provider: str, payload: ProviderUpdateRequest) -> ProviderConfiguration:
-        updates: dict[str, Any] = {k: v for k, v in payload.model_dump().items() if v is not None}
-        if "api_key" in updates:
-            api_key = updates.pop("api_key")
-            updates.update({"api_key_hash": hash_secret(api_key), "api_key_preview": mask_secret(api_key)})
+        provided_fields = payload.model_dump(exclude_unset=True)
+        updates: dict[str, Any] = {
+            key: value for key, value in payload.model_dump().items() if value is not None and key != "api_key"
+        }
+        if "api_key" in provided_fields:
+            api_key = provided_fields.get("api_key")
+            if api_key is None:
+                updates.update(
+                    {
+                        "api_key_hash": None,
+                        "api_key_preview": None,
+                        "api_key_encrypted": None,
+                    }
+                )
+            else:
+                try:
+                    await self._validator.validate(
+                        provider,
+                        api_key,
+                        base_url=payload.base_url,
+                        metadata=payload.metadata,
+                    )
+                except ValueError as exc:
+                    raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+                except RuntimeError as exc:
+                    raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(exc)) from exc
+
+                updates.update(
+                    {
+                        "api_key_hash": hash_secret(api_key),
+                        "api_key_preview": mask_secret(api_key),
+                        "api_key_encrypted": encrypt_secret(api_key, self._settings),
+                    }
+                )
         if not updates:
             records = await self._database.select(
                 "providers",
@@ -152,7 +204,27 @@ class ProvidersService:
             filters={"user_id": str(user_id)},
             order_by=[("created_at", True)],
         )
-        return [ProviderRecord.from_mapping(record) for record in records]
+        decrypted: list[ProviderRecord] = []
+        for record in records:
+            provider_record = ProviderRecord.from_mapping(record)
+            api_key: str | None = None
+            if provider_record.api_key_encrypted:
+                try:
+                    api_key = decrypt_secret(provider_record.api_key_encrypted, self._settings)
+                except RuntimeError as exc:
+                    self._logger.error(
+                        "Failed to decrypt API key for provider %s: %s", provider_record.provider, exc
+                    )
+            decrypted.append(replace(provider_record, api_key=api_key))
+        return decrypted
 
 
 __all__ = ["ProvidersService"]
+
+
+_SUPPORTED_PROVIDERS: dict[str, dict[str, str]] = {
+    "openai": {"name": "OpenAI"},
+    "groq": {"name": "Groq"},
+    "openrouter": {"name": "OpenRouter"},
+    "imagerouter": {"name": "ImageRouter"},
+}

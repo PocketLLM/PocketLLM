@@ -142,14 +142,37 @@ class ProviderModelCatalogue:
                     api_key=api_key,
                     metadata=metadata,
                 )
-
-        for provider_name, fallback in self._build_fallback_configs().items():
-            if provider_name in configs:
+        for item in providers:
+            provider = getattr(item, "provider", None)
+            if not provider:
                 continue
-            configs[provider_name] = fallback
-            self._logger.info(
-                "Using environment fallback credentials for %s provider catalogue", provider_name
-            )
+
+            provider_key = str(provider).lower()
+            is_active = bool(getattr(item, "is_active", False))
+            if not is_active:
+                self._logger.debug("Skipping provider %s because it is inactive", provider_key)
+                continue
+
+            direct_key = getattr(item, "api_key", None)
+            if not isinstance(direct_key, str) or not direct_key.strip():
+                self._logger.warning(
+                    "Provider %s has no configured API key; user configuration is required to fetch models",
+                    provider_key,
+                )
+                continue
+
+            base_url = getattr(item, "base_url", None)
+            metadata_obj = getattr(item, "metadata", None)
+            metadata: Mapping[str, Any] | None = None
+            if isinstance(metadata_obj, Mapping):
+                metadata = metadata_obj
+
+            configs[provider_key] = _ProviderConfig(
+                provider=provider_key,
+                base_url=base_url,
+                api_key=direct_key.strip(),
+                metadata=metadata,
+
         return configs
 
     def _build_fallback_configs(self) -> dict[str, _ProviderConfig]:

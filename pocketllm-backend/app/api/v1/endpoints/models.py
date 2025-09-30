@@ -17,14 +17,14 @@ from app.schemas.models import (
     ModelDefaultRequest,
     ModelImportRequest,
 )
-from app.schemas.providers import ProviderModel
+from app.schemas.providers import ProviderModelsResponse
 from app.services.models import ModelsService
 from app.services.provider_configs import ProvidersService
 
 router = APIRouter(prefix="/models", tags=["models"])
 
 
-@router.get("", response_model=list[ProviderModel], summary="List provider models")
+@router.get("", response_model=ProviderModelsResponse, summary="List provider models")
 async def list_models(
     user: TokenPayload = Depends(get_current_request_user),
     settings=Depends(get_settings_dependency),

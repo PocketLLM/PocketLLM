@@ -6,6 +6,7 @@ httpx
 groq
 openai
 openrouter
+cryptography
 asyncpg
 supabase
 passlib[bcrypt]

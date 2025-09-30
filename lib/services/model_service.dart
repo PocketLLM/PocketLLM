@@ -119,7 +119,48 @@ class ModelService {
 
   Future<List<ProviderConnection>> getProviders() async {
     try {
-      return await _remoteModelService.getProviders();
+      final configurations = await _remoteModelService.getProviderConfigurations();
+      final statuses = await _remoteModelService.getProviderStatuses();
+      final configurationMap = {for (final config in configurations) config.provider: config};
+
+      final merged = statuses.map((status) {
+        final config = configurationMap[status.provider];
+        return ProviderConnection(
+          id: config?.id ?? '',
+          provider: status.provider,
+          displayName: status.displayName,
+          baseUrl: config?.baseUrl ?? status.provider.defaultBaseUrl,
+          isActive: status.isActive,
+          hasApiKey: status.hasApiKey,
+          apiKeyPreview: status.apiKeyPreview,
+          metadata: config?.metadata,
+          statusMessage: status.message,
+        );
+      }).toList();
+
+      final knownProviders = {for (final connection in merged) connection.provider};
+      for (final provider in [ModelProvider.ollama, ModelProvider.anthropic]) {
+        if (knownProviders.contains(provider)) continue;
+        merged.add(
+          ProviderConnection(
+            id: '',
+            provider: provider,
+            displayName: provider.displayName,
+            baseUrl: provider.defaultBaseUrl,
+            isActive: provider == ModelProvider.ollama,
+            hasApiKey: provider == ModelProvider.ollama,
+            apiKeyPreview: null,
+            metadata: const {},
+            statusMessage: provider == ModelProvider.ollama
+                ? 'Local Ollama models are managed on this device.'
+                : 'Provider configuration not yet available.',
+          ),
+        );
+      }
+
+      merged.sort((a, b) => a.displayName.compareTo(b.displayName));
+
+      return merged;
     } catch (e) {
       debugPrint('Failed to load providers: $e');
       rethrow;
@@ -311,6 +352,16 @@ class ModelService {
           );
           return response.statusCode == 200;
 
+        case ModelProvider.groq:
+          final response = await http.get(
+            Uri.parse('${config.baseUrl}/models'),
+            headers: {
+              'Authorization': 'Bearer ${config.apiKey}',
+              'Content-Type': 'application/json',
+            },
+          );
+          return response.statusCode == 200;
+
         case ModelProvider.anthropic:
           final response = await http.get(
             Uri.parse('${config.baseUrl}/v1/models'),
@@ -325,6 +376,17 @@ class ModelService {
         case ModelProvider.openRouter:
           final response = await http.get(
             Uri.parse('${config.baseUrl}/v1/models'),
+            headers: {
+              'Authorization': 'Bearer ${config.apiKey}',
+              'Content-Type': 'application/json',
+            },
+          );
+          return response.statusCode == 200;
+
+        case ModelProvider.imageRouter:
+          // Add implementation for ImageRouter connection test
+          final response = await http.get(
+            Uri.parse('${config.baseUrl}/models'),
             headers: {
               'Authorization': 'Bearer ${config.apiKey}',
               'Content-Type': 'application/json',
