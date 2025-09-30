@@ -383,6 +383,17 @@ class ModelService {
           );
           return response.statusCode == 200;
 
+        case ModelProvider.imageRouter:
+          // Add implementation for ImageRouter connection test
+          final response = await http.get(
+            Uri.parse('${config.baseUrl}/models'),
+            headers: {
+              'Authorization': 'Bearer ${config.apiKey}',
+              'Content-Type': 'application/json',
+            },
+          );
+          return response.statusCode == 200;
+
         case ModelProvider.mistral:
           final response = await http.get(
             Uri.parse('${config.baseUrl}/models'),
