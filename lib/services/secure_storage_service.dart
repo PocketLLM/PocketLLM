@@ -1,3 +1,8 @@
+/// File Overview:
+/// - Purpose: Client-side vault for encrypting API keys and provider metadata
+///   using Flutter secure storage.
+/// - Backend Migration: Replace with backend-managed credential storage to
+///   avoid persisting secrets on devices.
 import 'dart:convert';
 import 'dart:math';
 import 'dart:typed_data';
@@ -409,7 +414,12 @@ class SecureStorageService {
         return apiKey.startsWith('sk-') && apiKey.length >= 20
             ? ApiKeyValidationResult.valid
             : ApiKeyValidationResult.invalid;
-            
+
+      case ModelProvider.groq:
+        return apiKey.startsWith('gsk_') && apiKey.length >= 20
+            ? ApiKeyValidationResult.valid
+            : ApiKeyValidationResult.invalid;
+
       case ModelProvider.anthropic:
         return apiKey.startsWith('sk-ant-') && apiKey.length >= 20
             ? ApiKeyValidationResult.valid

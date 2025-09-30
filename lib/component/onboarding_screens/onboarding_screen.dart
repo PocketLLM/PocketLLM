@@ -1,7 +1,11 @@
+/// File Overview:
+/// - Purpose: Hosts the onboarding pager and transitions to authentication.
+/// - Backend Migration: Keep but update completion flow once backend dictates
+///   whether onboarding is required.
 import 'package:flutter/material.dart';
 import 'package:smooth_page_indicator/smooth_page_indicator.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import '../home_screen.dart';
+import '../../pages/auth/auth_flow_screen.dart';
 import 'first_screen.dart';
 import 'second_screen.dart';
 import 'third_screen.dart';
@@ -26,11 +30,12 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   void _onDonePressed() async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool('showHome', true);
+    await prefs.remove('authSkipped');
     if (!mounted) return;
     Navigator.pushReplacement(
       context,
       MaterialPageRoute(
-        builder: (context) => HomeScreen(),
+        builder: (context) => const AuthFlowScreen(),
       ),
     );
   }

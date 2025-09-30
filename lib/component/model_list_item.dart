@@ -1,3 +1,7 @@
+/// File Overview:
+/// - Purpose: Visual representation of a model configuration with actions to
+///   edit, select, or delete.
+/// - Backend Migration: Keep UI but rely on backend-managed models for data.
 import 'package:flutter/material.dart';
 import '../component/models.dart';
 import 'model_config_dialog.dart';
@@ -127,9 +131,21 @@ class ModelListItem extends StatelessWidget {
         iconData = Icons.auto_awesome;
         iconColor = Colors.green;
         break;
+      case ModelProvider.groq:
+        iconData = Icons.flash_on;
+        iconColor = Colors.deepOrange;
+        break;
       case ModelProvider.anthropic:
         iconData = Icons.psychology;
         iconColor = Colors.purple;
+        break;
+      case ModelProvider.openRouter:
+        iconData = Icons.route;
+        iconColor = Colors.deepPurple;
+        break;
+      case ModelProvider.imageRouter:
+        iconData = Icons.image;
+        iconColor = Colors.orangeAccent;
         break;
       case ModelProvider.lmStudio:
         iconData = Icons.science;

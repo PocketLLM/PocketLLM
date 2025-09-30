@@ -1,3 +1,8 @@
+/// File Overview:
+/// - Purpose: Interactive UI widget that renders model selection controls with
+///   optional health indicators.
+/// - Backend Migration: Keep UI but ensure data is sourced from backend-driven
+///   model state rather than local caches.
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'models.dart';
@@ -539,9 +544,21 @@ class _ModelSelectorState extends State<ModelSelector> {
         iconData = Icons.auto_awesome;
         iconColor = Colors.blue;
         break;
+      case ModelProvider.groq:
+        iconData = Icons.flash_on;
+        iconColor = Colors.deepOrange;
+        break;
       case ModelProvider.anthropic:
         iconData = Icons.psychology;
         iconColor = Colors.purple;
+        break;
+      case ModelProvider.openRouter:
+        iconData = Icons.route;
+        iconColor = Colors.deepPurple;
+        break;
+      case ModelProvider.imageRouter:
+        iconData = Icons.image;
+        iconColor = Colors.orangeAccent;
         break;
       case ModelProvider.lmStudio:
         iconData = Icons.science;

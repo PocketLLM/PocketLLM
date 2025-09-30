@@ -1,3 +1,8 @@
+/// File Overview:
+/// - Purpose: Experimental helper that attempts to launch and automate Termux
+///   on Android devices to execute shell commands from the UI.
+/// - Backend Migration: Likely obsolete; backend job runners should own command
+///   execution rather than relying on device-level automation.
 import 'package:url_launcher/url_launcher.dart';
 import 'package:flutter/material.dart';
 import 'dart:io';

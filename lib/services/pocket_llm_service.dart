@@ -1,11 +1,22 @@
+/// File Overview:
+/// - Purpose: Legacy client-side service that stores API keys locally and
+///   performs direct HTTP calls to PocketLLM endpoints with hardcoded fallback
+///   models and responses.
+/// - Backend Migration: Mark for removal once backend-managed authentication,
+///   model discovery, and chat completion endpoints are wired through a single
+///   gateway.
 import 'dart:convert';
+
 import 'package:flutter/material.dart';
-import 'package:http/http.dart' as http;
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:http/http.dart' as http;
+
 import '../component/models.dart';
+import 'api_config.dart';
+import 'api_endpoints.dart';
 
 class PocketLLMService {
-  static const String baseUrl = 'https://api.sree.shop/v1';
+  static final String baseUrl = ApiEndpoints.resolveBaseUrl(apiBaseUrl);
   static const _secureStorage = FlutterSecureStorage();
   static const String _apiKeyKey = 'pocketllm_api_key';
 
@@ -56,7 +67,11 @@ class PocketLLMService {
       }
 
       final response = await http.get(
-        Uri.parse('$baseUrl/models'),
+        ApiEndpoints.buildUri(
+          '/models',
+          includeApiSuffix: false,
+          overrideBaseUrl: baseUrl,
+        ),
         headers: {
           'Authorization': 'Bearer $apiKey',
           'Content-Type': 'application/json',
@@ -117,7 +132,11 @@ class PocketLLMService {
       messages.add({'role': 'user', 'content': userMessage});
 
       // Ensure the full URL is constructed correctly
-      final uri = Uri.parse('$baseUrl/chat/completions');
+      final uri = ApiEndpoints.buildUri(
+        '/chat/completions',
+        includeApiSuffix: false,
+        overrideBaseUrl: baseUrl,
+      );
       debugPrint('Making request to: $uri');
 
       final response = await http.post(
@@ -172,7 +191,11 @@ class PocketLLMService {
       }
 
       final response = await http.get(
-        Uri.parse('${config.baseUrl}/models'),
+        ApiEndpoints.buildUri(
+          '/models',
+          includeApiSuffix: false,
+          overrideBaseUrl: config.baseUrl,
+        ),
         headers: {
           'Authorization': 'Bearer $apiKey',
           'Content-Type': 'application/json',

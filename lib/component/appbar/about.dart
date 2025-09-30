@@ -1,3 +1,7 @@
+/// File Overview:
+/// - Purpose: Static About page describing PocketLLM mission and links.
+/// - Backend Migration: Keep but refresh copy once backend-driven feature list
+///   stabilizes.
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'dart:ui';

@@ -1,3 +1,6 @@
+/// File Overview:
+/// - Purpose: Direct Tavily search client called from the chat interface.
+/// - Backend Migration: Remove once backend exposes a secure search proxy.
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';

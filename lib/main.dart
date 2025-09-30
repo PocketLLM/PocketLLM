@@ -1,27 +1,32 @@
+/// File Overview:
+/// - Purpose: Entry point that wires up lifecycle, theming, authentication, and
+///   bootstrapping so the Flutter shell can render the chat experience.
+/// - Backend Migration: Keep this file but plan to remove direct API key
+///   initialization and inline fallback flows once the backend exposes managed
+///   configuration endpoints.
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'component/splash_screen.dart';
 import 'component/home_screen.dart';
 import 'component/onboarding_screens/onboarding_screen.dart';
-import 'services/local_db_service.dart';
+import 'pages/auth/auth_flow_screen.dart';
 import 'package:pocketllm/services/pocket_llm_service.dart';
 import 'services/model_state.dart';
 import 'services/error_service.dart';
 import 'services/app_lifecycle_service.dart';
+import 'services/auth_state.dart';
+import 'services/theme_service.dart';
 
 import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:async';
+import 'package:provider/provider.dart';
 
 // Initialize core services that need to be available before lifecycle service
 Future<void> _initializeCoreServices() async {
   try {
-    // Initialize LocalDBService
-    final localDBService = LocalDBService();
-    await localDBService.initialize();
-
     // Initialize API key
     await PocketLLMService.initializeApiKey();
-    
+
     // Initialize model state
     await ModelState().init();
   } catch (e, stackTrace) {
@@ -36,17 +41,31 @@ Future<void> _initializeCoreServices() async {
   }
 }
 
+Widget _buildApp(AppLifecycleService appLifecycleService, {String? initializationError}) {
+  return MultiProvider(
+    providers: [
+      ChangeNotifierProvider(create: (_) => AuthState()),
+    ],
+    child: MyApp(
+      appLifecycleService: appLifecycleService,
+      initializationError: initializationError,
+    ),
+  );
+}
+
 void main() async {
   // Catch any errors that occur during app initialization
   await runZonedGuarded(() async {
     WidgetsFlutterBinding.ensureInitialized();
-    
+
     // Set preferred orientations
     await SystemChrome.setPreferredOrientations([
       DeviceOrientation.portraitUp,
       DeviceOrientation.portraitDown,
     ]);
-    
+
+    await ThemeService().init();
+
     // Initialize app lifecycle service
     final appLifecycleService = AppLifecycleService();
     
@@ -59,7 +78,7 @@ void main() async {
       
       if (initializationSuccess) {
         // Run the app with successful initialization
-        runApp(MyApp(appLifecycleService: appLifecycleService));
+        runApp(_buildApp(appLifecycleService));
       } else {
         // Run the app with initialization errors
         final summary = appLifecycleService.getInitializationSummary();
@@ -68,8 +87,8 @@ void main() async {
             .map((r) => r['service'])
             .join(', ');
         
-        runApp(MyApp(
-          appLifecycleService: appLifecycleService,
+        runApp(_buildApp(
+          appLifecycleService,
           initializationError: 'Failed to initialize services: $failedServices',
         ));
       }
@@ -84,8 +103,8 @@ void main() async {
       );
       
       // Still run the app, but with a fallback to show an error message
-      runApp(MyApp(
-        appLifecycleService: appLifecycleService,
+      runApp(_buildApp(
+        appLifecycleService,
         initializationError: error.toString(),
       ));
     }
@@ -104,7 +123,7 @@ void main() async {
 class MyApp extends StatelessWidget {
   final AppLifecycleService appLifecycleService;
   final String? initializationError;
-  
+
   const MyApp({
     required this.appLifecycleService,
     this.initializationError,
@@ -113,23 +132,25 @@ class MyApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'PocketLLM',
-      theme: ThemeData(
-        primarySwatch: Colors.purple,
-        primaryColor: Colors.purple,
-        colorScheme: ColorScheme.fromSeed(
-          seedColor: Colors.purple,
-          brightness: Brightness.light,
-        ),
-      ),
-      debugShowCheckedModeBanner: false,
-      home: initializationError != null
-          ? ErrorScreen(
-              error: initializationError!,
-              appLifecycleService: appLifecycleService,
-            )
-          : SplashLoader(appLifecycleService: appLifecycleService),
+    return AnimatedBuilder(
+      animation: ThemeService(),
+      builder: (context, _) {
+        final themeService = ThemeService();
+
+        return MaterialApp(
+          title: 'PocketLLM',
+          theme: themeService.lightTheme,
+          darkTheme: themeService.darkTheme,
+          themeMode: ThemeMode.light,
+          debugShowCheckedModeBanner: false,
+          home: initializationError != null
+              ? ErrorScreen(
+                  error: initializationError!,
+                  appLifecycleService: appLifecycleService,
+                )
+              : SplashLoader(appLifecycleService: appLifecycleService),
+        );
+      },
     );
   }
 }
@@ -157,6 +178,11 @@ class _ErrorScreenState extends State<ErrorScreen> {
   Widget build(BuildContext context) {
     final summary = widget.appLifecycleService.getInitializationSummary();
     
+    // Check if the error is specifically related to network connectivity
+    bool isNetworkError = widget.error.contains('Failed host lookup') || 
+                         widget.error.contains('SocketException') ||
+                         widget.error.contains('Unable to connect');
+    
     return Scaffold(
       body: SafeArea(
         child: Padding(
@@ -164,18 +190,24 @@ class _ErrorScreenState extends State<ErrorScreen> {
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              const Icon(Icons.error_outline, color: Colors.red, size: 64),
+              Icon(
+                isNetworkError ? Icons.wifi_off : Icons.error_outline, 
+                color: isNetworkError ? Colors.orange : Colors.red, 
+                size: 64
+              ),
               const SizedBox(height: 16),
-              const Text(
-                'Initialization Error',
-                style: TextStyle(
+              Text(
+                isNetworkError ? 'Network Connection Required' : 'Initialization Error',
+                style: const TextStyle(
                   fontSize: 20,
                   fontWeight: FontWeight.bold,
                 ),
               ),
               const SizedBox(height: 8),
               Text(
-                'The app encountered errors during initialization. Some features may not work properly.',
+                isNetworkError 
+                  ? 'Some features require an internet connection. You can still use local models offline.'
+                  : 'The app encountered errors during initialization. Some features may not work properly.',
                 textAlign: TextAlign.center,
                 style: TextStyle(color: Colors.grey[600]),
               ),
@@ -193,7 +225,7 @@ class _ErrorScreenState extends State<ErrorScreen> {
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        Text('Services Initialized:'),
+                        const Text('Services Initialized:'),
                         Text('${summary['successfulServices']}/${summary['totalServices']}'),
                       ],
                     ),
@@ -201,10 +233,42 @@ class _ErrorScreenState extends State<ErrorScreen> {
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        Text('Failed Services:'),
+                        const Text('Failed Services:'),
                         Text('${summary['failedServices']}', 
-                             style: TextStyle(color: Colors.red)),
+                             style: const TextStyle(color: Colors.red)),
                       ],
+                    ),
+                  ],
+                ),
+              ),
+              
+              const SizedBox(height: 16),
+              
+              // Additional information about offline mode
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: isNetworkError ? Colors.orange[50] : Colors.blue[50],
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Column(
+                  children: [
+                    Text(
+                      isNetworkError ? 'Offline Mode Available' : 'Offline Mode',
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        color: isNetworkError ? Colors.orange : Colors.blue,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      isNetworkError
+                        ? 'You can still use PocketLLM with local models like Ollama even when offline. '
+                          'Connect to the internet and try again to access remote features.'
+                        : 'You can still use PocketLLM with local models. '
+                          'Some features may be limited until the initialization issues are resolved.',
+                      style: TextStyle(color: isNetworkError ? Colors.orange[800] : Colors.blue[800]),
+                      textAlign: TextAlign.center,
                     ),
                   ],
                 ),
@@ -238,7 +302,7 @@ class _ErrorScreenState extends State<ErrorScreen> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text(
+                          const Text(
                             'Initialization Details:',
                             style: TextStyle(fontWeight: FontWeight.bold),
                           ),
@@ -257,7 +321,7 @@ class _ErrorScreenState extends State<ErrorScreen> {
                                   Expanded(
                                     child: Text(
                                       '${result['service']}: ${result['success'] ? 'Success' : result['error'] ?? 'Failed'} (${result['timeMs']}ms)',
-                                      style: TextStyle(fontSize: 12),
+                                      style: const TextStyle(fontSize: 12),
                                     ),
                                   ),
                                 ],
@@ -302,7 +366,7 @@ class _ErrorScreenState extends State<ErrorScreen> {
                           ),
                         );
                       },
-                      child: const Text('Continue Anyway'),
+                      child: const Text('Continue Offline'),
                     ),
                   ),
                 ],
@@ -402,13 +466,25 @@ class _SplashLoaderState extends State<SplashLoader> {
 
       // Check onboarding status
       final prefs = await SharedPreferences.getInstance();
+      final authState = Provider.of<AuthState>(context, listen: false);
+      await authState.ready;
+
       final bool showHome = prefs.getBool('showHome') ?? false;
 
-      // Navigate to appropriate screen
+      Widget destination;
+      if (!showHome) {
+        destination = const OnboardingScreen();
+      } else if (!authState.isServiceAvailable) {
+        destination = const HomeScreen();
+      } else if (authState.isAuthenticated) {
+        destination = const HomeScreen();
+      } else {
+        final skipped = prefs.getBool('authSkipped') ?? false;
+        destination = skipped ? const HomeScreen() : const AuthFlowScreen();
+      }
+
       Navigator.of(context).pushReplacement(
-        MaterialPageRoute(
-          builder: (context) => showHome ? const HomeScreen() : const OnboardingScreen(),
-        ),
+        MaterialPageRoute(builder: (context) => destination),
       );
     } catch (e, stackTrace) {
       // Log the error

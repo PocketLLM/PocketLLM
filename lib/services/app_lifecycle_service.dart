@@ -1,3 +1,8 @@
+/// File Overview:
+/// - Purpose: Coordinates service initialization order and tracks lifecycle
+///   state transitions for the Flutter shell.
+/// - Backend Migration: Keep but ensure initialization list reflects backend
+///   driven services instead of legacy client-only helpers.
 import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
@@ -63,7 +68,6 @@ class AppLifecycleService extends ChangeNotifier with WidgetsBindingObserver {
       final services = [
         ('ErrorService', _initializeErrorService),
         ('NetworkService', _initializeNetworkService),
-        ('LocalDBService', _initializeLocalDBService),
         ('ModelState', _initializeModelState),
         ('PocketLLMService', _initializePocketLLMService),
       ];
@@ -172,16 +176,6 @@ class AppLifecycleService extends ChangeNotifier with WidgetsBindingObserver {
       final networkService = NetworkService();
       await networkService.initialize();
       _serviceInstances['NetworkService'] = networkService;
-      return true;
-    } catch (e) {
-      return false;
-    }
-  }
-  
-  Future<bool> _initializeLocalDBService() async {
-    try {
-      // We'll handle this initialization in main.dart to avoid circular imports
-      // For now, just mark as successful
       return true;
     } catch (e) {
       return false;

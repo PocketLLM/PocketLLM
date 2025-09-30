@@ -1,4 +1,9 @@
- import 'package:flutter/material.dart';
+/// File Overview:
+/// - Purpose: Alternate search configuration screen persisting provider API
+///   keys locally.
+/// - Backend Migration: Consolidate with backend-managed search settings and
+///   remove local storage of secrets.
+import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:uuid/uuid.dart';
 import 'dart:convert';

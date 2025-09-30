@@ -1,12 +1,15 @@
+/// File Overview:
+/// - Purpose: Manages chat conversations locally using shared preferences and
+///   exposes notifiers for UI updates.
+/// - Backend Migration: Replace persistence with backend conversation APIs so
+///   history is synchronized across devices.
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../component/models.dart';
-import 'local_db_service.dart';
 
 class ChatHistoryService {
   static const String _localChatHistoryKey = 'chat_conversations';
-  final LocalDBService _localDBService = LocalDBService();
   
   // Cached conversations
   List<Conversation> _cachedConversations = [];

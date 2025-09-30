@@ -1,14 +1,20 @@
+/// File Overview:
+/// - Purpose: Settings hub that links to theming, profile, model, and API key
+///   configuration screens.
+/// - Backend Migration: Keep but audit sections that reference local-only
+///   features (e.g., direct model saves) as backend ownership grows.
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import 'dart:ui';
 import 'settings/profile_settings.dart';
 import '../component/model_config_dialog.dart';
 import 'model_settings_page.dart';
 import 'api_keys_page.dart';
+import 'auth/auth_flow_screen.dart';
 import '../services/model_service.dart';
-import '../services/auth_service.dart';
 import '../services/theme_service.dart';
+import '../services/auth_state.dart';
 import 'search_settings_page.dart';
-import '../services/local_db_service.dart';
 import '../component/models.dart';
 
 class SettingsPage extends StatefulWidget {
@@ -19,7 +25,6 @@ class SettingsPage extends StatefulWidget {
 }
 
 class _SettingsPageState extends State<SettingsPage> {
-  final _authService = AuthService();
   final ModelService _modelService = ModelService();
 
   @override
@@ -63,6 +68,12 @@ class _SettingsPageState extends State<SettingsPage> {
             iconColor: Colors.blue,
             title: 'Profile Settings',
             subtitle: 'Manage your account and preferences',
+            onTap: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (context) => const ProfileSettingsPage()),
+              );
+            },
           ),
           _buildSettingsItem(
             icon: Icons.notifications_outlined,
@@ -491,10 +502,13 @@ class _SettingsPageState extends State<SettingsPage> {
           );
           
           if (shouldLogout == true) {
-            // Perform logout
-            await _authService.signOut();
-            // Navigate to login screen
-            Navigator.of(context).pushNamedAndRemoveUntil('/', (route) => false);
+            final authState = context.read<AuthState>();
+            await authState.signOut();
+            if (!mounted) return;
+            Navigator.of(context).pushAndRemoveUntil(
+              MaterialPageRoute(builder: (_) => const AuthFlowScreen()),
+              (route) => false,
+            );
           }
         },
         style: ElevatedButton.styleFrom(

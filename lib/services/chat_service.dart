@@ -1,3 +1,8 @@
+/// File Overview:
+/// - Purpose: Routes chat requests from the UI directly to various model
+///   providers with provider-specific HTTP implementations.
+/// - Backend Migration: Deprecate once all chat generation flows are proxied
+///   through backend orchestration.
 import 'dart:convert';
 import 'dart:async';
 import 'package:flutter/material.dart';
@@ -49,17 +54,22 @@ class ChatService {
           debugPrint('Using PocketLLM service');
           response = await PocketLLMService.getPocketLLMResponse(modelConfig, userMessage);
           break;
-          
+
         case ModelProvider.ollama:
           debugPrint('Using Ollama service');
           response = await _getOllamaResponse(modelConfig, userMessage, false, null);
           break;
-          
+
         case ModelProvider.openAI:
           debugPrint('Using OpenAI service');
           response = await _getOpenAIResponse(modelConfig, userMessage, false, null);
           break;
-          
+
+        case ModelProvider.groq:
+          debugPrint('Using Groq service');
+          response = await _getOpenAIResponse(modelConfig, userMessage, false, null);
+          break;
+
         case ModelProvider.anthropic:
           debugPrint('Using Anthropic service');
           response = await _getAnthropicResponse(modelConfig, userMessage, false, null);

@@ -1,359 +1,142 @@
 import 'package:flutter/material.dart';
+
 import '../component/models.dart';
-import 'dart:ui';
-import 'package:http/http.dart' as http;
-import 'dart:convert';
-import '../services/model_service.dart' as service;
-import '../services/termux_service.dart';
-import '../component/model_input_dialog.dart';
-import '../component/ollama_model.dart';
-import '../component/model_parameter_dialog.dart';
+import '../services/backend_api_service.dart';
 import '../services/model_service.dart';
+import '../services/remote_model_service.dart';
 
 class LibraryPage extends StatefulWidget {
   const LibraryPage({Key? key}) : super(key: key);
 
   @override
-  _LibraryPageState createState() => _LibraryPageState();
+  State<LibraryPage> createState() => _LibraryPageState();
 }
 
 class _LibraryPageState extends State<LibraryPage> with TickerProviderStateMixin {
   final ModelService _modelService = ModelService();
-  String _filterText = '';
-  String _selectedCategory = 'All Models';
-  final List<String> _categories = ['All Models', 'Text', 'Vision', 'Code', 'Embedding', 'Audio'];
-  List<Map<String, dynamic>> _ollamaModels = [];
-  List<Map<String, dynamic>> _downloadedModels = [];
-  List<OllamaModel> _availableOllamaModels = [];
-  Map<String, OllamaModel> _downloadingModels = {};
-  bool _isLoading = true;
-  String _selectedSort = 'Latest';
-  final List<String> _sortOptions = ['Latest', 'Name', 'Size', 'Downloads'];
-  TabController? _tabController;
+  final RemoteModelService _remoteModelService = RemoteModelService();
+
+  late TabController _tabController;
+  bool _loadingDownloaded = false;
+  bool _loadingAvailable = false;
+  List<ModelConfig> _downloadedModels = [];
+  List<AvailableModelOption> _availableModels = [];
+  String? _availableError;
+  String _searchQuery = '';
 
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(
-      initialIndex: 0,
-      length: 2,
-      vsync: this,
-    );
-    _fetchDownloadedModels();
-    _loadAvailableOllamaModels();
+    _tabController = TabController(length: 2, vsync: this);
+    _refreshAll();
   }
 
   @override
   void dispose() {
-    _tabController?.dispose();
+    _tabController.dispose();
     super.dispose();
   }
 
+  void _refreshAll() {
+    _fetchDownloadedModels();
+    _loadAvailableModels();
+  }
+
   Future<void> _fetchDownloadedModels() async {
-    try {
-      final response = await http.get(Uri.parse('http://localhost:11434/api/tags'));
-      if (response.statusCode == 200) {
-        final data = jsonDecode(response.body);
-        setState(() {
-          _downloadedModels = List<Map<String, dynamic>>.from(data['models'] ?? []);
-        });
-      }
-    } catch (e) {
-      print('Error fetching downloaded models: $e');
-    }
-  }
-
-  void _loadAvailableOllamaModels() {
     setState(() {
-      _isLoading = true;
-      _availableOllamaModels = OllamaModel.getAllModels();
-      _isLoading = false;
+      _loadingDownloaded = true;
     });
-  }
-
-  void _showFilterOptions() {
-    showModalBottomSheet(
-      context: context,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (context) => StatefulBuilder(
-        builder: (context, setState) => Container(
-          padding: EdgeInsets.all(20),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                'Sort by',
-                style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-              ),
-              SizedBox(height: 16),
-              Wrap(
-                spacing: 8,
-                children: _sortOptions.map((sort) => ChoiceChip(
-                  label: Text(sort),
-                  selected: _selectedSort == sort,
-                  onSelected: (selected) {
-                    if (selected) {
-                      this.setState(() => _selectedSort = sort);
-                      Navigator.pop(context);
-                    }
-                  },
-                )).toList(),
-              ),
-              SizedBox(height: 20),
-              Text(
-                'Categories',
-                style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-              ),
-              SizedBox(height: 16),
-              Wrap(
-                spacing: 8,
-                children: _categories.map((category) => ChoiceChip(
-                  label: Text(category),
-                  selected: category == _selectedCategory,
-                  onSelected: (selected) {
-                    if (selected) {
-                      this.setState(() => _selectedCategory = category);
-                      Navigator.pop(context);
-                    }
-                  },
-                )).toList(),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  void _showInstallOptions(OllamaModel model) {
-    showDialog(
-      context: context,
-      builder: (context) => ModelParameterDialog(
-        model: model,
-        onInstall: (modelName, fullModelName) {
-          _installModelWithParameter(model, fullModelName);
-        },
-      ),
-    );
-  }
-
-  void _installModelWithParameter(OllamaModel model, String fullModelName) async {
     try {
+      final models = await _modelService.getSavedModels();
+      if (!mounted) return;
       setState(() {
-        model.isDownloading = true;
-        model.downloadProgress = 0.0;
-        _downloadingModels[model.name] = model;
+        _downloadedModels = models;
       });
-
-      // Start the download process
-      await TermuxService.runCommand(
-        context,
-        'ollama pull $fullModelName',
-        onOutput: (output) {
-          // Parse download progress from output
-          if (output.contains('%')) {
-            try {
-              final regex = RegExp(r'(\d+)%');
-              final match = regex.firstMatch(output);
-              if (match != null) {
-                final progress = int.parse(match.group(1)!) / 100.0;
-                setState(() {
-                  model.downloadProgress = progress;
-                  _downloadingModels[model.name] = model;
-                });
-              }
-            } catch (e) {
-              print('Error parsing progress: $e');
-            }
-          }
-        },
-      );
-
-      // When download completes
-      setState(() {
-        model.isDownloading = false;
-        model.isDownloaded = true;
-        model.downloadProgress = 1.0;
-        _downloadingModels[model.name] = model;
-      });
-
-      // Refresh downloaded models list
-      _fetchDownloadedModels();
-
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('$fullModelName installed successfully'),
-            backgroundColor: Colors.green,
-          ),
-        );
-      }
     } catch (e) {
+      if (!mounted) return;
       setState(() {
-        model.isDownloading = false;
-        model.downloadProgress = 0.0;
-        _downloadingModels[model.name] = model;
+        _downloadedModels = [];
       });
-
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Error installing model: $e'),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
+      _showSnack('Failed to load saved models: $e', Colors.red);
+    } finally {
+      if (!mounted) return;
+      setState(() {
+        _loadingDownloaded = false;
+      });
     }
   }
 
-  void _showDeleteConfirmation(Map<String, dynamic> model) {
-    showDialog(
-      context: context,
-      builder: (context) => PermissionDialog(
-        title: 'Delete Model',
-        description: 'Are you sure you want to delete ${model['name']}? This action cannot be undone.',
-        onContinue: () async {
-          Navigator.pop(context);
-          try {
-            await TermuxService.runCommand(
-              context,
-              'ollama rm ${model['name']}',
-            );
-            _fetchDownloadedModels();
-            if (mounted) {
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(content: Text('Model deleted successfully')),
-              );
-            }
-          } catch (e) {
-            if (mounted) {
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: Text('Error deleting model: $e'),
-                  backgroundColor: Colors.red,
-                ),
-              );
-            }
-          }
-        },
-        onCancel: () => Navigator.pop(context),
-      ),
-    );
-  }
-
-  void _configureModel(Map<String, dynamic> model) async {
+  Future<void> _loadAvailableModels() async {
+    setState(() {
+      _loadingAvailable = true;
+      _availableError = null;
+    });
     try {
-      final config = ModelConfig(
-        id: model['name'],
-        name: model['name'],
-        provider: ModelProvider.ollama,
-        baseUrl: 'http://localhost:11434',
-        model: model['name'],
-        createdAt: DateTime.now(),
-        updatedAt: DateTime.now(),
-      );
-      await _modelService.saveModel(config);
-      await _modelService.setDefaultModel(config.id);
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Model configured successfully')),
-        );
-      }
+      final models = await _remoteModelService.getAvailableModels();
+      if (!mounted) return;
+      setState(() {
+        _availableModels = models;
+      });
+    } on BackendApiException catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _availableModels = [];
+        _availableError = e.message;
+      });
     } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Error configuring model: $e'),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
+      if (!mounted) return;
+      setState(() {
+        _availableModels = [];
+        _availableError = e.toString();
+      });
+    } finally {
+      if (!mounted) return;
+      setState(() {
+        _loadingAvailable = false;
+      });
     }
   }
 
-  void _installModel(String modelName) {
-    showDialog(
-      context: context,
-      builder: (context) => PermissionDialog(
-        title: 'Install Model',
-        description: 'Do you want to install $modelName?',
-        onContinue: () async {
-          Navigator.pop(context);
-          try {
-            await TermuxService.runCommand(
-              context,
-              'ollama pull $modelName',
-            );
-            _fetchDownloadedModels();
-            if (mounted) {
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: Text('Installing $modelName...'),
-                  duration: Duration(seconds: 2),
-                ),
-              );
-            }
-          } catch (e) {
-            if (mounted) {
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: Text('Error installing model: $e'),
-                  backgroundColor: Colors.red,
-                ),
-              );
-            }
-          }
-        },
-        onCancel: () => Navigator.pop(context),
-      ),
+  void _showSnack(String message, Color backgroundColor) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(message), backgroundColor: backgroundColor),
     );
   }
 
-  Future<void> _addModelToSettings(AIModel model) async {
-    try {
-      final config = ModelConfig(
-        id: model.id,
-        name: model.name,
-        provider: ModelProvider.pocketLLM,
-        baseUrl: '',
-        apiKey: '',
-        model: model.id,
-        createdAt: DateTime.now(),
-        updatedAt: DateTime.now(),
-      );
-
-      await _modelService.saveModel(config);
-      await _modelService.setDefaultModel(config.id);
-      
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Model added successfully')),
-      );
-    } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Failed to add model: $e')),
-      );
+  List<AvailableModelOption> get _filteredAvailableModels {
+    final query = _searchQuery.trim().toLowerCase();
+    if (query.isEmpty) {
+      return List<AvailableModelOption>.from(_availableModels);
     }
+    return _availableModels.where((model) {
+      final description = model.description ?? '';
+      return model.name.toLowerCase().contains(query) ||
+          model.id.toLowerCase().contains(query) ||
+          description.toLowerCase().contains(query) ||
+          model.provider.toLowerCase().contains(query);
+    }).toList();
+  }
+
+  Map<ModelProvider, List<AvailableModelOption>> _groupAvailableModels(
+    List<AvailableModelOption> models,
+  ) {
+    final grouped = <ModelProvider, List<AvailableModelOption>>{};
+    for (final option in models) {
+      final provider = ModelProviderExtension.fromBackend(option.provider);
+      grouped.putIfAbsent(provider, () => []).add(option);
+    }
+    return grouped;
   }
 
   @override
   Widget build(BuildContext context) {
-    if (_tabController == null) {
-      return const Scaffold(
-        body: Center(
-          child: CircularProgressIndicator(),
-        ),
-      );
-    }
-
     return Scaffold(
       backgroundColor: Colors.grey[50],
       appBar: AppBar(
         backgroundColor: Colors.grey[50],
         elevation: 0,
-        title: Text(
+        title: const Text(
           'Model Library',
           style: TextStyle(
             color: Colors.black,
@@ -362,472 +145,219 @@ class _LibraryPageState extends State<LibraryPage> with TickerProviderStateMixin
           ),
         ),
         bottom: TabBar(
-          controller: _tabController!,
-          labelColor: Color(0xFF8B5CF6),
+          controller: _tabController,
+          labelColor: const Color(0xFF8B5CF6),
           unselectedLabelColor: Colors.grey[600],
-          indicatorColor: Color(0xFF8B5CF6),
+          indicatorColor: const Color(0xFF8B5CF6),
           tabs: const [
-            Tab(text: 'Downloaded'),
+            Tab(text: 'Imported'),
             Tab(text: 'Available'),
           ],
         ),
         actions: [
           IconButton(
-            icon: Icon(Icons.refresh, color: Colors.black),
-            onPressed: () {
-              _fetchDownloadedModels();
-            },
+            icon: const Icon(Icons.refresh, color: Colors.black),
+            onPressed: _refreshAll,
+            tooltip: 'Refresh models',
           ),
         ],
       ),
       body: TabBarView(
-        controller: _tabController!,
+        controller: _tabController,
         children: [
-          _buildDownloadedModelsTab(),
-          _buildAvailableModelsTab(),
+          _buildDownloadedTab(),
+          _buildAvailableTab(),
         ],
       ),
     );
   }
 
-  Widget _buildDownloadedModelsTab() {
-    return Column(
-      children: [
-        Padding(
-          padding: EdgeInsets.all(16),
-          child: _buildSearchBar(),
-        ),
-        Expanded(
-          child: ListView.builder(
-            padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-            itemCount: _downloadedModels.length,
-            itemBuilder: (context, index) {
-              final model = _downloadedModels[index];
-              if (_filterText.isNotEmpty &&
-                  !model['name'].toString().toLowerCase().contains(_filterText.toLowerCase())) {
-                return SizedBox.shrink();
-              }
-              return _buildDownloadedModelCard(model);
-            },
+  Widget _buildDownloadedTab() {
+    if (_loadingDownloaded) {
+      return const Center(child: CircularProgressIndicator());
+    }
+    if (_downloadedModels.isEmpty) {
+      return _buildEmptyState(
+        icon: Icons.download_done,
+        title: 'No models imported yet',
+        message: 'Import models from the Available tab once you add provider API keys.',
+      );
+    }
+    return ListView.separated(
+      padding: const EdgeInsets.all(16),
+      itemCount: _downloadedModels.length,
+      separatorBuilder: (_, __) => const SizedBox(height: 12),
+      itemBuilder: (context, index) {
+        final model = _downloadedModels[index];
+        return Card(
+          elevation: 0,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+            side: BorderSide(color: Colors.grey.shade200),
           ),
-        ),
-      ],
+          child: ListTile(
+            leading: _buildProviderAvatar(model.provider),
+            title: Text(
+              model.name,
+              style: const TextStyle(fontWeight: FontWeight.w600),
+            ),
+            subtitle: Text(model.model),
+            trailing: Text(
+              model.provider.displayName,
+              style: TextStyle(color: Colors.grey[600]),
+            ),
+          ),
+        );
+      },
     );
   }
 
-  Widget _buildAvailableModelsTab() {
-    // Filter models by category
-    List<OllamaModel> filteredModels = _availableOllamaModels;
-    if (_selectedCategory != 'All Models') {
-      filteredModels = _availableOllamaModels
-          .where((model) => model.category == _selectedCategory)
-          .toList();
+  Widget _buildAvailableTab() {
+    if (_loadingAvailable) {
+      return const Center(child: CircularProgressIndicator());
+    }
+    if (_availableError != null) {
+      return _buildErrorState(_availableError!);
     }
 
-    // Filter models by search text
-    if (_filterText.isNotEmpty) {
-      filteredModels = filteredModels
-          .where((model) => 
-              model.name.toLowerCase().contains(_filterText.toLowerCase()) ||
-              model.description.toLowerCase().contains(_filterText.toLowerCase()))
-          .toList();
+    final filtered = _filteredAvailableModels;
+    if (filtered.isEmpty) {
+      return _buildEmptyState(
+        icon: Icons.travel_explore,
+        title: 'No models found',
+        message: 'Adjust your search or configure provider API keys in Settings.',
+      );
     }
 
-    // Sort models
-    switch (_selectedSort) {
-      case 'Latest':
-        // Already sorted by latest in the API
-        break;
-      case 'Name':
-        filteredModels.sort((a, b) => a.name.compareTo(b.name));
-        break;
-      case 'Size':
-        // Sort by parameter size (largest first)
-        filteredModels.sort((a, b) {
-          if (a.parameters.isEmpty || b.parameters.isEmpty) return 0;
-          
-          // Extract the largest parameter size for each model
-          int getMaxSize(List<String> params) {
-            int maxSize = 0;
-            for (var param in params) {
-              if (param.contains('b')) {
-                final sizeStr = param.replaceAll(RegExp(r'[^0-9.]'), '');
-                final size = double.tryParse(sizeStr) ?? 0;
-                final multiplier = param.toLowerCase().contains('b') ? 1 : 0.001;
-                final sizeInB = (size * multiplier).round();
-                if (sizeInB > maxSize) maxSize = sizeInB;
-              }
-            }
-            return maxSize;
-          }
-          
-          return getMaxSize(b.parameters).compareTo(getMaxSize(a.parameters));
-        });
-        break;
-      case 'Downloads':
-        filteredModels.sort((a, b) => b.pulls.compareTo(a.pulls));
-        break;
-    }
+    final grouped = _groupAvailableModels(filtered);
+    final providers = grouped.keys.toList()
+      ..sort((a, b) => a.displayName.compareTo(b.displayName));
 
-    return Column(
+    return ListView(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       children: [
-        Padding(
-          padding: EdgeInsets.all(16),
-          child: _buildSearchBar(),
-        ),
-        SingleChildScrollView(
-          scrollDirection: Axis.horizontal,
-          child: Padding(
-            padding: EdgeInsets.symmetric(horizontal: 16),
-            child: Row(
-              children: _categories.map((category) {
-                return Padding(
-                  padding: EdgeInsets.only(right: 8),
-                  child: ChoiceChip(
-                    label: Text(category),
-                    selected: category == _selectedCategory,
-                    onSelected: (selected) {
-                      if (selected) {
-                        setState(() => _selectedCategory = category);
-                      }
-                    },
-                  ),
-                );
-              }).toList(),
-            ),
-          ),
-        ),
-        SizedBox(height: 8),
-        Expanded(
-          child: _isLoading
-              ? Center(child: CircularProgressIndicator())
-              : filteredModels.isEmpty
-                  ? Center(
-                      child: Text(
-                        'No models found matching your criteria',
-                        style: TextStyle(
-                          fontSize: 16,
-                          color: Colors.grey[600],
-                        ),
-                      ),
-                    )
-                  : ListView.builder(
-                      padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                      itemCount: filteredModels.length,
-                      itemBuilder: (context, index) {
-                        final model = filteredModels[index];
-                        return _buildAvailableModelCard(model);
-                      },
-                    ),
-        ),
+        _buildSearchBar(),
+        const SizedBox(height: 16),
+        for (final provider in providers) ...[
+          _buildProviderHeader(provider),
+          const SizedBox(height: 8),
+          ...grouped[provider]!
+              .map((model) => _buildAvailableModelCard(provider, model))
+              .toList(),
+          const SizedBox(height: 24),
+        ],
       ],
     );
   }
 
   Widget _buildSearchBar() {
     return Container(
-      height: 40,
       decoration: BoxDecoration(
-        color: Colors.grey[100],
+        color: Colors.white,
         borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: Colors.grey.shade300),
       ),
-      child: Row(
-        children: [
-          Padding(
-            padding: EdgeInsets.symmetric(horizontal: 12),
-            child: Icon(Icons.search, color: Colors.grey[600], size: 20),
-          ),
-          Expanded(
-            child: TextField(
-              decoration: InputDecoration(
-                hintText: 'Search models...',
-                hintStyle: TextStyle(color: Colors.grey[500], fontSize: 14),
-                border: InputBorder.none,
-                contentPadding: EdgeInsets.zero,
-              ),
-              onChanged: (value) => setState(() => _filterText = value),
-            ),
-          ),
-          IconButton(
-            icon: Icon(Icons.tune, color: Colors.grey[600], size: 20),
-            onPressed: _showFilterOptions,
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildDownloadedModelCard(Map<String, dynamic> model) {
-    return Card(
-      margin: EdgeInsets.only(bottom: 16),
-      elevation: 0,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
-        side: BorderSide(color: Colors.grey.shade200),
-      ),
-      child: Padding(
-        padding: EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Container(
-                  width: 48,
-                  height: 48,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    gradient: LinearGradient(
-                      colors: [Colors.purple.shade200, Colors.purple.shade400],
-                    ),
-                  ),
-                  child: Icon(Icons.auto_awesome, color: Colors.white),
-                ),
-                SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        model['name'].toString(),
-                        style: TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                      Text(
-                        'Size: ${model['size'] ?? 'Unknown'}',
-                        style: TextStyle(
-                          color: Colors.grey[600],
-                          fontSize: 14,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-            SizedBox(height: 16),
-            Row(
-              children: [
-                Expanded(
-                  child: OutlinedButton.icon(
-                    onPressed: () => _configureModel(model),
-                    icon: Icon(Icons.settings),
-                    label: Text('Configure'),
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: Color(0xFF8B5CF6),
-                      side: BorderSide(color: Color(0xFF8B5CF6)),
-                      padding: EdgeInsets.symmetric(vertical: 12),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                    ),
-                  ),
-                ),
-                SizedBox(width: 8),
-                Expanded(
-                  child: ElevatedButton.icon(
-                    onPressed: () => _showDeleteConfirmation(model),
-                    icon: Icon(Icons.delete_outline),
-                    label: Text('Delete'),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.red.shade50,
-                      foregroundColor: Colors.red,
-                      elevation: 0,
-                      padding: EdgeInsets.symmetric(vertical: 12),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(8),
-                        side: BorderSide(color: Colors.red.shade200),
-                      ),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ],
+      child: TextField(
+        decoration: const InputDecoration(
+          prefixIcon: Icon(Icons.search),
+          hintText: 'Search models by name or provider',
+          border: InputBorder.none,
+          contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 12),
         ),
+        onChanged: (value) => setState(() => _searchQuery = value),
       ),
     );
   }
 
-  Widget _buildAvailableModelCard(OllamaModel model) {
-    // Check if model is in downloading state
-    final isDownloading = _downloadingModels.containsKey(model.name) && 
-                          _downloadingModels[model.name]!.isDownloading;
-    
-    // Check if model is already downloaded
-    final isDownloaded = _downloadingModels.containsKey(model.name) && 
-                         _downloadingModels[model.name]!.isDownloaded;
-    
-    // Get download progress
-    final downloadProgress = _downloadingModels.containsKey(model.name) 
-        ? _downloadingModels[model.name]!.downloadProgress 
-        : 0.0;
+  Widget _buildProviderHeader(ModelProvider provider) {
+    return Row(
+      children: [
+        _buildProviderAvatar(provider),
+        const SizedBox(width: 12),
+        Text(
+          provider.displayName,
+          style: const TextStyle(
+            fontSize: 18,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildAvailableModelCard(ModelProvider provider, AvailableModelOption model) {
+    final description = model.description?.trim();
+    final metadata = model.metadata ?? const {};
+    final contextWindow = metadata['context_window'] ?? metadata['contextLength'];
+    final pricing = metadata['pricing'];
 
     return Card(
-      margin: EdgeInsets.only(bottom: 16),
       elevation: 0,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(12),
         side: BorderSide(color: Colors.grey.shade200),
       ),
       child: Padding(
-        padding: EdgeInsets.all(16),
+        padding: const EdgeInsets.all(16),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Container(
-                  width: 48,
-                  height: 48,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    gradient: LinearGradient(
-                      colors: [
-                        model.getCategoryColor().withOpacity(0.7),
-                        model.getCategoryColor(),
-                      ],
-                    ),
-                  ),
-                  child: Icon(model.getCategoryIcon(), color: Colors.white),
-                ),
-                SizedBox(width: 12),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
                         model.name,
-                        style: TextStyle(
-                          fontSize: 18,
+                        style: const TextStyle(
+                          fontSize: 16,
                           fontWeight: FontWeight.w600,
                         ),
                       ),
-                      Container(
-                        margin: EdgeInsets.only(top: 4),
-                        padding: EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                        decoration: BoxDecoration(
-                          color: model.getCategoryColor().withOpacity(0.1),
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: Text(
-                          model.category,
-                          style: TextStyle(
-                            color: model.getCategoryColor()[700],
-                            fontSize: 12,
-                          ),
-                        ),
+                      const SizedBox(height: 4),
+                      Text(
+                        model.id,
+                        style: TextStyle(color: Colors.grey[600]),
                       ),
                     ],
                   ),
                 ),
-                if (model.pulls > 0)
-                  Chip(
-                    label: Text(
-                      '${(model.pulls / 1000000).toStringAsFixed(1)}M',
-                      style: TextStyle(fontSize: 12),
-                    ),
-                    backgroundColor: Colors.grey.shade100,
+                ElevatedButton.icon(
+                  onPressed: () => _importModel(provider, model),
+                  icon: const Icon(Icons.download, size: 18),
+                  label: const Text('Import'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF8B5CF6),
+                    foregroundColor: Colors.white,
                   ),
+                ),
               ],
             ),
-            if (model.description.isNotEmpty) ...[
-              SizedBox(height: 12),
+            if (description != null && description.isNotEmpty) ...[
+              const SizedBox(height: 8),
               Text(
-                model.description,
-                style: TextStyle(
-                  fontSize: 14,
-                  color: Colors.grey[800],
-                ),
-                maxLines: 3,
-                overflow: TextOverflow.ellipsis,
+                description,
+                style: TextStyle(color: Colors.grey[700]),
               ),
             ],
-            if (model.parameters.isNotEmpty) ...[
-              SizedBox(height: 12),
+            if (contextWindow != null || pricing != null) ...[
+              const SizedBox(height: 12),
               Wrap(
-                spacing: 6,
-                runSpacing: 6,
-                children: model.parameters.map((param) => Container(
-                  padding: EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                  decoration: BoxDecoration(
-                    color: Color(0xFFEEF2FF),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Text(
-                    param,
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: Color(0xFF6366F1),
-                      fontWeight: FontWeight.w500,
-                    ),
-                  ),
-                )).toList(),
-              ),
-            ],
-            SizedBox(height: 16),
-            if (isDownloading) ...[
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+                spacing: 12,
+                runSpacing: 8,
                 children: [
-                  Text(
-                    'Downloading: ${(downloadProgress * 100).toInt()}%',
-                    style: TextStyle(
-                      fontWeight: FontWeight.w500,
-                      color: Color(0xFF8B5CF6),
+                  if (contextWindow != null)
+                    _buildMetadataChip(
+                      icon: Icons.unfold_more,
+                      label: 'Context: $contextWindow tokens',
                     ),
-                  ),
-                  SizedBox(height: 8),
-                  LinearProgressIndicator(
-                    value: downloadProgress,
-                    backgroundColor: Colors.grey.shade200,
-                    valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF8B5CF6)),
-                    borderRadius: BorderRadius.circular(4),
-                  ),
-                ],
-              ),
-            ] else if (isDownloaded) ...[
-              Row(
-                children: [
-                  Expanded(
-                    child: OutlinedButton.icon(
-                      onPressed: () => _configureModel(_downloadedModels.firstWhere(
-                        (m) => m['name'] == model.name,
-                        orElse: () => {'name': model.name},
-                      )),
-                      icon: Icon(Icons.settings),
-                      label: Text('Configure'),
-                      style: OutlinedButton.styleFrom(
-                        foregroundColor: Color(0xFF8B5CF6),
-                        side: BorderSide(color: Color(0xFF8B5CF6)),
-                        padding: EdgeInsets.symmetric(vertical: 12),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                      ),
+                  if (pricing is Map && pricing.isNotEmpty)
+                    _buildMetadataChip(
+                      icon: Icons.attach_money,
+                      label: _formatPricing(pricing),
                     ),
-                  ),
-                ],
-              ),
-            ] else ...[
-              Row(
-                children: [
-                  Expanded(
-                    child: ElevatedButton(
-                      onPressed: () => _showInstallOptions(model),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Color(0xFF8B5CF6),
-                        foregroundColor: Colors.white,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        padding: EdgeInsets.symmetric(vertical: 12),
-                      ),
-                      child: Text('Download'),
-                    ),
-                  ),
                 ],
               ),
             ],
@@ -835,5 +365,156 @@ class _LibraryPageState extends State<LibraryPage> with TickerProviderStateMixin
         ),
       ),
     );
+  }
+
+  Widget _buildMetadataChip({required IconData icon, required String label}) {
+    return Chip(
+      avatar: Icon(icon, size: 18, color: const Color(0xFF8B5CF6)),
+      backgroundColor: const Color(0xFFEDE9FE),
+      label: Text(
+        label,
+        style: const TextStyle(color: Color(0xFF5B21B6)),
+      ),
+    );
+  }
+
+  String _formatPricing(Map<dynamic, dynamic> pricing) {
+    final prompt = pricing['prompt'] ?? pricing['input'];
+    final completion = pricing['completion'] ?? pricing['output'];
+    if (prompt == null && completion == null) {
+      return 'Pricing available';
+    }
+    if (prompt != null && completion != null) {
+      return 'Prompt $prompt / Completion $completion';
+    }
+    return 'Price ${prompt ?? completion}';
+  }
+
+  Widget _buildErrorState(String message) {
+    return _buildEmptyState(
+      icon: Icons.lock_outline,
+      title: 'Unable to fetch models',
+      message: message,
+      action: TextButton(
+        onPressed: _loadAvailableModels,
+        child: const Text('Try again'),
+      ),
+    );
+  }
+
+  Widget _buildEmptyState({
+    required IconData icon,
+    required String title,
+    required String message,
+    Widget? action,
+  }) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 32),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 48, color: Colors.grey[500]),
+            const SizedBox(height: 16),
+            Text(
+              title,
+              style: const TextStyle(
+                fontSize: 20,
+                fontWeight: FontWeight.w600,
+              ),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 8),
+            Text(
+              message,
+              style: TextStyle(color: Colors.grey[600]),
+              textAlign: TextAlign.center,
+            ),
+            if (action != null) ...[
+              const SizedBox(height: 16),
+              action,
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildProviderAvatar(ModelProvider provider) {
+    final iconData = _resolveProviderIcon(provider);
+    final color = _resolveProviderColor(provider);
+    return CircleAvatar(
+      backgroundColor: color.withOpacity(0.15),
+      child: Icon(iconData, color: color),
+    );
+  }
+
+  IconData _resolveProviderIcon(ModelProvider provider) {
+    switch (provider) {
+      case ModelProvider.openAI:
+        return Icons.auto_awesome;
+      case ModelProvider.groq:
+        return Icons.flash_on;
+      case ModelProvider.openRouter:
+        return Icons.route;
+      case ModelProvider.imageRouter:
+        return Icons.image;
+      case ModelProvider.anthropic:
+        return Icons.psychology;
+      case ModelProvider.googleAI:
+        return Icons.cloud;
+      case ModelProvider.mistral:
+        return Icons.waves;
+      case ModelProvider.deepseek:
+        return Icons.troubleshoot;
+      case ModelProvider.lmStudio:
+        return Icons.science;
+      case ModelProvider.ollama:
+        return Icons.terminal;
+      default:
+        return Icons.smart_toy;
+    }
+  }
+
+  Color _resolveProviderColor(ModelProvider provider) {
+    switch (provider) {
+      case ModelProvider.openAI:
+        return const Color(0xFF10A37F);
+      case ModelProvider.groq:
+        return Colors.deepOrange;
+      case ModelProvider.openRouter:
+        return const Color(0xFF6B21A8);
+      case ModelProvider.imageRouter:
+        return Colors.orangeAccent;
+      case ModelProvider.anthropic:
+        return const Color(0xFF9333EA);
+      case ModelProvider.googleAI:
+        return const Color(0xFF1A73E8);
+      case ModelProvider.mistral:
+        return Colors.blueGrey;
+      case ModelProvider.deepseek:
+        return Colors.teal;
+      case ModelProvider.lmStudio:
+        return Colors.blue;
+      case ModelProvider.ollama:
+        return Colors.amber;
+      default:
+        return const Color(0xFF8B5CF6);
+    }
+  }
+
+  Future<void> _importModel(ModelProvider provider, AvailableModelOption option) async {
+    try {
+      await _modelService.importModelsFromProvider(
+        provider: provider,
+        selections: [option],
+      );
+      await _fetchDownloadedModels();
+      _showSnack('${option.name} imported successfully', Colors.green);
+    } on BackendApiException catch (e) {
+      _showSnack(e.message, Colors.red);
+    } catch (e) {
+      _showSnack('Failed to import ${option.name}: $e', Colors.red);
+    }
   }
 }

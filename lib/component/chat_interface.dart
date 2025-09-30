@@ -1,3 +1,8 @@
+/// File Overview:
+/// - Purpose: Core chat UI handling message rendering, attachments, and direct
+///   calls to various model/search services.
+/// - Backend Migration: Substantially refactor; remove embedded API keys,
+///   switch to backend chat/search endpoints, and simplify local state.
 import 'package:flutter/material.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
 import 'package:clipboard/clipboard.dart';
@@ -23,6 +28,7 @@ import '../services/chat_history_service.dart';
 import 'appbar/chat_history.dart';
 import '../services/error_service.dart';
 import '../services/search_service.dart';
+import '../services/pocket_llm_service.dart';
 import '../pages/search_settings_page.dart';
 
 class ChatInterface extends StatefulWidget {
@@ -58,7 +64,7 @@ class ChatInterfaceState extends State<ChatInterface> {
   
   // Restore missing variables
   final String apiKey = 'ddc-m4qlvrgpt1W1E4ZXc4bvm5T5Z6CRFLeXRCx9AbRuQOcGpFFrX2';
-  final String apiUrl = 'https://api.sree.shop/v1/chat/completions';
+  final String apiUrl = '${PocketLLMService.baseUrl}/chat/completions';
   final TavilyService _tavilyService = TavilyService();
   bool _isOnline = false;
 
@@ -2113,6 +2119,8 @@ class ChatInterfaceState extends State<ChatInterface> {
         return Icons.terminal;
       case ModelProvider.openAI:
         return Icons.auto_awesome;
+      case ModelProvider.groq:
+        return Icons.flash_on;
       case ModelProvider.anthropic:
         return Icons.psychology;
       case ModelProvider.lmStudio:

@@ -1,3 +1,8 @@
+/// File Overview:
+/// - Purpose: Observable state container that keeps track of available models,
+///   selection, and health checks for client-side decision making.
+/// - Backend Migration: Reduce scope once backend delivers curated model lists
+///   and health telemetry so the frontend only consumes summarized states.
 import 'dart:async';
 import 'dart:io';
 import 'package:flutter/foundation.dart';
@@ -154,13 +159,20 @@ class ModelState extends ChangeNotifier {
       debugPrint('ModelState: Enhanced initialization complete');
       
     } catch (e, stackTrace) {
+      // Provide more specific error messages
+      String userFriendlyError = e.toString();
+      if (userFriendlyError.contains('Failed host lookup') || 
+          userFriendlyError.contains('SocketException')) {
+        userFriendlyError = 'Unable to connect to the model server. The app will use local models only.';
+      }
+      
       await _errorService.logError(
-        'ModelState initialization failed: $e',
+        'ModelState initialization failed: $userFriendlyError',
         stackTrace,
         type: ErrorType.initialization,
         context: 'ModelState.init',
       );
-      debugPrint('ModelState: Error initializing: $e');
+      debugPrint('ModelState: Error initializing: $userFriendlyError');
     }
   }
 
@@ -182,10 +194,18 @@ class ModelState extends ChangeNotifier {
       
       debugPrint('ModelState: Loaded ${models.length} available models');
     } catch (e, stackTrace) {
+      // Provide more specific error messages
+      String userFriendlyError = e.toString();
+      if (userFriendlyError.contains('Failed host lookup') || 
+          userFriendlyError.contains('SocketException')) {
+        userFriendlyError = 'Unable to load remote models. Using local models only.';
+      }
+      
       await _errorService.logError(
-        'Failed to load available models: $e',
+        'Failed to load available models: $userFriendlyError',
         stackTrace,
         type: ErrorType.unknown,
+        severity: ErrorSeverity.medium,
         context: 'ModelState._loadAvailableModels',
       );
     }
@@ -352,6 +372,8 @@ class ModelState extends ChangeNotifier {
         return await _checkOllamaHealth(model);
       case ModelProvider.openAI:
         return await _checkOpenAIHealth(model);
+      case ModelProvider.groq:
+        return await _checkGroqHealth(model);
       case ModelProvider.anthropic:
         return await _checkAnthropicHealth(model);
       case ModelProvider.lmStudio:
@@ -391,7 +413,23 @@ class ModelState extends ChangeNotifier {
           'Content-Type': 'application/json',
         },
       ).timeout(_healthCheckTimeout);
-      
+
+      return response.statusCode == 200;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  Future<bool> _checkGroqHealth(ModelConfig model) async {
+    try {
+      final response = await http.get(
+        Uri.parse('${model.baseUrl}/models'),
+        headers: {
+          'Authorization': 'Bearer ${model.apiKey}',
+          'Content-Type': 'application/json',
+        },
+      ).timeout(_healthCheckTimeout);
+
       return response.statusCode == 200;
     } catch (e) {
       return false;

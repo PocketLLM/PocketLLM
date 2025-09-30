@@ -1,3 +1,8 @@
+/// File Overview:
+/// - Purpose: Animated splash experience shown during initial service
+///   initialization.
+/// - Backend Migration: Keep for UX polish; ensure animation duration matches
+///   backend initialization once remote boot becomes faster.
 import 'package:flutter/material.dart';
 import 'dart:math' as math;
 

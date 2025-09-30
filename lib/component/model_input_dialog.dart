@@ -1,3 +1,6 @@
+/// File Overview:
+/// - Purpose: Reusable permission dialog for confirming sensitive actions.
+/// - Backend Migration: Keep; triggers may change but dialog remains UI-only.
 import 'package:flutter/material.dart';
 
 class PermissionDialog extends StatelessWidget {

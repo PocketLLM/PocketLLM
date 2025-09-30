@@ -1,3 +1,8 @@
+/// File Overview:
+/// - Purpose: Shared data models used across the frontend, including message
+///   history and provider metadata with some hardcoded defaults.
+/// - Backend Migration: Review all classes; many fields (e.g., provider lists,
+///   static enums) should align with backend contracts instead of local copies.
 import '../services/model_service.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
@@ -33,61 +38,8 @@ class AIModel {
 }
 
 class ModelsRepository {
-  static final List<AIModel> models = [
-    AIModel(
-      id: 'deepseek-r1',
-      provider: 'DeepSeek',
-      description: 'DeepSeek\'s first-generation of reasoning models with comparable performance to OpenAI-r1, including six dense models distilled from DeepSeek-R1 based on Llama and Qwen.',
-      parameterVariants: ['1.5b', '7b', '8b', '14b', '32b', '67b'],
-      downloads: 20000000,
-      comments: 29,
-      releaseDate: DateTime.now().subtract(Duration(days: 14)),
-    ),
-    AIModel(
-      id: 'llama3.3',
-      provider: 'Meta',
-      description: 'New state of the art 70B model. Llama 3.3 70B offers similar performance compared to the Llama 3.1 405B model.',
-      parameterVariants: ['70b'],
-      downloads: 1400000,
-      comments: 14,
-      releaseDate: DateTime.now().subtract(Duration(days: 60)),
-      tools: ['tools'],
-    ),
-    AIModel(
-      id: 'phi4',
-      provider: 'Microsoft',
-      description: 'Phi-4 is a 14B parameter, state-of-the-art open model from Microsoft.',
-      parameterVariants: ['14b'],
-      downloads: 702800,
-      comments: 5,
-      releaseDate: DateTime.now().subtract(Duration(days: 42)),
-    ),
-    AIModel(
-      id: 'llama3.2',
-      provider: 'Meta',
-      description: 'Meta\'s Llama 3.2 goes small with 1B and 3B models.',
-      parameterVariants: ['1b', '3b'],
-      downloads: 9300000,
-      comments: 63,
-      releaseDate: DateTime.now().subtract(Duration(days: 150)),
-      tools: ['tools'],
-    ),
-    AIModel(
-      id: 'llama3.1',
-      provider: 'Meta',
-      description: 'Llama 3.1 is a new state-of-the-art model from Meta available in 8B, 70B and 405B parameter sizes.',
-      parameterVariants: ['8b', '70b', '405b'],
-      downloads: 24800000,
-      comments: 93,
-      releaseDate: DateTime.now().subtract(Duration(days: 60)),
-      tools: ['tools'],
-    ),
-  ];
-  // Change this method to return Future
   static Future<List<AIModel>> getAvailableModels() async {
-    final sortedModels = List<AIModel>.from(models);
-    sortedModels.sort((a, b) => b.releaseDate.compareTo(a.releaseDate));
-    return sortedModels;
+    return [];
   }
 }
 
@@ -201,6 +153,9 @@ enum ModelProvider {
   pocketLLM,
   ollama,
   openAI,
+  groq,
+  openRouter,
+  imageRouter,
   anthropic,
   mistral,
   deepseek,
@@ -218,8 +173,14 @@ extension ModelProviderExtension on ModelProvider {
         return 'Ollama';
       case ModelProvider.openAI:
         return 'OpenAI';
+      case ModelProvider.groq:
+        return 'Groq';
       case ModelProvider.anthropic:
         return 'Anthropic';
+      case ModelProvider.openRouter:
+        return 'OpenRouter';
+      case ModelProvider.imageRouter:
+        return 'ImageRouter';
       case ModelProvider.mistral:
         return 'Mistral AI';
       case ModelProvider.deepseek:
@@ -234,13 +195,19 @@ extension ModelProviderExtension on ModelProvider {
   String get defaultBaseUrl {
     switch (this) {
       case ModelProvider.pocketLLM:
-        return 'https://api.pocketllm.com';
+        return 'https://pocket-llm-api.vercel.app';
       case ModelProvider.ollama:
         return 'http://localhost:11434';
       case ModelProvider.openAI:
         return 'https://api.openai.com/v1';
+      case ModelProvider.groq:
+        return 'https://api.groq.com/openai/v1';
       case ModelProvider.anthropic:
         return 'https://api.anthropic.com';
+      case ModelProvider.openRouter:
+        return 'https://openrouter.ai/api';
+      case ModelProvider.imageRouter:
+        return 'https://api.imagerouter.com';
       case ModelProvider.mistral:
         return 'https://api.mistral.ai/v1';
       case ModelProvider.deepseek:
@@ -260,8 +227,14 @@ extension ModelProviderExtension on ModelProvider {
         return Icons.computer;
       case ModelProvider.openAI:
         return Icons.auto_awesome;
+      case ModelProvider.groq:
+        return Icons.flash_on;
       case ModelProvider.anthropic:
         return Icons.psychology;
+      case ModelProvider.openRouter:
+        return Icons.route;
+      case ModelProvider.imageRouter:
+        return Icons.image;
       case ModelProvider.mistral:
         return Icons.cloud;
       case ModelProvider.deepseek:
@@ -281,8 +254,14 @@ extension ModelProviderExtension on ModelProvider {
         return Colors.blue;
       case ModelProvider.openAI:
         return Color(0xFF10A37F);
+      case ModelProvider.groq:
+        return Colors.deepOrange;
       case ModelProvider.anthropic:
         return Color(0xFFB4306A);
+      case ModelProvider.openRouter:
+        return Colors.deepPurple;
+      case ModelProvider.imageRouter:
+        return Colors.orangeAccent;
       case ModelProvider.mistral:
         return Colors.indigo;
       case ModelProvider.deepseek:
@@ -293,6 +272,163 @@ extension ModelProviderExtension on ModelProvider {
         return Color(0xFF4285F4);
     }
   }
+
+  String get backendId {
+    switch (this) {
+      case ModelProvider.pocketLLM:
+        return 'pocketllm';
+      case ModelProvider.ollama:
+        return 'ollama';
+      case ModelProvider.openAI:
+        return 'openai';
+      case ModelProvider.groq:
+        return 'groq';
+      case ModelProvider.anthropic:
+        return 'anthropic';
+      case ModelProvider.openRouter:
+        return 'openrouter';
+      case ModelProvider.imageRouter:
+        return 'imagerouter';
+      case ModelProvider.mistral:
+        return 'mistral';
+      case ModelProvider.deepseek:
+        return 'deepseek';
+      case ModelProvider.lmStudio:
+        return 'lmstudio';
+      case ModelProvider.googleAI:
+        return 'googleai';
+    }
+  }
+
+  static ModelProvider fromBackend(String value) {
+    switch (value.toLowerCase()) {
+      case 'pocketllm':
+        return ModelProvider.pocketLLM;
+      case 'ollama':
+        return ModelProvider.ollama;
+      case 'openai':
+        return ModelProvider.openAI;
+      case 'groq':
+        return ModelProvider.groq;
+      case 'anthropic':
+        return ModelProvider.anthropic;
+      case 'openrouter':
+        return ModelProvider.openRouter;
+      case 'imagerouter':
+        return ModelProvider.imageRouter;
+      case 'mistral':
+        return ModelProvider.mistral;
+      case 'deepseek':
+        return ModelProvider.deepseek;
+      case 'lmstudio':
+        return ModelProvider.lmStudio;
+      case 'googleai':
+        return ModelProvider.googleAI;
+      default:
+        return ModelProvider.pocketLLM;
+    }
+  }
+}
+
+class ProviderConnection {
+  final String id;
+  final ModelProvider provider;
+  final String displayName;
+  final String? baseUrl;
+  final bool isActive;
+  final bool hasApiKey;
+  final String? apiKeyPreview;
+  final Map<String, dynamic>? metadata;
+  final String? statusMessage;
+
+  ProviderConnection({
+    required this.id,
+    required this.provider,
+    required this.displayName,
+    required this.baseUrl,
+    required this.isActive,
+    required this.hasApiKey,
+    this.apiKeyPreview,
+    this.metadata,
+    this.statusMessage,
+  });
+
+  factory ProviderConnection.fromJson(Map<String, dynamic> json) {
+    return ProviderConnection(
+      id: json['id'] ?? '',
+      provider: json['provider'] != null
+          ? ModelProviderExtension.fromBackend(json['provider'])
+          : ModelProvider.pocketLLM,
+      displayName: json['displayName'] ?? json['provider'] ?? '',
+      baseUrl: json['baseUrl'],
+      isActive: json['isActive'] ?? false,
+      hasApiKey: json['hasApiKey'] ?? false,
+      apiKeyPreview: json['apiKeyPreview'],
+      metadata: json['metadata'] != null
+          ? Map<String, dynamic>.from(json['metadata'])
+          : null,
+      statusMessage: json['message'] as String?,
+    );
+  }
+}
+
+class ProviderStatusInfo {
+  final ModelProvider provider;
+  final String displayName;
+  final bool configured;
+  final bool isActive;
+  final bool hasApiKey;
+  final String? apiKeyPreview;
+  final String message;
+
+  ProviderStatusInfo({
+    required this.provider,
+    required this.displayName,
+    required this.configured,
+    required this.isActive,
+    required this.hasApiKey,
+    this.apiKeyPreview,
+    required this.message,
+  });
+
+  factory ProviderStatusInfo.fromJson(Map<String, dynamic> json) {
+    final providerId = json['provider'] as String? ?? '';
+    return ProviderStatusInfo(
+      provider: ModelProviderExtension.fromBackend(providerId),
+      displayName: json['displayName'] as String? ?? providerId,
+      configured: json['configured'] ?? false,
+      isActive: json['isActive'] ?? false,
+      hasApiKey: json['hasApiKey'] ?? false,
+      apiKeyPreview: json['apiKeyPreview'] as String?,
+      message: json['message'] as String? ?? '',
+    );
+  }
+}
+
+class AvailableModelOption {
+  final String id;
+  final String name;
+  final String provider;
+  final String? description;
+  final Map<String, dynamic>? metadata;
+
+  AvailableModelOption({
+    required this.id,
+    required this.name,
+    required this.provider,
+    this.description,
+    this.metadata,
+  });
+
+  factory AvailableModelOption.fromJson(Map<String, dynamic> json, String provider) {
+    return AvailableModelOption(
+      id: json['id'] ?? json['name'] ?? '',
+      name: json['name'] ?? json['id'] ?? '',
+      provider: provider,
+      description: json['description'],
+      metadata: json,
+    );
+  }
 }
 
 // Model configuration class
@@ -300,6 +436,7 @@ class ModelConfig {
   String id;
   String name;
   ModelProvider provider;
+  String? providerId;
   String baseUrl;
   String? apiKey;
   String model;
@@ -310,6 +447,9 @@ class ModelConfig {
   double? frequencyPenalty;
   double? presencePenalty;
   Map<String, dynamic>? additionalParams;
+  Map<String, dynamic>? metadata;
+  bool isDefault;
+  bool isActive;
   DateTime createdAt;
   DateTime updatedAt;
 
@@ -317,6 +457,7 @@ class ModelConfig {
     required this.id,
     required this.name,
     required this.provider,
+    this.providerId,
     required this.baseUrl,
     this.apiKey,
     required this.model,
@@ -327,6 +468,9 @@ class ModelConfig {
     this.frequencyPenalty = 0.0,
     this.presencePenalty = 0.0,
     this.additionalParams,
+    this.metadata,
+    this.isDefault = false,
+    this.isActive = true,
     required this.createdAt,
     required this.updatedAt,
   });
@@ -335,7 +479,8 @@ class ModelConfig {
     return {
       'id': id,
       'name': name,
-      'provider': provider.index,
+      'provider': provider.backendId,
+      'providerId': providerId,
       'baseUrl': baseUrl,
       'apiKey': apiKey,
       'model': model,
@@ -346,16 +491,40 @@ class ModelConfig {
       'frequencyPenalty': frequencyPenalty,
       'presencePenalty': presencePenalty,
       'additionalParams': additionalParams,
+      'metadata': metadata,
+      'isDefault': isDefault,
+      'isActive': isActive,
       'createdAt': createdAt.millisecondsSinceEpoch,
       'updatedAt': updatedAt.millisecondsSinceEpoch,
     };
   }
 
   factory ModelConfig.fromJson(Map<String, dynamic> json) {
+    final providerValue = json['provider'];
+    final ModelProvider provider;
+    if (providerValue is int) {
+      provider = ModelProvider.values[providerValue];
+    } else if (providerValue is String) {
+      provider = ModelProviderExtension.fromBackend(providerValue);
+    } else {
+      provider = ModelProvider.pocketLLM;
+    }
+
+    DateTime parseDate(dynamic value) {
+      if (value is int) {
+        return DateTime.fromMillisecondsSinceEpoch(value);
+      }
+      if (value is String) {
+        return DateTime.tryParse(value) ?? DateTime.now();
+      }
+      return DateTime.now();
+    }
+
     return ModelConfig(
       id: json['id'],
       name: json['name'],
-      provider: ModelProvider.values[json['provider']],
+      provider: provider,
+      providerId: json['providerId'] ?? json['provider_id'],
       baseUrl: json['baseUrl'],
       apiKey: json['apiKey'],
       model: json['model'],
@@ -365,9 +534,16 @@ class ModelConfig {
       topP: json['topP'] ?? 1.0,
       frequencyPenalty: json['frequencyPenalty'] ?? 0.0,
       presencePenalty: json['presencePenalty'] ?? 0.0,
-      additionalParams: json['additionalParams'],
-      createdAt: DateTime.fromMillisecondsSinceEpoch(json['createdAt']),
-      updatedAt: DateTime.fromMillisecondsSinceEpoch(json['updatedAt']),
+      additionalParams: json['additionalParams'] != null
+          ? Map<String, dynamic>.from(json['additionalParams'])
+          : null,
+      metadata: json['metadata'] != null
+          ? Map<String, dynamic>.from(json['metadata'])
+          : null,
+      isDefault: json['isDefault'] == true || json['is_default'] == true,
+      isActive: json['isActive'] ?? true,
+      createdAt: parseDate(json['createdAt']),
+      updatedAt: parseDate(json['updatedAt']),
     );
   }
 
@@ -375,6 +551,7 @@ class ModelConfig {
     String? id,
     String? name,
     ModelProvider? provider,
+    String? providerId,
     String? baseUrl,
     String? apiKey,
     String? model,
@@ -385,6 +562,9 @@ class ModelConfig {
     double? frequencyPenalty,
     double? presencePenalty,
     Map<String, dynamic>? additionalParams,
+    Map<String, dynamic>? metadata,
+    bool? isDefault,
+    bool? isActive,
     DateTime? createdAt,
     DateTime? updatedAt,
   }) {
@@ -392,6 +572,7 @@ class ModelConfig {
       id: id ?? this.id,
       name: name ?? this.name,
       provider: provider ?? this.provider,
+      providerId: providerId ?? this.providerId,
       baseUrl: baseUrl ?? this.baseUrl,
       apiKey: apiKey ?? this.apiKey,
       model: model ?? this.model,
@@ -402,6 +583,9 @@ class ModelConfig {
       frequencyPenalty: frequencyPenalty ?? this.frequencyPenalty,
       presencePenalty: presencePenalty ?? this.presencePenalty,
       additionalParams: additionalParams ?? this.additionalParams,
+      metadata: metadata ?? this.metadata,
+      isDefault: isDefault ?? this.isDefault,
+      isActive: isActive ?? this.isActive,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
     );
