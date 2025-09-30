@@ -738,7 +738,7 @@ async def test_providers_service_requires_provider_configuration_for_specific_pr
     service = ProvidersService(settings, database=FakeDatabase(), catalogue=FakeCatalogue([]))
     user_id = uuid4()
 
-    provider_records = [make_provider_record(provider="openai", user_id=user_id)]
+    provider_records = [make_provider_record(provider="openAI", user_id=user_id)]
 
     async def stub_fetch(_: UUID) -> list[ProviderRecord]:
         return provider_records
@@ -750,6 +750,30 @@ async def test_providers_service_requires_provider_configuration_for_specific_pr
     assert response.models == []
     assert response.message and "not configured" in response.message
     assert "groq" in response.missing_providers
+
+
+@pytest.mark.asyncio
+async def test_providers_service_normalises_provider_identifiers():
+    settings = make_settings()
+    service = ProvidersService(settings, database=FakeDatabase(), catalogue=FakeCatalogue([]))
+    user_id = uuid4()
+
+    provider_records = [
+        make_provider_record(provider="OpenAI", user_id=user_id),
+        make_provider_record(provider="GROQ", user_id=user_id, api_key="groq-key"),
+    ]
+
+    async def stub_fetch(_: UUID) -> list[ProviderRecord]:
+        return provider_records
+
+    service._fetch_provider_records = stub_fetch  # type: ignore[assignment]
+
+    response = await service.get_provider_models(user_id)
+
+    assert response.configured_providers == ["groq", "openai"]
+    assert response.missing_providers == ["imagerouter", "openrouter"]
+
+
     models = [
         ProviderModel(provider="openai", id="gpt-4o", name="GPT-4 Omni"),
         ProviderModel(provider="groq", id="llama-guard", name="LLaMA Guard"),

@@ -166,7 +166,8 @@ class ProvidersService:
             if self._record_is_usable(record)
         ]
 
-        configured_providers = sorted({record.provider for record in active_records})
+        configured_providers_set = {record.provider.lower() for record in active_records}
+        configured_providers = sorted(configured_providers_set)
         supported_providers = sorted(_SUPPORTED_PROVIDERS)
 
         if provider is None:
@@ -198,7 +199,7 @@ class ProvidersService:
             missing = [
                 provider_name
                 for provider_name in supported_providers
-                if provider_name not in configured_providers
+                if provider_name not in configured_providers_set
             ]
             return ProviderModelsResponse(
                 models=filtered,
@@ -219,7 +220,7 @@ class ProvidersService:
                 f"Provider '{provider}' is not configured or is inactive for this workspace."
             )
             missing = sorted({provider_key} | set(
-                p for p in supported_providers if p not in configured_providers
+                p for p in supported_providers if p not in configured_providers_set
             ))
             return ProviderModelsResponse(
                 models=[],
@@ -251,7 +252,7 @@ class ProvidersService:
             missing_providers=[
                 provider_name
                 for provider_name in supported_providers
-                if provider_name not in configured_providers
+                if provider_name not in configured_providers_set
             ],
         )
 
