@@ -33,7 +33,7 @@ async def list_models(
     name: str | None = Query(default=None, description="Case-insensitive substring filter applied to model names"),
     model_id: str | None = Query(default=None, description="Case-insensitive substring filter applied to model identifiers"),
     query: str | None = Query(default=None, description="Free text search across model id, name, and description"),
-) -> list[ProviderModel]:
+) -> ProviderModelsResponse:
     service = ProvidersService(settings=settings, database=database)
     return await service.get_provider_models(
         user.sub,
