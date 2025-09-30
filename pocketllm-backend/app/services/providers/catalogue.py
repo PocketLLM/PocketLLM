@@ -131,6 +131,12 @@ class ProviderModelCatalogue:
                 self._logger.debug(
                     "Skipping provider %s because it is inactive", provider_key
                 )
+                if provider_key in configs:
+                    self._logger.debug(
+                        "Removing fallback configuration for inactive provider %s",
+                        provider_key,
+                    )
+                    configs.pop(provider_key, None)
                 continue
 
             base_url = getattr(item, "base_url", None)
