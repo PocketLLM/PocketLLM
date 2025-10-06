@@ -313,14 +313,16 @@ class SupabaseDatabase:
                 query = self.client.table(table).upsert(payload, **upsert_kwargs)
             except TypeError as exc:
                 # Older versions of the Supabase SDK did not expose the
-                # ``on_conflict`` keyword argument. Falling back to a plain
-                # upsert keeps the operation functional while emitting a
-                # diagnostic so the deployment can be upgraded.
+                # ``on_conflict`` keyword argument. These clients instead
+                # require chaining ``.on_conflict()`` after the upsert call.
                 if on_conflict and "on_conflict" in str(exc):
                     logger.warning(
-                        "Supabase client does not support on_conflict parameter; continuing without conflict handling."
+                        "Supabase client does not support on_conflict keyword; retrying with chained on_conflict()."
                     )
-                    query = self.client.table(table).upsert(payload)
+                    legacy_query = self.client.table(table).upsert(payload)
+                    if not hasattr(legacy_query, "on_conflict"):
+                        raise
+                    query = legacy_query.on_conflict(on_conflict)
                 else:
                     raise
 

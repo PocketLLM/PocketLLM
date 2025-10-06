@@ -16,12 +16,11 @@ from app.schemas.providers import ProviderModel
 from .base import ProviderClient
 
 try:  # pragma: no cover - exercised in production environments
-    from groq import AsyncGroq
-    from groq.errors import GroqError
+    from groq import APIError as GroqAPIError, AsyncGroq
 except Exception:  # pragma: no cover - defensive fallback for test environments
     AsyncGroq = None  # type: ignore[assignment]
 
-    class GroqError(Exception):
+    class GroqAPIError(Exception):
         """Fallback error type when the Groq SDK is unavailable."""
 
 
@@ -135,7 +134,7 @@ class GroqProviderClient(ProviderClient):
         try:
             async with _client_context(self._client_factory, **client_kwargs) as client:
                 payload = await client.models.list()
-        except GroqError as exc:  # pragma: no cover - depends on SDK error types
+        except GroqAPIError as exc:  # pragma: no cover - depends on SDK error types
             self._logger.error("Groq SDK request failed: %s", exc)
             return []
         except Exception:  # pragma: no cover - defensive catch-all
@@ -159,7 +158,7 @@ class GroqProviderClient(ProviderClient):
         try:
             async with _client_context(self._client_factory, **client_kwargs) as client:
                 payload = await client.models.list()
-        except GroqError as exc:  # pragma: no cover - depends on SDK error types
+        except GroqAPIError as exc:  # pragma: no cover - depends on SDK error types
             self._logger.error("Groq SDK request failed: %s", exc)
             return []
         except Exception:  # pragma: no cover - defensive catch-all
@@ -314,7 +313,7 @@ class GroqSDKService:
         async with self._client() as client:
             try:
                 return await client.chat.completions.create(model=model, messages=list(messages), **kwargs)
-            except GroqError as exc:  # pragma: no cover - depends on SDK runtime
+            except GroqAPIError as exc:  # pragma: no cover - depends on SDK runtime
                 self._logger.error("Groq chat completion failed: %s", exc)
                 raise
 
@@ -335,7 +334,7 @@ class GroqSDKService:
                         messages=list(messages),
                         **stream_kwargs,
                     )
-                except GroqError as exc:  # pragma: no cover - depends on SDK runtime
+                except GroqAPIError as exc:  # pragma: no cover - depends on SDK runtime
                     self._logger.error("Groq chat completion stream failed: %s", exc)
                     raise
                 async for chunk in stream:
@@ -349,7 +348,7 @@ class GroqSDKService:
         async with self._client() as client:
             try:
                 return await client.responses.create(**kwargs)
-            except GroqError as exc:  # pragma: no cover
+            except GroqAPIError as exc:  # pragma: no cover
                 self._logger.error("Groq response request failed: %s", exc)
                 raise
 
@@ -358,7 +357,7 @@ class GroqSDKService:
         async with self._client() as client:
             try:
                 return await client.audio.transcriptions.create(file=file, model=model, **kwargs)
-            except GroqError as exc:  # pragma: no cover
+            except GroqAPIError as exc:  # pragma: no cover
                 self._logger.error("Groq transcription failed: %s", exc)
                 raise
 
@@ -367,7 +366,7 @@ class GroqSDKService:
         async with self._client() as client:
             try:
                 return await client.audio.translations.create(file=file, model=model, **kwargs)
-            except GroqError as exc:  # pragma: no cover
+            except GroqAPIError as exc:  # pragma: no cover
                 self._logger.error("Groq translation failed: %s", exc)
                 raise
 
@@ -378,7 +377,7 @@ class GroqSDKService:
         async with self._client() as client:
             try:
                 return await client.audio.speech.create(**payload)
-            except GroqError as exc:  # pragma: no cover
+            except GroqAPIError as exc:  # pragma: no cover
                 self._logger.error("Groq speech synthesis failed: %s", exc)
                 raise
 
