@@ -507,6 +507,26 @@ async def test_groq_provider_client_uses_sdk_payload(caplog):
 
 
 @pytest.mark.asyncio
+async def test_groq_provider_client_normalises_base_url():
+    factory_calls: list[Mapping[str, Any]] = []
+
+    def factory(**kwargs: Any) -> FakeGroqClient:
+        factory_calls.append(kwargs)
+        return FakeGroqClient({"data": []})
+
+    settings = make_settings(
+        groq_api_key="test-key",
+        groq_api_base="https://proxy.example.com/openai/v1/",
+    )
+    client = GroqProviderClient(settings, client_factory=factory)
+
+    await client.list_models()
+
+    assert factory_calls
+    assert factory_calls[0].get("base_url") == "https://proxy.example.com"
+
+
+@pytest.mark.asyncio
 async def test_groq_provider_client_handles_sdk_errors(caplog):
     error = RuntimeError("boom")
 
