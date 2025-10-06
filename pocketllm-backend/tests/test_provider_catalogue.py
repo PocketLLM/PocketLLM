@@ -88,6 +88,44 @@ class RecordingProviderClient(ProviderClient):
         return []
 
 
+class RecordingGroqClient(ProviderClient):
+    provider = "groq"
+    default_base_url = "https://api.groq"
+    requires_api_key = False
+
+    def __init__(
+        self,
+        settings: Settings,
+        *,
+        base_url: str | None = None,
+        api_key: str | None = None,
+        metadata: Mapping[str, Any] | None = None,
+        transport: Any | None = None,
+    ) -> None:
+        self.initialiser_calls.append(
+            {
+                "base_url": base_url,
+                "api_key": api_key,
+                "metadata": dict(metadata or {}),
+            }
+        )
+        super().__init__(
+            settings,
+            base_url=base_url,
+            api_key=api_key,
+            metadata=metadata,
+            transport=transport,
+        )
+
+    initialiser_calls: list[dict[str, Any]] = []
+
+    async def list_models(self) -> list[ProviderModel]:
+        return [ProviderModel(provider=self.provider, id="groq:test", name="Groq Test")]
+
+    def _parse_models(self, payload: Any) -> list[ProviderModel]:  # pragma: no cover - unused
+        return []
+
+
 class RecordingOpenAIClient:
     def __init__(self, payload: Any) -> None:
         self._payload = payload
@@ -330,6 +368,33 @@ async def test_catalogue_uses_environment_fallback_configuration(caplog):
     assert call["api_key"] == "env-key"
     assert call["base_url"] == "https://env.openai"
     assert "environment fallback" in caplog.text.lower()
+
+
+@pytest.mark.asyncio
+async def test_catalogue_ignores_environment_fallback_for_unconfigured_provider():
+    RecordingProviderClient.initialiser_calls = []
+    RecordingGroqClient.initialiser_calls = []
+    settings = make_settings(openai_api_key="env-key")
+    catalogue = ProviderModelCatalogue(
+        settings,
+        client_factories={
+            "openai": RecordingProviderClient,
+            "groq": RecordingGroqClient,
+        },
+    )
+    groq_configuration = SimpleNamespace(
+        provider="groq",
+        is_active=True,
+        base_url="https://user.groq",
+        metadata={},
+        api_key="user-groq-key",
+    )
+
+    models = await catalogue.list_all_models([groq_configuration])
+
+    assert {model.provider for model in models} == {"groq"}
+    assert RecordingGroqClient.initialiser_calls
+    assert RecordingProviderClient.initialiser_calls == []
 
 
 @pytest.mark.asyncio

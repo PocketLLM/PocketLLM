@@ -120,12 +120,15 @@ class ProviderModelCatalogue:
         if not providers:
             return configs
 
+        explicitly_configured: set[str] = set()
+
         for item in providers:
             provider = getattr(item, "provider", None)
             if not provider:
                 continue
 
             provider_key = str(provider).lower()
+            explicitly_configured.add(provider_key)
             is_active = bool(getattr(item, "is_active", False))
             if not is_active:
                 self._logger.debug(
@@ -178,6 +181,15 @@ class ProviderModelCatalogue:
                 api_key=api_key,
                 metadata=metadata,
             )
+
+        if explicitly_configured:
+            for provider_key in list(configs.keys()):
+                if provider_key not in explicitly_configured:
+                    self._logger.debug(
+                        "Removing fallback configuration for unconfigured provider %s",
+                        provider_key,
+                    )
+                    configs.pop(provider_key, None)
 
         return configs
 
