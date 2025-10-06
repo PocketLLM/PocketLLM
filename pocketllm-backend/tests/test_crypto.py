@@ -34,8 +34,18 @@ def test_encrypt_decrypt_with_raw_32_char_key(secret: str) -> None:
     assert decrypt_secret(token, settings) == secret
 
 
+def test_encrypt_decrypt_with_arbitrary_length_key() -> None:
+    settings = _Settings(
+        encryption_key="bj1-8kO9s993W4D7mJ3yVv6bB5gB7x4xL3dY2qV5mQ8kbh"
+    )
+
+    token = encrypt_secret("super-secret", settings)
+
+    assert decrypt_secret(token, settings) == "super-secret"
+
+
 def test_encrypt_with_invalid_key_raises() -> None:
-    settings = _Settings(encryption_key="short")
+    settings = _Settings(encryption_key="")
 
     with pytest.raises(RuntimeError):
         encrypt_secret("secret", settings)

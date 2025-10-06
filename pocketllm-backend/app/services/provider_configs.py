@@ -52,12 +52,13 @@ class ProvidersService:
         user_id: UUID,
         payload: ProviderActivationRequest,
     ) -> ProviderActivationResponse:
+        resolved_base_url, resolved_metadata = self._resolve_activation_defaults(payload)
         try:
             await self._validator.validate(
                 payload.provider,
                 payload.api_key,
-                base_url=payload.base_url,
-                metadata=payload.metadata,
+                base_url=resolved_base_url,
+                metadata=resolved_metadata if resolved_metadata else None,
             )
         except ValueError as exc:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
@@ -70,8 +71,8 @@ class ProvidersService:
         provider_payload = {
             "user_id": str(user_id),
             "provider": payload.provider,
-            "base_url": payload.base_url,
-            "metadata": payload.metadata or {},
+            "base_url": resolved_base_url,
+            "metadata": resolved_metadata,
             "api_key_hash": api_key_hash,
             "api_key_preview": api_key_preview,
             "api_key_encrypted": api_key_encrypted,
@@ -86,6 +87,22 @@ class ProvidersService:
             raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to save provider")
         provider = ProviderRecord.from_mapping(records[0]).to_schema()
         return ProviderActivationResponse(provider=provider)
+
+    def _resolve_activation_defaults(
+        self, payload: ProviderActivationRequest
+    ) -> tuple[str | None, dict[str, Any]]:
+        """Merge user supplied data with backend defaults for known providers."""
+
+        provider_key = payload.provider.lower()
+        defaults = _PROVIDER_DEFAULT_CONFIGS.get(provider_key, {})
+        default_metadata = dict(defaults.get("metadata") or {})
+
+        resolved_base_url = payload.base_url or defaults.get("base_url")
+        resolved_metadata = dict(default_metadata)
+        if payload.metadata:
+            resolved_metadata.update(payload.metadata)
+
+        return resolved_base_url, resolved_metadata
 
     async def update_provider(self, user_id: UUID, provider: str, payload: ProviderUpdateRequest) -> ProviderConfiguration:
         provided_fields = payload.model_dump(exclude_unset=True)
@@ -320,6 +337,14 @@ class ProvidersService:
 
 
 __all__ = ["ProvidersService"]
+
+
+_PROVIDER_DEFAULT_CONFIGS: dict[str, dict[str, Any]] = {
+    "openai": {"base_url": "https://api.openai.com/v1"},
+    "groq": {"base_url": "https://api.groq.com/openai/v1"},
+    "openrouter": {"base_url": "https://openrouter.ai/api/v1"},
+    "imagerouter": {"base_url": "https://api.imagerouter.com"},
+}
 
 
 _SUPPORTED_PROVIDERS: dict[str, dict[str, str]] = {

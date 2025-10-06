@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import binascii
+import hashlib
 import logging
 from base64 import urlsafe_b64encode
 from typing import TYPE_CHECKING
@@ -19,7 +20,16 @@ def _derive_fernet_token(secret: str) -> bytes:
     """Derive a valid Fernet token from an arbitrary secret string."""
 
     digest = hashlib.sha256(secret.encode("utf-8")).digest()
-    return base64.urlsafe_b64encode(digest)
+    return urlsafe_b64encode(digest)
+
+
+def _maybe_pad_base64(token: bytes) -> bytes | None:
+    """Return ``token`` padded for base64 decoding when required."""
+
+    remainder = len(token) % 4
+    if remainder:
+        return token + b"=" * (4 - remainder)
+    return None
 
 
 def _load_fernet(settings: "Settings") -> Fernet:
@@ -34,12 +44,39 @@ def _load_fernet(settings: "Settings") -> Fernet:
     try:
         return Fernet(token)
     except (ValueError, TypeError, binascii.Error) as exc:
-        if len(token) == 32:
-            derived_key = urlsafe_b64encode(token)
-            logger.warning(
-                "Provided ENCRYPTION_KEY was not base64 encoded; derived Fernet key from raw 32-byte string."
+        fallback_candidates: list[tuple[bytes, str]] = []
+
+        padded = _maybe_pad_base64(token)
+        if padded and padded != token:
+            fallback_candidates.append(
+                (
+                    padded,
+                    "Provided ENCRYPTION_KEY appeared to be missing base64 padding; applied automatic padding.",
+                )
             )
-            return Fernet(derived_key)
+
+        if len(token) == 32:
+            fallback_candidates.append(
+                (
+                    urlsafe_b64encode(token),
+                    "Provided ENCRYPTION_KEY was not base64 encoded; derived Fernet key from raw 32-byte string.",
+                )
+            )
+
+        fallback_candidates.append(
+            (
+                _derive_fernet_token(key),
+                "Provided ENCRYPTION_KEY was not a valid Fernet key; derived deterministic key from hashed secret.",
+            )
+        )
+
+        for candidate, message in fallback_candidates:
+            try:
+                fernet = Fernet(candidate)
+            except (ValueError, TypeError, binascii.Error):
+                continue
+            logger.warning(message)
+            return fernet
         raise RuntimeError(
             "Invalid encryption key format. Ensure ENCRYPTION_KEY is a base64 encoded Fernet key or a 32-character string."
         ) from exc
