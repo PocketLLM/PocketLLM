@@ -116,11 +116,10 @@ class ProviderModelCatalogue:
         self,
         providers: Sequence[object] | None,
     ) -> dict[str, _ProviderConfig]:
-        configs: dict[str, _ProviderConfig] = self._build_fallback_configs()
         if not providers:
-            return configs
+            return self._build_fallback_configs()
 
-        explicitly_configured: set[str] = set()
+        configs: dict[str, _ProviderConfig] = {}
 
         for item in providers:
             provider = getattr(item, "provider", None)
@@ -128,18 +127,11 @@ class ProviderModelCatalogue:
                 continue
 
             provider_key = str(provider).lower()
-            explicitly_configured.add(provider_key)
             is_active = bool(getattr(item, "is_active", False))
             if not is_active:
                 self._logger.debug(
                     "Skipping provider %s because it is inactive", provider_key
                 )
-                if provider_key in configs:
-                    self._logger.debug(
-                        "Removing fallback configuration for inactive provider %s",
-                        provider_key,
-                    )
-                    configs.pop(provider_key, None)
                 continue
 
             base_url = getattr(item, "base_url", None)
@@ -158,21 +150,10 @@ class ProviderModelCatalogue:
                     api_key = candidate.strip()
 
             if api_key is None:
-                if provider_key not in configs:
-                    self._logger.warning(
-                        "Provider %s has no configured API key; user configuration is required to fetch models",
-                        provider_key,
-                    )
-                else:
-                    existing = configs[provider_key]
-                    configs[provider_key] = _ProviderConfig(
-                        provider=existing.provider,
-                        base_url=base_url if base_url is not None else existing.base_url,
-                        api_key=existing.api_key,
-                        metadata=(
-                            metadata if metadata is not None else existing.metadata
-                        ),
-                    )
+                self._logger.warning(
+                    "Provider %s has no configured API key; user configuration is required to fetch models",
+                    provider_key,
+                )
                 continue
 
             configs[provider_key] = _ProviderConfig(
@@ -181,15 +162,6 @@ class ProviderModelCatalogue:
                 api_key=api_key,
                 metadata=metadata,
             )
-
-        if explicitly_configured:
-            for provider_key in list(configs.keys()):
-                if provider_key not in explicitly_configured:
-                    self._logger.debug(
-                        "Removing fallback configuration for unconfigured provider %s",
-                        provider_key,
-                    )
-                    configs.pop(provider_key, None)
 
         return configs
 
