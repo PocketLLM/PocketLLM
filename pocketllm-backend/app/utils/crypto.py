@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from base64 import urlsafe_b64encode
 from typing import TYPE_CHECKING
 
 from cryptography.fernet import Fernet, InvalidToken
@@ -21,11 +22,19 @@ def _load_fernet(settings: "Settings") -> Fernet:
         raise RuntimeError(
             "Application encryption key is not configured. Set ENCRYPTION_KEY to a valid Fernet key."
         )
+    token = key.encode("utf-8")
     try:
-        token = key.encode("utf-8")
         return Fernet(token)
     except Exception as exc:  # pragma: no cover - defensive guard for invalid keys
-        raise RuntimeError("Invalid encryption key format. Ensure ENCRYPTION_KEY is a base64 encoded Fernet key.") from exc
+        if len(token) == 32:
+            derived_key = urlsafe_b64encode(token)
+            logger.warning(
+                "Provided ENCRYPTION_KEY was not base64 encoded; derived Fernet key from raw 32-byte string."
+            )
+            return Fernet(derived_key)
+        raise RuntimeError(
+            "Invalid encryption key format. Ensure ENCRYPTION_KEY is a base64 encoded Fernet key or a 32-character string."
+        ) from exc
 
 
 def encrypt_secret(secret: str, settings: "Settings") -> str:
