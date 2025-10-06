@@ -31,10 +31,6 @@ def _load_fernet(settings: "Settings") -> Fernet:
         raise RuntimeError(
             "Application encryption key is not configured. Set ENCRYPTION_KEY to a valid Fernet key."
         )
-<<<<<<< HEAD
-
-=======
->>>>>>> 32429fc45dc26333f82e71edad4dba74b134cd18
     token = key.encode("utf-8")
     try:
         return Fernet(token)
