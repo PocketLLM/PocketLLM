@@ -9,6 +9,7 @@ import pytest
 
 httpx = pytest.importorskip("httpx")
 
+from app.core.config import Settings
 from app.schemas.providers import ProviderConfiguration, ProviderModel
 from app.services.provider_configs import ProvidersService
 from app.services.providers import (
@@ -683,17 +684,9 @@ async def test_providers_service_filters_models_by_attributes():
 
     guard_match = await service.get_provider_models(user_id, model_id="guard")
     assert [model.id for model in guard_match.models] == ["llama-guard"]
-    service = ProvidersService(make_settings(), database=FakeDatabase(), catalogue=FakeCatalogue(models))
-    user_id = uuid4()
 
-    moderation = await service.get_provider_models(user_id, query="moderation")
-    assert [model.id for model in moderation] == ["llama-guard"]
-
-    gpt_match = await service.get_provider_models(user_id, name="gpt-4")
-    assert [model.id for model in gpt_match] == ["gpt-4o"]
-
-    guard_match = await service.get_provider_models(user_id, model_id="guard")
-    assert [model.id for model in guard_match] == ["llama-guard"]
+    all_models = await service.get_provider_models(user_id)
+    assert {model.id for model in all_models.models} == {"gpt-4o", "llama-guard"}
 
 
 @pytest.mark.asyncio
@@ -720,6 +713,7 @@ async def test_providers_service_respects_provider_parameter():
     assert catalogue.calls and catalogue.calls[0][0] == "groq"
 
 
+
 @pytest.mark.asyncio
 async def test_providers_service_requires_user_configuration_for_all_models():
     settings = make_settings()
@@ -744,7 +738,7 @@ async def test_providers_service_requires_provider_configuration_for_specific_pr
     service = ProvidersService(settings, database=FakeDatabase(), catalogue=FakeCatalogue([]))
     user_id = uuid4()
 
-    provider_records = [make_provider_record(provider="openai", user_id=user_id)]
+    provider_records = [make_provider_record(provider="openAI", user_id=user_id)]
 
     async def stub_fetch(_: UUID) -> list[ProviderRecord]:
         return provider_records
@@ -756,10 +750,46 @@ async def test_providers_service_requires_provider_configuration_for_specific_pr
     assert response.models == []
     assert response.message and "not configured" in response.message
     assert "groq" in response.missing_providers
+
+
+@pytest.mark.asyncio
+async def test_providers_service_normalises_provider_identifiers():
+    settings = make_settings()
+    service = ProvidersService(settings, database=FakeDatabase(), catalogue=FakeCatalogue([]))
+    user_id = uuid4()
+
+    provider_records = [
+        make_provider_record(provider="OpenAI", user_id=user_id),
+        make_provider_record(provider="GROQ", user_id=user_id, api_key="groq-key"),
+    ]
+
+    async def stub_fetch(_: UUID) -> list[ProviderRecord]:
+        return provider_records
+
+    service._fetch_provider_records = stub_fetch  # type: ignore[assignment]
+
+    response = await service.get_provider_models(user_id)
+
+    assert response.configured_providers == ["groq", "openai"]
+    assert response.missing_providers == ["imagerouter", "openrouter"]
+
+
+    models = [
+        ProviderModel(provider="openai", id="gpt-4o", name="GPT-4 Omni"),
+        ProviderModel(provider="groq", id="llama-guard", name="LLaMA Guard"),
+    ]
+    catalogue = FakeCatalogue(models)
     service = ProvidersService(make_settings(), database=FakeDatabase(), catalogue=catalogue)
     user_id = uuid4()
 
+    provider_records = [make_provider_record(provider="groq", user_id=user_id, api_key="groq-key")]
+
+    async def stub_fetch_groq(_: UUID) -> list[ProviderRecord]:
+        return provider_records
+
+    service._fetch_provider_records = stub_fetch_groq  # type: ignore[assignment]
+
     groq_models = await service.get_provider_models(user_id, provider="groq")
 
-    assert [model.provider for model in groq_models] == ["groq"]
+    assert [model.provider for model in groq_models.models] == ["groq"]
     assert catalogue.calls and catalogue.calls[0][0] == "groq"

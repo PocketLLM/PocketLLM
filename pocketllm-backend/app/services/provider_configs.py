@@ -158,13 +158,103 @@ class ProvidersService:
         name: str | None = None,
         model_id: str | None = None,
         query: str | None = None,
-    ) -> list[ProviderModel]:
+    ) -> ProviderModelsResponse:
         records = await self._fetch_provider_records(user_id)
+        active_records = [
+            record
+            for record in records
+            if self._record_is_usable(record)
+        ]
+
+        configured_providers_set = {record.provider.lower() for record in active_records}
+        configured_providers = sorted(configured_providers_set)
+        supported_providers = sorted(_SUPPORTED_PROVIDERS)
+
         if provider is None:
-            models = await self._catalogue.list_all_models(records)
-        else:
-            models = await self._catalogue.list_models_for_provider(provider, records)
-        return self._filter_models(models, name=name, model_id=model_id, query=query)
+            if not active_records:
+                return ProviderModelsResponse(
+                    models=[],
+                    message=(
+                        "No providers are configured for this workspace. "
+                        "Add a provider to browse available models."
+                    ),
+                    configured_providers=[],
+                    missing_providers=supported_providers,
+                )
+
+            models = await self._catalogue.list_all_models(active_records)
+            filtered = self._filter_models(
+                models,
+                name=name,
+                model_id=model_id,
+                query=query,
+            )
+            message = None
+            if not filtered:
+                if any([name, model_id, query]):
+                    message = "No models matched the provided filters."
+                else:
+                    message = "No models are currently available from the configured providers."
+
+            missing = [
+                provider_name
+                for provider_name in supported_providers
+                if provider_name not in configured_providers_set
+            ]
+            return ProviderModelsResponse(
+                models=filtered,
+                message=message,
+                configured_providers=configured_providers,
+                missing_providers=missing,
+            )
+
+        provider_key = provider.lower()
+        provider_records = [
+            record
+            for record in active_records
+            if record.provider.lower() == provider_key
+        ]
+
+        if not provider_records:
+            message = (
+                f"Provider '{provider}' is not configured or is inactive for this workspace."
+            )
+            missing = sorted({provider_key} | set(
+                p for p in supported_providers if p not in configured_providers_set
+            ))
+            return ProviderModelsResponse(
+                models=[],
+                message=message,
+                configured_providers=configured_providers,
+                missing_providers=missing,
+            )
+
+        models = await self._catalogue.list_models_for_provider(provider_key, provider_records)
+        filtered = self._filter_models(
+            models,
+            name=name,
+            model_id=model_id,
+            query=query,
+        )
+        message = None
+        if not filtered:
+            if any([name, model_id, query]):
+                message = "No models matched the provided filters."
+            else:
+                message = (
+                    f"No models are currently available for provider '{provider}'."
+                )
+
+        return ProviderModelsResponse(
+            models=filtered,
+            message=message,
+            configured_providers=configured_providers,
+            missing_providers=[
+                provider_name
+                for provider_name in supported_providers
+                if provider_name not in configured_providers_set
+            ],
+        )
 
     def _filter_models(
         self,
@@ -197,6 +287,16 @@ class ProvidersService:
             return True
 
         return [model for model in models if _matches(model)]
+
+    @staticmethod
+    def _record_is_usable(record: ProviderRecord) -> bool:
+        if not record.is_active:
+            return False
+        return bool(
+            (record.api_key and record.api_key.strip())
+            or record.api_key_encrypted
+            or record.api_key_hash
+        )
 
     async def _fetch_provider_records(self, user_id: UUID) -> list[ProviderRecord]:
         records = await self._database.select(
