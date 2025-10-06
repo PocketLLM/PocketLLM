@@ -17,7 +17,8 @@ class ImageRouterProviderClient(ProviderClient):
     """ImageRouter provider client for image generation models."""
 
     provider = "imagerouter"
-    default_base_url = "https://api.imagerouter.io/v1/openai"
+    default_base_url = "https://api.imagerouter.io"
+    models_endpoint = "/v1/models"
 
     def __init__(
         self,
@@ -61,7 +62,7 @@ class ImageRouterProviderClient(ProviderClient):
                 timeout=self.timeout,
                 transport=self._transport,
             ) as client:
-                response = await client.get("/models")
+                response = await client.get(self.models_endpoint)
                 response.raise_for_status()
                 return self._parse_models(response.json())
 
@@ -201,7 +202,7 @@ class ImageRouterProviderClient(ProviderClient):
                 timeout=self.timeout * 2,
                 transport=self._transport,
             ) as client:
-                response = await client.post("/images/generations", json=payload)
+                response = await client.post("/v1/openai/images/generations", json=payload)
                 response.raise_for_status()
                 return response.json()
 

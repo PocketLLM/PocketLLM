@@ -150,7 +150,15 @@ class APIKeyValidationService:
         base_url: str | None,
         metadata: Mapping[str, Any] | None,
     ) -> None:
-        url = (base_url or "https://api.imagerouter.io/v1/openai") + "/models"
+        base = (base_url or "https://api.imagerouter.io").rstrip("/")
+        lowered_base = base.lower()
+        if lowered_base.endswith("/v1/openai"):
+            base = base[: -len("/openai")]
+            lowered_base = base.lower()
+        if lowered_base.endswith("/v1"):
+            url = _join_url_path(base, "models")
+        else:
+            url = _join_url_path(base, "v1/models")
         headers = {"Authorization": f"Bearer {api_key}", "Accept": "application/json"}
         if metadata and isinstance(metadata.get("headers"), Mapping):
             headers.update({str(k): str(v) for k, v in metadata["headers"].items()})
