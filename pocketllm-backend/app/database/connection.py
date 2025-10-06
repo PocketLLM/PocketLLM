@@ -305,9 +305,25 @@ class SupabaseDatabase:
 
         try:
             payload = self._serialise_for_supabase(data)
-            query = self.client.table(table).upsert(payload)
+            upsert_kwargs: Dict[str, Any] = {}
             if on_conflict:
-                query = query.on_conflict(on_conflict)
+                upsert_kwargs["on_conflict"] = on_conflict
+
+            try:
+                query = self.client.table(table).upsert(payload, **upsert_kwargs)
+            except TypeError as exc:
+                # Older versions of the Supabase SDK did not expose the
+                # ``on_conflict`` keyword argument. Falling back to a plain
+                # upsert keeps the operation functional while emitting a
+                # diagnostic so the deployment can be upgraded.
+                if on_conflict and "on_conflict" in str(exc):
+                    logger.warning(
+                        "Supabase client does not support on_conflict parameter; continuing without conflict handling."
+                    )
+                    query = self.client.table(table).upsert(payload)
+                else:
+                    raise
+
             result = query.execute()
             if not result.data:
                 logger.critical("❌ CRITICAL: Upsert failed for %s - no data returned", table)
