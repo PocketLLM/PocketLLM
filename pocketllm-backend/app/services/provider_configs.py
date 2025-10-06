@@ -23,6 +23,7 @@ from app.schemas.providers import (
 from app.services.api_keys import APIKeyValidationService
 from app.services.providers import (
     GroqProviderClient,
+    ImageRouterProviderClient,
     OpenAIProviderClient,
     OpenRouterProviderClient,
     ProviderModelCatalogue,
@@ -139,7 +140,11 @@ class ProvidersService:
                 if default_title:
                     resolved_metadata.setdefault("x_title", default_title)
         elif provider_key == "imagerouter":
-            cleaned_base_url = cleaned_base_url or "https://api.imagerouter.com"
+            cleaned_base_url = (
+                cleaned_base_url
+                or getattr(self._settings, "imagerouter_api_base", None)
+                or ImageRouterProviderClient.default_base_url
+            )
 
         return cleaned_base_url, (resolved_metadata or None)
 

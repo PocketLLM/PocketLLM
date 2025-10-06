@@ -3,6 +3,7 @@
 from .base import ProviderClient
 from .catalogue import ProviderModelCatalogue
 from .groq import GroqProviderClient, GroqSDKService
+from .imagerouter import ImageRouterProviderClient
 from .openai import OpenAIProviderClient
 from .openrouter import OpenRouterProviderClient
 
@@ -13,4 +14,5 @@ __all__ = [
     "GroqSDKService",
     "OpenAIProviderClient",
     "OpenRouterProviderClient",
+    "ImageRouterProviderClient",
 ]

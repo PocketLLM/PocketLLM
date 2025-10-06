@@ -16,6 +16,7 @@ from app.schemas.providers import ProviderModel
 
 from .base import ProviderClient
 from .groq import GroqProviderClient
+from .imagerouter import ImageRouterProviderClient
 from .openai import OpenAIProviderClient
 from .openrouter import OpenRouterProviderClient
 
@@ -54,6 +55,7 @@ class ProviderModelCatalogue:
                 "openai": OpenAIProviderClient,
                 "groq": GroqProviderClient,
                 "openrouter": OpenRouterProviderClient,
+                "imagerouter": ImageRouterProviderClient,
             }
         )
         self._cache_ttl_seconds = self._coerce_ttl(
@@ -116,9 +118,10 @@ class ProviderModelCatalogue:
         self,
         providers: Sequence[object] | None,
     ) -> dict[str, _ProviderConfig]:
-        configs: dict[str, _ProviderConfig] = self._build_fallback_configs()
         if not providers:
-            return configs
+            return self._build_fallback_configs()
+
+        configs: dict[str, _ProviderConfig] = {}
 
         for item in providers:
             provider = getattr(item, "provider", None)
@@ -131,12 +134,6 @@ class ProviderModelCatalogue:
                 self._logger.debug(
                     "Skipping provider %s because it is inactive", provider_key
                 )
-                if provider_key in configs:
-                    self._logger.debug(
-                        "Removing fallback configuration for inactive provider %s",
-                        provider_key,
-                    )
-                    configs.pop(provider_key, None)
                 continue
 
             base_url = getattr(item, "base_url", None)
@@ -155,21 +152,10 @@ class ProviderModelCatalogue:
                     api_key = candidate.strip()
 
             if api_key is None:
-                if provider_key not in configs:
-                    self._logger.warning(
-                        "Provider %s has no configured API key; user configuration is required to fetch models",
-                        provider_key,
-                    )
-                else:
-                    existing = configs[provider_key]
-                    configs[provider_key] = _ProviderConfig(
-                        provider=existing.provider,
-                        base_url=base_url if base_url is not None else existing.base_url,
-                        api_key=existing.api_key,
-                        metadata=(
-                            metadata if metadata is not None else existing.metadata
-                        ),
-                    )
+                self._logger.warning(
+                    "Provider %s has no configured API key; user configuration is required to fetch models",
+                    provider_key,
+                )
                 continue
 
             configs[provider_key] = _ProviderConfig(
@@ -216,6 +202,15 @@ class ProviderModelCatalogue:
                 base_url=getattr(self._settings, "openrouter_api_base", None),
                 api_key=openrouter_key,
                 metadata=metadata or None,
+            )
+
+        imagerouter_key = getattr(self._settings, "imagerouter_api_key", None)
+        if isinstance(imagerouter_key, str) and imagerouter_key:
+            fallbacks["imagerouter"] = _ProviderConfig(
+                provider="imagerouter",
+                base_url=getattr(self._settings, "imagerouter_api_base", None),
+                api_key=imagerouter_key,
+                metadata=None,
             )
 
         return fallbacks

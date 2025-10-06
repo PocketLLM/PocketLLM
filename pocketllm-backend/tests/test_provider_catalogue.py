@@ -16,6 +16,7 @@ from app.services.providers import (
     ProviderClient,
     GroqProviderClient,
     GroqSDKService,
+    ImageRouterProviderClient,
     OpenAIProviderClient,
     OpenRouterProviderClient,
     ProviderModelCatalogue,
@@ -88,6 +89,44 @@ class RecordingProviderClient(ProviderClient):
         return []
 
 
+class RecordingGroqProviderClient(ProviderClient):
+    provider = "groq"
+    default_base_url = "https://api.groq"
+    requires_api_key = False
+
+    def __init__(
+        self,
+        settings: Settings,
+        *,
+        base_url: str | None = None,
+        api_key: str | None = None,
+        metadata: Mapping[str, Any] | None = None,
+        transport: Any | None = None,
+    ) -> None:
+        self.initialiser_calls.append(
+            {
+                "base_url": base_url,
+                "api_key": api_key,
+                "metadata": dict(metadata or {}),
+            }
+        )
+        super().__init__(
+            settings,
+            base_url=base_url,
+            api_key=api_key,
+            metadata=metadata,
+            transport=transport,
+        )
+
+    initialiser_calls: list[dict[str, Any]] = []
+
+    async def list_models(self) -> list[ProviderModel]:
+        return [ProviderModel(provider=self.provider, id="groq:test", name="Groq Test")]
+
+    def _parse_models(self, payload: Any) -> list[ProviderModel]:  # pragma: no cover - unused
+        return []
+
+
 class RecordingOpenAIClient:
     def __init__(self, payload: Any) -> None:
         self._payload = payload
@@ -124,6 +163,8 @@ def make_settings(**overrides: Any) -> SimpleNamespace:
         "openrouter_api_base": None,
         "openrouter_app_url": None,
         "openrouter_app_name": None,
+        "imagerouter_api_key": None,
+        "imagerouter_api_base": None,
         "provider_catalogue_cache_ttl": 0,
     }
     defaults.update(overrides)
@@ -170,6 +211,150 @@ class FakeCatalogue:
         self.calls.append((provider, providers))
         provider_key = provider.lower()
         return [model for model in self._models if model.provider.lower() == provider_key]
+
+
+def test_normalise_skips_environment_fallback_for_user_configured_provider() -> None:
+    class TrackingOpenAIClient(ProviderClient):
+        provider = "openai"
+        default_base_url = "https://api.test"
+        requires_api_key = False
+        created: list[dict[str, Any]] = []
+
+        def __init__(
+            self,
+            settings: Settings,
+            *,
+            base_url: str | None = None,
+            api_key: str | None = None,
+            metadata: Mapping[str, Any] | None = None,
+            transport: Any | None = None,
+        ) -> None:
+            type(self).created.append(
+                {
+                    "base_url": base_url,
+                    "api_key": api_key,
+                    "metadata": dict(metadata or {}),
+                }
+            )
+            super().__init__(
+                settings,
+                base_url=base_url,
+                api_key=api_key,
+                metadata=metadata,
+                transport=transport,
+            )
+
+        async def list_models(self) -> list[ProviderModel]:
+            return []
+
+        def _parse_models(self, payload: Any) -> list[ProviderModel]:  # pragma: no cover - unused
+            return []
+
+    class TrackingGroqClient(ProviderClient):
+        provider = "groq"
+        default_base_url = "https://api.groq"
+        requires_api_key = False
+        created: list[dict[str, Any]] = []
+
+        def __init__(
+            self,
+            settings: Settings,
+            *,
+            base_url: str | None = None,
+            api_key: str | None = None,
+            metadata: Mapping[str, Any] | None = None,
+            transport: Any | None = None,
+        ) -> None:
+            type(self).created.append(
+                {
+                    "base_url": base_url,
+                    "api_key": api_key,
+                    "metadata": dict(metadata or {}),
+                }
+            )
+            super().__init__(
+                settings,
+                base_url=base_url,
+                api_key=api_key,
+                metadata=metadata,
+                transport=transport,
+            )
+
+        async def list_models(self) -> list[ProviderModel]:
+            return []
+
+        def _parse_models(self, payload: Any) -> list[ProviderModel]:  # pragma: no cover - unused
+            return []
+
+    settings = make_settings(openai_api_key="env-openai", groq_api_key="env-groq")
+    TrackingOpenAIClient.created.clear()
+    TrackingGroqClient.created.clear()
+    catalogue = ProviderModelCatalogue(
+        settings,
+        client_factories={
+            "openai": TrackingOpenAIClient,
+            "groq": TrackingGroqClient,
+        },
+    )
+    provider = make_provider_record(provider="groq", api_key="user-groq")
+
+    clients = catalogue._get_clients([provider])
+
+    assert [client.provider for client in clients] == ["groq"]
+    assert TrackingOpenAIClient.created == []
+    assert TrackingGroqClient.created[-1]["api_key"] == "user-groq"
+
+
+def test_normalise_uses_environment_fallback_when_no_providers_configured() -> None:
+    class TrackingOpenAIClient(ProviderClient):
+        provider = "openai"
+        default_base_url = "https://api.test"
+        requires_api_key = False
+        created: list[dict[str, Any]] = []
+
+        def __init__(
+            self,
+            settings: Settings,
+            *,
+            base_url: str | None = None,
+            api_key: str | None = None,
+            metadata: Mapping[str, Any] | None = None,
+            transport: Any | None = None,
+        ) -> None:
+            type(self).created.append(
+                {
+                    "base_url": base_url,
+                    "api_key": api_key,
+                    "metadata": dict(metadata or {}),
+                }
+            )
+            super().__init__(
+                settings,
+                base_url=base_url,
+                api_key=api_key,
+                metadata=metadata,
+                transport=transport,
+            )
+
+        async def list_models(self) -> list[ProviderModel]:
+            return []
+
+        def _parse_models(self, payload: Any) -> list[ProviderModel]:  # pragma: no cover - unused
+            return []
+
+    settings = make_settings(openai_api_key="env-openai")
+    TrackingOpenAIClient.created.clear()
+    catalogue = ProviderModelCatalogue(
+        settings,
+        client_factories={
+            "openai": TrackingOpenAIClient,
+        },
+    )
+
+    clients = catalogue._get_clients(None)
+
+    assert [client.provider for client in clients] == ["openai"]
+    assert TrackingOpenAIClient.created[-1]["api_key"] == "env-openai"
 
 
 class FakeDatabase:
@@ -330,6 +515,33 @@ async def test_catalogue_uses_environment_fallback_configuration(caplog):
     assert call["api_key"] == "env-key"
     assert call["base_url"] == "https://env.openai"
     assert "environment fallback" in caplog.text.lower()
+
+
+@pytest.mark.asyncio
+async def test_catalogue_ignores_environment_fallback_for_unconfigured_provider():
+    RecordingProviderClient.initialiser_calls = []
+    RecordingGroqProviderClient.initialiser_calls = []
+    settings = make_settings(openai_api_key="env-key")
+    catalogue = ProviderModelCatalogue(
+        settings,
+        client_factories={
+            "openai": RecordingProviderClient,
+            "groq": RecordingGroqProviderClient,
+        },
+    )
+    groq_configuration = SimpleNamespace(
+        provider="groq",
+        is_active=True,
+        base_url="https://user.groq",
+        metadata={},
+        api_key="user-groq-key",
+    )
+
+    models = await catalogue.list_all_models([groq_configuration])
+
+    assert {model.provider for model in models} == {"groq"}
+    assert RecordingGroqProviderClient.initialiser_calls
+    assert RecordingProviderClient.initialiser_calls == []
 
 
 @pytest.mark.asyncio
@@ -642,7 +854,7 @@ async def test_openrouter_provider_client_includes_headers():
 
 @pytest.mark.asyncio
 async def test_openrouter_provider_client_requires_sdk_when_unavailable(monkeypatch, caplog):
-    monkeypatch.setattr("app.services.providers.openrouter.AsyncOpenRouter", None, raising=False)
+    monkeypatch.setattr("app.services.providers.openrouter.AsyncOpenAI", None, raising=False)
     captured_requests: list[httpx.Request] = []
 
     def handler(request: httpx.Request) -> httpx.Response:  # pragma: no cover - should not be called
@@ -663,6 +875,40 @@ async def test_openrouter_provider_client_requires_sdk_when_unavailable(monkeypa
     assert models == []
     assert captured_requests == []
     assert "cannot list models" in caplog.text.lower()
+
+
+@pytest.mark.asyncio
+async def test_imagerouter_provider_client_fetches_models_via_http():
+    captured: list[httpx.Request] = []
+    payload = {
+        "data": [
+            {
+                "id": "imagerouter/image-alpha",
+                "name": "Image Alpha",
+                "capabilities": ["image_generation"],
+                "supported_formats": ["png"],
+                "pricing": {"usd": 0.02},
+            }
+        ]
+    }
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        captured.append(request)
+        return httpx.Response(200, json=payload)
+
+    transport = httpx.MockTransport(handler)
+    settings = make_settings(imagerouter_api_key="image-key")
+    client = ImageRouterProviderClient(settings, transport=transport)
+
+    models = await client.list_models()
+
+    assert [model.id for model in models] == ["imagerouter/image-alpha"]
+    assert models[0].metadata == {
+        "capabilities": ["image_generation"],
+        "supported_formats": ["png"],
+    }
+    assert captured and captured[0].headers["Authorization"] == "Bearer image-key"
+    assert captured[0].url.path.endswith("/models")
 
 
 @pytest.mark.asyncio

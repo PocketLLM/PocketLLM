@@ -6,16 +6,9 @@ import logging
 from typing import Any, Mapping
 
 import httpx
+from openai import AsyncOpenAI, OpenAIError
 
 from app.core.config import Settings
-
-try:  # pragma: no cover - exercised in production environments
-    from openai import AsyncOpenAI, OpenAIError
-except Exception:  # pragma: no cover - defensive fallback when SDK missing
-    AsyncOpenAI = None  # type: ignore[assignment]
-
-    class OpenAIError(Exception):
-        """Fallback OpenAI error."""
 
 
 _GROQ_IMPORT_ERROR: Exception | None = None
@@ -28,15 +21,6 @@ except Exception as exc:  # pragma: no cover
 
     class GroqAPIError(Exception):
         """Fallback Groq error."""
-
-
-try:  # pragma: no cover
-    from openrouter import AsyncOpenRouter, OpenRouterError
-except Exception:  # pragma: no cover
-    AsyncOpenRouter = None  # type: ignore[assignment]
-
-    class OpenRouterError(Exception):
-        """Fallback OpenRouter error."""
 
 
 logger = logging.getLogger(__name__)
@@ -67,13 +51,11 @@ class APIKeyValidationService:
             await self._validate_openrouter(api_key, base_url, metadata)
             return
         if provider_key == "imagerouter":
-            await self._validate_imagerouter(api_key, base_url)
+            await self._validate_imagerouter(api_key, base_url, metadata)
             return
         raise ValueError(f"Unsupported provider '{provider}'.")
 
     async def _validate_openai(self, api_key: str, base_url: str | None) -> None:
-        if AsyncOpenAI is None:
-            raise RuntimeError("The 'openai' package is required to validate OpenAI API keys.")
         client = AsyncOpenAI(api_key=api_key, base_url=base_url or "https://api.openai.com/v1")
         try:
             await client.models.list()
@@ -141,41 +123,60 @@ class APIKeyValidationService:
         base_url: str | None,
         metadata: Mapping[str, Any] | None,
     ) -> None:
-        if AsyncOpenRouter is None:
-            raise RuntimeError("The 'openrouter' package is required to validate OpenRouter API keys.")
-        kwargs: dict[str, Any] = {"api_key": api_key}
-        if base_url:
-            kwargs["base_url"] = base_url
-        headers: dict[str, str] = {}
-        if metadata:
-            referer = metadata.get("http_referer") or metadata.get("referer")
-            title = metadata.get("x_title") or metadata.get("app_name")
-            extra_headers = metadata.get("headers")
-            if isinstance(extra_headers, Mapping):
-                headers.update({str(k): str(v) for k, v in extra_headers.items()})
-            if referer:
-                headers.setdefault("HTTP-Referer", str(referer))
-            if title:
-                headers.setdefault("X-Title", str(title))
+        kwargs: dict[str, Any] = {
+            "api_key": api_key,
+            "base_url": base_url or "https://openrouter.ai/api/v1",
+        }
+        headers = self._build_openrouter_headers(metadata)
         if headers:
             kwargs["default_headers"] = headers
-        client = AsyncOpenRouter(**kwargs)
+        if metadata:
+            for key in ("timeout", "max_retries"):
+                value = metadata.get(key)
+                if value is not None:
+                    kwargs[key] = value
+
+        client = AsyncOpenAI(**kwargs)
         try:
             await client.models.list()
-        except OpenRouterError as exc:  # pragma: no cover
+        except OpenAIError as exc:  # pragma: no cover - depends on SDK runtime
             raise ValueError(f"OpenRouter API key validation failed: {exc}") from exc
         finally:
             await _close_client(client)
 
-    async def _validate_imagerouter(self, api_key: str, base_url: str | None) -> None:
-        url = (base_url or "https://api.imagerouter.com") + "/v1/models"
+    async def _validate_imagerouter(
+        self,
+        api_key: str,
+        base_url: str | None,
+        metadata: Mapping[str, Any] | None,
+    ) -> None:
+        url = (base_url or "https://api.imagerouter.io/v1/openai") + "/models"
         headers = {"Authorization": f"Bearer {api_key}", "Accept": "application/json"}
+        if metadata and isinstance(metadata.get("headers"), Mapping):
+            headers.update({str(k): str(v) for k, v in metadata["headers"].items()})
         async with httpx.AsyncClient(timeout=10.0) as client:
             response = await client.get(url, headers=headers)
         if response.status_code != 200:
             raise ValueError(
                 f"ImageRouter API key validation failed with status {response.status_code}: {response.text.strip()}"
             )
+
+    def _build_openrouter_headers(
+        self, metadata: Mapping[str, Any] | None
+    ) -> dict[str, str]:
+        headers: dict[str, str] = {}
+        if not metadata:
+            return headers
+        referer = metadata.get("http_referer") or metadata.get("referer")
+        title = metadata.get("x_title") or metadata.get("app_name")
+        extra_headers = metadata.get("headers")
+        if isinstance(extra_headers, Mapping):
+            headers.update({str(k): str(v) for k, v in extra_headers.items()})
+        if referer:
+            headers.setdefault("HTTP-Referer", str(referer))
+        if title:
+            headers.setdefault("X-Title", str(title))
+        return headers
 
 
 async def _close_client(client: Any) -> None:

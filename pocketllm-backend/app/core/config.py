@@ -81,6 +81,8 @@ class Settings(BaseSettings):
     openrouter_api_base: str | None = Field(default=None, alias="OPENROUTER_API_BASE")
     openrouter_app_url: str | None = Field(default=None, alias="OPENROUTER_APP_URL")
     openrouter_app_name: str | None = Field(default=None, alias="OPENROUTER_APP_NAME")
+    imagerouter_api_key: str | None = Field(default=None, alias="IMAGEROUTER_API_KEY")
+    imagerouter_api_base: str | None = Field(default=None, alias="IMAGEROUTER_API_BASE")
     provider_catalogue_cache_ttl: int = Field(
         default=60, alias="PROVIDER_CATALOGUE_CACHE_TTL"
     )

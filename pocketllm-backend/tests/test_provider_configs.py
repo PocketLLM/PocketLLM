@@ -94,7 +94,7 @@ async def test_update_provider_clears_api_key_when_null() -> None:
     }
 
     database = _StubDatabase(record)
-    settings = SimpleNamespace(encryption_key="test-key")
+    settings = SimpleNamespace(encryption_key="test-key", imagerouter_api_base=None)
     service = ProvidersService(settings, database, catalogue=Mock())
 
     payload = ProviderUpdateRequest(api_key=None)
@@ -120,6 +120,7 @@ async def test_activate_provider_applies_default_groq_configuration(monkeypatch)
         openrouter_api_base=None,
         openrouter_app_url=None,
         openrouter_app_name=None,
+        imagerouter_api_base=None,
     )
     database = _ActivationDatabaseStub()
     service = ProvidersService(settings, database, catalogue=Mock())
@@ -148,6 +149,7 @@ async def test_activate_provider_populates_openrouter_defaults(monkeypatch) -> N
         openrouter_api_base=None,
         openrouter_app_url="https://app.example",
         openrouter_app_name="PocketLLM",
+        imagerouter_api_base=None,
     )
     database = _ActivationDatabaseStub()
     service = ProvidersService(settings, database, catalogue=Mock())

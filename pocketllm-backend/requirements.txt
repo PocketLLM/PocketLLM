@@ -5,7 +5,6 @@ pydantic-settings
 httpx
 groq
 openai
-openrouter
 cryptography
 asyncpg
 supabase
