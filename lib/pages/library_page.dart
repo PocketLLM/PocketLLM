@@ -12,65 +12,36 @@ class LibraryPage extends StatefulWidget {
   State<LibraryPage> createState() => _LibraryPageState();
 }
 
-class _LibraryPageState extends State<LibraryPage> with TickerProviderStateMixin {
+class _LibraryPageState extends State<LibraryPage> {
   final ModelService _modelService = ModelService();
   final RemoteModelService _remoteModelService = RemoteModelService();
+  final TextEditingController _searchController = TextEditingController();
 
-  late TabController _tabController;
-  bool _loadingDownloaded = false;
-  bool _loadingAvailable = false;
-  List<ModelConfig> _downloadedModels = [];
+  bool _isLoading = false;
+  String? _error;
   List<AvailableModelOption> _availableModels = [];
-  String? _availableError;
   String _searchQuery = '';
+  final Set<String> _importingModelIds = <String>{};
 
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 2, vsync: this);
-    _refreshAll();
+    _loadModels();
   }
 
   @override
   void dispose() {
-    _tabController.dispose();
+    _searchController.dispose();
     super.dispose();
   }
 
-  void _refreshAll() {
-    _fetchDownloadedModels();
-    _loadAvailableModels();
-  }
-
-  Future<void> _fetchDownloadedModels() async {
+  Future<void> _loadModels() async {
+    if (!mounted) return;
     setState(() {
-      _loadingDownloaded = true;
+      _isLoading = true;
+      _error = null;
     });
-    try {
-      final models = await _modelService.getSavedModels();
-      if (!mounted) return;
-      setState(() {
-        _downloadedModels = models;
-      });
-    } catch (e) {
-      if (!mounted) return;
-      setState(() {
-        _downloadedModels = [];
-      });
-      _showSnack('Failed to load saved models: $e', Colors.red);
-    } finally {
-      if (!mounted) return;
-      setState(() {
-        _loadingDownloaded = false;
-      });
-    }
-  }
 
-  Future<void> _loadAvailableModels() async {
-    setState(() {
-      _loadingAvailable = true;
-      _availableError = null;
-    });
     try {
       final models = await _remoteModelService.getAvailableModels();
       if (!mounted) return;
@@ -81,44 +52,45 @@ class _LibraryPageState extends State<LibraryPage> with TickerProviderStateMixin
       if (!mounted) return;
       setState(() {
         _availableModels = [];
-        _availableError = e.message;
+        _error = e.message;
       });
     } catch (e) {
       if (!mounted) return;
       setState(() {
         _availableModels = [];
-        _availableError = e.toString();
+        _error = e.toString();
       });
     } finally {
       if (!mounted) return;
       setState(() {
-        _loadingAvailable = false;
+        _isLoading = false;
       });
     }
   }
 
-  void _showSnack(String message, Color backgroundColor) {
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(message), backgroundColor: backgroundColor),
-    );
+  void _onSearchChanged(String value) {
+    setState(() {
+      _searchQuery = value;
+    });
   }
 
-  List<AvailableModelOption> get _filteredAvailableModels {
+  List<AvailableModelOption> get _filteredModels {
     final query = _searchQuery.trim().toLowerCase();
     if (query.isEmpty) {
       return List<AvailableModelOption>.from(_availableModels);
     }
+
     return _availableModels.where((model) {
-      final description = model.description ?? '';
+      final provider = ModelProviderExtension.fromBackend(model.provider);
+      final description = _resolveDescription(model).toLowerCase();
       return model.name.toLowerCase().contains(query) ||
           model.id.toLowerCase().contains(query) ||
-          description.toLowerCase().contains(query) ||
-          model.provider.toLowerCase().contains(query);
+          provider.displayName.toLowerCase().contains(query) ||
+          description.contains(query);
     }).toList();
   }
 
-  Map<ModelProvider, List<AvailableModelOption>> _groupAvailableModels(
+  Map<ModelProvider, List<AvailableModelOption>> _groupModels(
     List<AvailableModelOption> models,
   ) {
     final grouped = <ModelProvider, List<AvailableModelOption>>{};
@@ -129,6 +101,101 @@ class _LibraryPageState extends State<LibraryPage> with TickerProviderStateMixin
     return grouped;
   }
 
+  void _showSnack(String message, Color backgroundColor) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(message), backgroundColor: backgroundColor),
+    );
+  }
+
+  Future<bool> _importModel(
+    AvailableModelOption option, {
+    BuildContext? popContext,
+  }) async {
+    final provider = ModelProviderExtension.fromBackend(option.provider);
+
+    if (mounted) {
+      setState(() {
+        _importingModelIds.add(option.id);
+      });
+    }
+
+    var succeeded = false;
+    try {
+      await _modelService.importModelsFromProvider(
+        provider: provider,
+        selections: [option],
+      );
+      succeeded = true;
+      if (mounted) {
+        _showSnack('${option.name} imported successfully', Colors.green);
+      }
+    } on BackendApiException catch (e) {
+      if (mounted) {
+        _showSnack(e.message, Colors.red);
+      }
+    } catch (e) {
+      if (mounted) {
+        _showSnack('Failed to import ${option.name}: $e', Colors.red);
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _importingModelIds.remove(option.id);
+        });
+      }
+    }
+
+    if (succeeded && popContext != null && Navigator.of(popContext).canPop()) {
+      Navigator.of(popContext).pop();
+    }
+
+    return succeeded;
+  }
+
+  void _showModelDetails(AvailableModelOption model) {
+    final provider = ModelProviderExtension.fromBackend(model.provider);
+
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (sheetContext) {
+        var localImporting = _importingModelIds.contains(model.id);
+        return StatefulBuilder(
+          builder: (context, setModalState) {
+            Future<void> handleImport() async {
+              if (localImporting) return;
+              setModalState(() {
+                localImporting = true;
+              });
+              final success = await _importModel(
+                model,
+                popContext: sheetContext,
+              );
+              if (!success && mounted) {
+                setModalState(() {
+                  localImporting = false;
+                });
+              }
+            }
+
+            return _buildModelDetailsSheet(
+              sheetContext: sheetContext,
+              provider: provider,
+              model: model,
+              isImporting: localImporting,
+              onImport: handleImport,
+            );
+          },
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -136,117 +203,94 @@ class _LibraryPageState extends State<LibraryPage> with TickerProviderStateMixin
       appBar: AppBar(
         backgroundColor: Colors.grey[50],
         elevation: 0,
+        titleSpacing: 24,
         title: const Text(
           'Model Library',
           style: TextStyle(
             color: Colors.black,
-            fontSize: 32,
+            fontSize: 30,
             fontWeight: FontWeight.bold,
           ),
-        ),
-        bottom: TabBar(
-          controller: _tabController,
-          labelColor: const Color(0xFF8B5CF6),
-          unselectedLabelColor: Colors.grey[600],
-          indicatorColor: const Color(0xFF8B5CF6),
-          tabs: const [
-            Tab(text: 'Imported'),
-            Tab(text: 'Available'),
-          ],
         ),
         actions: [
           IconButton(
             icon: const Icon(Icons.refresh, color: Colors.black),
-            onPressed: _refreshAll,
             tooltip: 'Refresh models',
+            onPressed: _loadModels,
           ),
+          const SizedBox(width: 8),
         ],
       ),
-      body: TabBarView(
-        controller: _tabController,
-        children: [
-          _buildDownloadedTab(),
-          _buildAvailableTab(),
-        ],
+      body: SafeArea(
+        child: _buildBody(),
       ),
     );
   }
 
-  Widget _buildDownloadedTab() {
-    if (_loadingDownloaded) {
+  Widget _buildBody() {
+    if (_isLoading && _availableModels.isEmpty) {
       return const Center(child: CircularProgressIndicator());
     }
-    if (_downloadedModels.isEmpty) {
-      return _buildEmptyState(
-        icon: Icons.download_done,
-        title: 'No models imported yet',
-        message: 'Import models from the Available tab once you add provider API keys.',
-      );
-    }
-    return ListView.separated(
-      padding: const EdgeInsets.all(16),
-      itemCount: _downloadedModels.length,
-      separatorBuilder: (_, __) => const SizedBox(height: 12),
-      itemBuilder: (context, index) {
-        final model = _downloadedModels[index];
-        return Card(
-          elevation: 0,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12),
-            side: BorderSide(color: Colors.grey.shade200),
-          ),
-          child: ListTile(
-            leading: _buildProviderAvatar(model.provider),
-            title: Text(
-              model.name,
-              style: const TextStyle(fontWeight: FontWeight.w600),
-            ),
-            subtitle: Text(model.model),
-            trailing: Text(
-              model.provider.displayName,
-              style: TextStyle(color: Colors.grey[600]),
-            ),
-          ),
-        );
-      },
-    );
-  }
 
-  Widget _buildAvailableTab() {
-    if (_loadingAvailable) {
-      return const Center(child: CircularProgressIndicator());
-    }
-    if (_availableError != null) {
-      return _buildErrorState(_availableError!);
+    if (_error != null && _availableModels.isEmpty) {
+      return _buildErrorState(_error!);
     }
 
-    final filtered = _filteredAvailableModels;
-    if (filtered.isEmpty) {
-      return _buildEmptyState(
-        icon: Icons.travel_explore,
-        title: 'No models found',
-        message: 'Adjust your search or configure provider API keys in Settings.',
+    final filtered = _filteredModels;
+
+    if (!_isLoading && filtered.isEmpty) {
+      return RefreshIndicator(
+        onRefresh: _loadModels,
+        color: const Color(0xFF6D28D9),
+        child: ListView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          padding: const EdgeInsets.fromLTRB(24, 16, 24, 32),
+          children: [
+            _buildSearchBar(),
+            const SizedBox(height: 24),
+            _buildEmptyState(
+              icon: Icons.travel_explore,
+              title: 'No models found',
+              message: 'Adjust your search or try refreshing the catalogue.',
+            ),
+          ],
+        ),
       );
     }
 
-    final grouped = _groupAvailableModels(filtered);
+    final grouped = _groupModels(filtered);
     final providers = grouped.keys.toList()
       ..sort((a, b) => a.displayName.compareTo(b.displayName));
 
-    return ListView(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-      children: [
-        _buildSearchBar(),
-        const SizedBox(height: 16),
-        for (final provider in providers) ...[
-          _buildProviderHeader(provider),
-          const SizedBox(height: 8),
-          ...grouped[provider]!
-              .map((model) => _buildAvailableModelCard(provider, model))
-              .toList(),
+    return RefreshIndicator(
+      onRefresh: _loadModels,
+      color: const Color(0xFF6D28D9),
+      child: ListView(
+        physics: const AlwaysScrollableScrollPhysics(),
+        padding: const EdgeInsets.fromLTRB(24, 16, 24, 32),
+        children: [
+          _buildSearchBar(),
           const SizedBox(height: 24),
+          for (final provider in providers) ...[
+            _buildProviderHeader(provider),
+            const SizedBox(height: 12),
+            ...grouped[provider]!
+                .map((model) => Padding(
+                      padding: const EdgeInsets.only(bottom: 16),
+                      child: _buildModelCard(provider, model),
+                    ))
+                .toList(),
+            const SizedBox(height: 12),
+          ],
+          if (_isLoading)
+            const Center(
+              child: Padding(
+                padding: EdgeInsets.symmetric(vertical: 24),
+                child: CircularProgressIndicator(),
+              ),
+            ),
         ],
-      ],
+      ),
     );
   }
 
@@ -254,17 +298,33 @@ class _LibraryPageState extends State<LibraryPage> with TickerProviderStateMixin
     return Container(
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: Colors.grey.shade300),
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.04),
+            blurRadius: 12,
+            offset: const Offset(0, 4),
+          ),
+        ],
       ),
       child: TextField(
-        decoration: const InputDecoration(
-          prefixIcon: Icon(Icons.search),
-          hintText: 'Search models by name or provider',
+        controller: _searchController,
+        onChanged: _onSearchChanged,
+        decoration: InputDecoration(
+          prefixIcon: const Icon(Icons.search),
+          suffixIcon: _searchQuery.isNotEmpty
+              ? IconButton(
+                  icon: const Icon(Icons.clear),
+                  onPressed: () {
+                    _searchController.clear();
+                    _onSearchChanged('');
+                  },
+                )
+              : null,
+          hintText: 'Search by model, provider, or capability',
           border: InputBorder.none,
-          contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
         ),
-        onChanged: (value) => setState(() => _searchQuery = value),
       ),
     );
   }
@@ -272,122 +332,444 @@ class _LibraryPageState extends State<LibraryPage> with TickerProviderStateMixin
   Widget _buildProviderHeader(ModelProvider provider) {
     return Row(
       children: [
-        _buildProviderAvatar(provider),
-        const SizedBox(width: 12),
-        Text(
-          provider.displayName,
-          style: const TextStyle(
-            fontSize: 18,
-            fontWeight: FontWeight.w600,
-          ),
+        _buildProviderAvatar(provider, size: 44),
+        const SizedBox(width: 16),
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              provider.displayName,
+              style: const TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+            Text(
+              'Models from ${provider.displayName}',
+              style: TextStyle(
+                color: Colors.grey[600],
+              ),
+            ),
+          ],
         ),
       ],
     );
   }
 
-  Widget _buildAvailableModelCard(ModelProvider provider, AvailableModelOption model) {
-    final description = model.description?.trim();
-    final metadata = model.metadata ?? const {};
-    final contextWindow = metadata['context_window'] ?? metadata['contextLength'];
-    final pricing = metadata['pricing'];
+  Widget _buildModelCard(ModelProvider provider, AvailableModelOption model) {
+    final metadata = _normalizeMetadata(model.metadata);
+    final description = _resolveDescription(model);
+    final contextWindow = metadata['context_window'] ?? metadata['contextWindow'] ?? metadata['contextLength'];
+    final maxOutput = metadata['max_output_tokens'] ?? metadata['maxTokens'];
+    final capabilities = _stringList(metadata['capabilities']);
+    final architecture = metadata['architecture'];
+    final inputModalities = architecture is Map ? _stringList(architecture['input_modalities']) : <String>[];
+    final outputModalities = architecture is Map ? _stringList(architecture['output_modalities']) : <String>[];
+    final isImporting = _importingModelIds.contains(model.id);
 
-    return Card(
-      elevation: 0,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
-        side: BorderSide(color: Colors.grey.shade200),
-      ),
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        model.name,
-                        style: const TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.w600,
+    return InkWell(
+      borderRadius: BorderRadius.circular(20),
+      onTap: () => _showModelDetails(model),
+      child: Card(
+        elevation: 0,
+        color: Colors.white,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(20),
+          side: BorderSide(color: Colors.grey.shade200),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          model.name,
+                          style: const TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.w700,
+                          ),
                         ),
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        model.id,
-                        style: TextStyle(color: Colors.grey[600]),
-                      ),
-                    ],
+                        const SizedBox(height: 4),
+                        Text(
+                          model.id,
+                          style: TextStyle(color: Colors.grey[600]),
+                        ),
+                      ],
+                    ),
                   ),
-                ),
-                ElevatedButton.icon(
-                  onPressed: () => _importModel(provider, model),
-                  icon: const Icon(Icons.download, size: 18),
-                  label: const Text('Import'),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF8B5CF6),
-                    foregroundColor: Colors.white,
+                  FilledButton.icon(
+                    onPressed: isImporting ? null : () => _importModel(model),
+                    style: FilledButton.styleFrom(
+                      backgroundColor: const Color(0xFF6D28D9),
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    ),
+                    icon: isImporting
+                        ? const SizedBox(
+                            width: 18,
+                            height: 18,
+                            child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                          )
+                        : const Icon(Icons.download, size: 20),
+                    label: Text(isImporting ? 'Importing' : 'Import'),
                   ),
+                ],
+              ),
+              if (description.isNotEmpty) ...[
+                const SizedBox(height: 12),
+                Text(
+                  description,
+                  maxLines: 3,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(color: Colors.grey[700]),
                 ),
               ],
-            ),
-            if (description != null && description.isNotEmpty) ...[
-              const SizedBox(height: 8),
-              Text(
-                description,
-                style: TextStyle(color: Colors.grey[700]),
-              ),
-            ],
-            if (contextWindow != null || pricing != null) ...[
-              const SizedBox(height: 12),
+              const SizedBox(height: 16),
               Wrap(
-                spacing: 12,
-                runSpacing: 8,
+                spacing: 10,
+                runSpacing: 10,
                 children: [
+                  _buildMetadataChip(
+                    icon: Icons.business,
+                    label: provider.displayName,
+                  ),
                   if (contextWindow != null)
                     _buildMetadataChip(
                       icon: Icons.unfold_more,
-                      label: 'Context: $contextWindow tokens',
+                      label: 'Context ${contextWindow.toString()} tokens',
                     ),
-                  if (pricing is Map && pricing.isNotEmpty)
+                  if (maxOutput != null)
                     _buildMetadataChip(
-                      icon: Icons.attach_money,
-                      label: _formatPricing(pricing),
+                      icon: Icons.vertical_align_bottom,
+                      label: 'Max output ${maxOutput.toString()} tokens',
+                    ),
+                  if (capabilities.isNotEmpty)
+                    _buildMetadataChip(
+                      icon: Icons.extension,
+                      label: capabilities.take(2).join(' • '),
+                    ),
+                  if (inputModalities.isNotEmpty)
+                    _buildMetadataChip(
+                      icon: Icons.input,
+                      label: 'Input: ${inputModalities.join(', ')}',
+                    ),
+                  if (outputModalities.isNotEmpty)
+                    _buildMetadataChip(
+                      icon: Icons.output,
+                      label: 'Output: ${outputModalities.join(', ')}',
                     ),
                 ],
               ),
             ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildModelDetailsSheet({
+    required BuildContext sheetContext,
+    required ModelProvider provider,
+    required AvailableModelOption model,
+    required bool isImporting,
+    required Future<void> Function() onImport,
+  }) {
+    final metadata = _normalizeMetadata(model.metadata);
+    final description = _resolveDescription(model);
+    final pricing = metadata['pricing'];
+    final contextWindow = metadata['context_window'] ?? metadata['contextWindow'] ?? metadata['contextLength'];
+    final maxOutput = metadata['max_output_tokens'] ?? metadata['maxTokens'];
+    final capabilities = _stringList(metadata['capabilities']);
+    final tags = _stringList(metadata['tags']);
+    final architecture = metadata['architecture'];
+    final inputModalities = architecture is Map ? _stringList(architecture['input_modalities']) : <String>[];
+    final outputModalities = architecture is Map ? _stringList(architecture['output_modalities']) : <String>[];
+
+    final bottomPadding = MediaQuery.of(sheetContext).padding.bottom;
+
+    return FractionallySizedBox(
+      heightFactor: 0.92,
+      child: SafeArea(
+        top: false,
+        child: Column(
+          children: [
+            const SizedBox(height: 12),
+            Container(
+              width: 48,
+              height: 5,
+              decoration: BoxDecoration(
+                color: Colors.grey[300],
+                borderRadius: BorderRadius.circular(12),
+              ),
+            ),
+            Expanded(
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.fromLTRB(24, 24, 24, 0),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        _buildProviderAvatar(provider, size: 56),
+                        const SizedBox(width: 16),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                model.name,
+                                style: const TextStyle(
+                                  fontSize: 22,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                              const SizedBox(height: 6),
+                              Text(
+                                model.id,
+                                style: TextStyle(color: Colors.grey[600]),
+                              ),
+                              const SizedBox(height: 8),
+                              _buildMetadataChip(
+                                icon: Icons.business,
+                                label: provider.displayName,
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                    if (description.isNotEmpty) ...[
+                      const SizedBox(height: 16),
+                      Text(
+                        description,
+                        style: TextStyle(
+                          color: Colors.grey[800],
+                          height: 1.5,
+                        ),
+                      ),
+                    ],
+                    const SizedBox(height: 20),
+                    _buildSectionTitle('Model specifications'),
+                    const SizedBox(height: 12),
+                    Wrap(
+                      spacing: 12,
+                      runSpacing: 12,
+                      children: [
+                        if (contextWindow != null)
+                          _buildInfoTile(
+                            icon: Icons.unfold_more,
+                            label: 'Context window',
+                            value: '$contextWindow tokens',
+                          ),
+                        if (maxOutput != null)
+                          _buildInfoTile(
+                            icon: Icons.vertical_align_bottom,
+                            label: 'Max output tokens',
+                            value: '$maxOutput tokens',
+                          ),
+                        if (capabilities.isNotEmpty)
+                          _buildInfoTile(
+                            icon: Icons.extension,
+                            label: 'Capabilities',
+                            value: capabilities.join(', '),
+                          ),
+                        if (inputModalities.isNotEmpty)
+                          _buildInfoTile(
+                            icon: Icons.input,
+                            label: 'Input modalities',
+                            value: inputModalities.join(', '),
+                          ),
+                        if (outputModalities.isNotEmpty)
+                          _buildInfoTile(
+                            icon: Icons.output,
+                            label: 'Output modalities',
+                            value: outputModalities.join(', '),
+                          ),
+                        if (tags.isNotEmpty)
+                          _buildInfoTile(
+                            icon: Icons.local_offer,
+                            label: 'Tags',
+                            value: tags.join(', '),
+                          ),
+                      ],
+                    ),
+                    if (pricing is Map && pricing.isNotEmpty) ...[
+                      const SizedBox(height: 24),
+                      _buildSectionTitle('Pricing'),
+                      const SizedBox(height: 12),
+                      _buildPricingTable(pricing),
+                    ],
+                  ],
+                ),
+              ),
+            ),
+            Padding(
+              padding: EdgeInsets.fromLTRB(24, 12, 24, 24 + bottomPadding),
+              child: SizedBox(
+                width: double.infinity,
+                child: FilledButton.icon(
+                  onPressed: isImporting ? null : onImport,
+                  style: FilledButton.styleFrom(
+                    backgroundColor: const Color(0xFF6D28D9),
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 16),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                  ),
+                  icon: isImporting
+                      ? const SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                        )
+                      : const Icon(Icons.download),
+                  label: Text(isImporting ? 'Importing…' : 'Import model'),
+                ),
+              ),
+            ),
           ],
         ),
       ),
     );
   }
 
-  Widget _buildMetadataChip({required IconData icon, required String label}) {
-    return Chip(
-      avatar: Icon(icon, size: 18, color: const Color(0xFF8B5CF6)),
-      backgroundColor: const Color(0xFFEDE9FE),
-      label: Text(
-        label,
-        style: const TextStyle(color: Color(0xFF5B21B6)),
+  Widget _buildInfoTile({
+    required IconData icon,
+    required String label,
+    required String value,
+  }) {
+    return Container(
+      width: 220,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.grey[100],
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(icon, color: const Color(0xFF6D28D9)),
+          const SizedBox(height: 8),
+          Text(
+            label,
+            style: const TextStyle(
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            value,
+            style: TextStyle(color: Colors.grey[700]),
+          ),
+        ],
       ),
     );
   }
 
-  String _formatPricing(Map<dynamic, dynamic> pricing) {
-    final prompt = pricing['prompt'] ?? pricing['input'];
-    final completion = pricing['completion'] ?? pricing['output'];
-    if (prompt == null && completion == null) {
-      return 'Pricing available';
+  Widget _buildPricingTable(Map<dynamic, dynamic> pricing) {
+    final entries = pricing.entries
+        .map((entry) => MapEntry(entry.key.toString(), entry.value))
+        .where((entry) => entry.value != null && entry.value.toString().isNotEmpty)
+        .toList()
+      ..sort((a, b) => a.key.compareTo(b.key));
+
+    return Container(
+      width: double.infinity,
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: Colors.grey.shade200),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.03),
+            blurRadius: 8,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Column(
+        children: [
+          for (var i = 0; i < entries.length; i++)
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+              decoration: BoxDecoration(
+                border: i == entries.length - 1
+                    ? null
+                    : Border(
+                        bottom: BorderSide(color: Colors.grey.shade200),
+                      ),
+              ),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      _humanizeKey(entries[i].key),
+                      style: const TextStyle(fontWeight: FontWeight.w600),
+                    ),
+                  ),
+                  Text(
+                    entries[i].value.toString(),
+                    style: TextStyle(color: Colors.grey[700]),
+                  ),
+                ],
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  String _humanizeKey(String key) {
+    final normalized = key.replaceAll('_', ' ').replaceAll('-', ' ');
+    return normalized.isEmpty
+        ? key
+        : normalized[0].toUpperCase() + normalized.substring(1);
+  }
+
+  Widget _buildMetadataChip({required IconData icon, required String label}) {
+    return Chip(
+      avatar: Icon(icon, size: 18, color: const Color(0xFF6D28D9)),
+      backgroundColor: const Color(0xFFEDE9FE),
+      label: Text(
+        label,
+        style: const TextStyle(color: Color(0xFF4C1D95), fontWeight: FontWeight.w600),
+      ),
+    );
+  }
+
+  Map<String, dynamic> _normalizeMetadata(Map<String, dynamic>? raw) {
+    if (raw == null) {
+      return <String, dynamic>{};
     }
-    if (prompt != null && completion != null) {
-      return 'Prompt $prompt / Completion $completion';
+    return raw.map((key, value) => MapEntry(key.toString(), value));
+  }
+
+  String _resolveDescription(AvailableModelOption model) {
+    final metadata = _normalizeMetadata(model.metadata);
+    final description = metadata['description'] ?? model.description ?? '';
+    return description.toString().trim();
+  }
+
+  List<String> _stringList(dynamic value) {
+    if (value is List) {
+      return value.map((entry) => entry.toString().trim()).where((entry) => entry.isNotEmpty).toList();
     }
-    return 'Price ${prompt ?? completion}';
+    if (value is String) {
+      return value
+          .split(',')
+          .map((entry) => entry.trim())
+          .where((entry) => entry.isNotEmpty)
+          .toList();
+    }
+    return <String>[];
   }
 
   Widget _buildErrorState(String message) {
@@ -396,7 +778,7 @@ class _LibraryPageState extends State<LibraryPage> with TickerProviderStateMixin
       title: 'Unable to fetch models',
       message: message,
       action: TextButton(
-        onPressed: _loadAvailableModels,
+        onPressed: _loadModels,
         child: const Text('Try again'),
       ),
     );
@@ -440,12 +822,13 @@ class _LibraryPageState extends State<LibraryPage> with TickerProviderStateMixin
     );
   }
 
-  Widget _buildProviderAvatar(ModelProvider provider) {
+  Widget _buildProviderAvatar(ModelProvider provider, {double size = 44}) {
     final iconData = _resolveProviderIcon(provider);
     final color = _resolveProviderColor(provider);
     return CircleAvatar(
+      radius: size / 2,
       backgroundColor: color.withOpacity(0.15),
-      child: Icon(iconData, color: color),
+      child: Icon(iconData, color: color, size: size / 2),
     );
   }
 
@@ -471,7 +854,7 @@ class _LibraryPageState extends State<LibraryPage> with TickerProviderStateMixin
         return Icons.science;
       case ModelProvider.ollama:
         return Icons.terminal;
-      default:
+      case ModelProvider.pocketLLM:
         return Icons.smart_toy;
     }
   }
@@ -498,23 +881,8 @@ class _LibraryPageState extends State<LibraryPage> with TickerProviderStateMixin
         return Colors.blue;
       case ModelProvider.ollama:
         return Colors.amber;
-      default:
+      case ModelProvider.pocketLLM:
         return const Color(0xFF8B5CF6);
-    }
-  }
-
-  Future<void> _importModel(ModelProvider provider, AvailableModelOption option) async {
-    try {
-      await _modelService.importModelsFromProvider(
-        provider: provider,
-        selections: [option],
-      );
-      await _fetchDownloadedModels();
-      _showSnack('${option.name} imported successfully', Colors.green);
-    } on BackendApiException catch (e) {
-      _showSnack(e.message, Colors.red);
-    } catch (e) {
-      _showSnack('Failed to import ${option.name}: $e', Colors.red);
     }
   }
 }
