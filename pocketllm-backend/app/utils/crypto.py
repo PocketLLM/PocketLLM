@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+import base64
+import hashlib
 import logging
+from binascii import Error as BinasciiError
 from typing import TYPE_CHECKING
 
 from cryptography.fernet import Fernet, InvalidToken
@@ -13,6 +16,13 @@ if TYPE_CHECKING:  # pragma: no cover - typing helper
 logger = logging.getLogger(__name__)
 
 
+def _derive_fernet_token(secret: str) -> bytes:
+    """Derive a valid Fernet token from an arbitrary secret string."""
+
+    digest = hashlib.sha256(secret.encode("utf-8")).digest()
+    return base64.urlsafe_b64encode(digest)
+
+
 def _load_fernet(settings: "Settings") -> Fernet:
     """Return a :class:`Fernet` instance using the configured key."""
 
@@ -21,9 +31,19 @@ def _load_fernet(settings: "Settings") -> Fernet:
         raise RuntimeError(
             "Application encryption key is not configured. Set ENCRYPTION_KEY to a valid Fernet key."
         )
+
+    token = key.encode("utf-8")
     try:
-        token = key.encode("utf-8")
         return Fernet(token)
+    except (ValueError, TypeError, BinasciiError):
+        logger.info("ENCRYPTION_KEY is not a Fernet token; deriving one from the provided secret.")
+        try:
+            derived_token = _derive_fernet_token(key)
+            return Fernet(derived_token)
+        except Exception as exc:  # pragma: no cover - defensive guard for invalid keys
+            raise RuntimeError(
+                "Invalid encryption key format. Ensure ENCRYPTION_KEY is a base64 encoded Fernet key."
+            ) from exc
     except Exception as exc:  # pragma: no cover - defensive guard for invalid keys
         raise RuntimeError("Invalid encryption key format. Ensure ENCRYPTION_KEY is a base64 encoded Fernet key.") from exc
 

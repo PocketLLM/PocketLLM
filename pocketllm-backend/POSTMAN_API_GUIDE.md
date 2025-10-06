@@ -24,7 +24,7 @@ Follow these steps to prepare the NestJS backend before exercising the API colle
    ```bash
    cp .env.example .env
    ```
-   Update `.env` with your Supabase project URL and service role key (`SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`) and set an `ENCRYPTION_KEY` for securing provider API keys.
+   Update `.env` with your Supabase project URL and service role key (`SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`) and set an `ENCRYPTION_KEY` for securing provider API keys. The key can be either a Fernet token (run `python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"`) or any strong passphrase—the backend will safely derive a Fernet key from the passphrase for you.
 3. **Run the development server**
    ```bash
    npm run start:dev
