@@ -36,7 +36,10 @@ class _CacheEntry:
 
 
 class ProviderModelCatalogue:
-    """Aggregate models across multiple provider clients."""
+    """Aggregate models across multiple provider clients with concurrency safeguards."""
+
+    PROVIDER_TIMEOUT = 4.0
+    TOTAL_TIMEOUT = 8.0
 
     def __init__(
         self,
@@ -59,8 +62,24 @@ class ProviderModelCatalogue:
             }
         )
         self._cache_ttl_seconds = self._coerce_ttl(
-            getattr(settings, "provider_catalogue_cache_ttl", 60)
+            getattr(settings, "provider_catalogue_cache_ttl", 300)
         )
+        self._provider_timeout = self._coerce_timeout(
+            getattr(settings, "provider_catalogue_provider_timeout", self.PROVIDER_TIMEOUT),
+            self.PROVIDER_TIMEOUT,
+        )
+        self._total_timeout = self._coerce_timeout(
+            getattr(settings, "provider_catalogue_total_timeout", self.TOTAL_TIMEOUT),
+            self.TOTAL_TIMEOUT,
+        )
+
+        if 0 < self._total_timeout < self._provider_timeout:
+            self._logger.warning(
+                "Total timeout %.2fs is smaller than provider timeout %.2fs; clamping provider timeout.",
+                self._total_timeout,
+                self._provider_timeout,
+            )
+            self._provider_timeout = self._total_timeout
 
     _cache: dict[str, "_CacheEntry"] = {}
     _locks: dict[str, asyncio.Lock] = {}
@@ -72,7 +91,21 @@ class ProviderModelCatalogue:
         """Return models from every configured provider."""
 
         clients = self._get_clients(providers)
-        return await self._gather_models(clients)
+        if not clients:
+            self._logger.warning("No provider clients available for catalogue lookup")
+            return []
+
+        try:
+            return await asyncio.wait_for(
+                self._gather_models_concurrent(clients),
+                timeout=self._total_timeout if self._total_timeout > 0 else None,
+            )
+        except asyncio.TimeoutError:
+            self._logger.error(
+                "Provider catalogue fetch exceeded %.2fs timeout; returning partial results.",
+                self._total_timeout,
+            )
+            return []
 
     async def list_models_for_provider(
         self,
@@ -93,7 +126,17 @@ class ProviderModelCatalogue:
         if not clients:
             self._logger.warning("Provider %s is not configured for this user", provider)
             return []
-        return await self._gather_models(clients)
+
+        try:
+            return await asyncio.wait_for(
+                self._gather_models_concurrent(clients),
+                timeout=self._provider_timeout if self._provider_timeout > 0 else None,
+            )
+        except asyncio.TimeoutError:
+            self._logger.error(
+                "Provider %s catalogue fetch exceeded %.2fs timeout", provider, self._provider_timeout
+            )
+            return []
 
     def _get_clients(self, providers: Sequence[object] | None) -> list[ProviderClient]:
         if self._clients_override is not None:
@@ -104,12 +147,14 @@ class ProviderModelCatalogue:
             factory = self._client_factories.get(provider_name)
             if factory is None:
                 continue
+            metadata = dict(config.metadata or {})
+            metadata.setdefault("timeout", self._provider_timeout)
             clients.append(
                 factory(
                     self._settings,
                     base_url=config.base_url,
                     api_key=config.api_key,
-                    metadata=config.metadata,
+                    metadata=metadata,
                 )
             )
         return clients
@@ -215,17 +260,34 @@ class ProviderModelCatalogue:
 
         return fallbacks
 
-    async def _gather_models(self, clients: Sequence[ProviderClient]) -> list[ProviderModel]:
+    async def _gather_models_concurrent(self, clients: Sequence[ProviderClient]) -> list[ProviderModel]:
         if not clients:
             return []
-        tasks = [self._safe_list_models(client) for client in clients]
-        results = await asyncio.gather(*tasks)
+
+        tasks = [
+            self._fetch_with_timeout(client, self._resolve_client_timeout(client))
+            for client in clients
+        ]
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+
         models: list[ProviderModel] = []
-        for provider_models in results:
-            models.extend(provider_models)
+        for index, result in enumerate(results):
+            if isinstance(result, Exception):
+                client = clients[index]
+                self._logger.error(
+                    "Provider %s fetch failed with unexpected exception: %s",
+                    getattr(client, "provider", "unknown"),
+                    result,
+                )
+                continue
+            models.extend(result)
         return models
 
-    async def _safe_list_models(self, client: ProviderClient) -> list[ProviderModel]:
+    async def _fetch_with_timeout(
+        self,
+        client: ProviderClient,
+        timeout: float,
+    ) -> list[ProviderModel]:
         cache_key = self._build_cache_key(client)
         cached = self._cache_lookup(cache_key)
         if cached is not None:
@@ -243,7 +305,17 @@ class ProviderModelCatalogue:
                 )
                 return cached
             try:
-                models = await client.list_models()
+                models = await asyncio.wait_for(
+                    client.list_models(),
+                    timeout=timeout if timeout > 0 else None,
+                )
+            except asyncio.TimeoutError:
+                self._logger.error(
+                    "Provider %s exceeded %.2fs timeout when fetching catalogue",
+                    client.provider,
+                    timeout,
+                )
+                models = []
             except Exception:  # pragma: no cover - defensive catch-all
                 self._logger.exception(
                     "Failed to fetch models from provider %s", client.provider
@@ -255,6 +327,25 @@ class ProviderModelCatalogue:
                 )
             self._store_cache(cache_key, models)
             return list(models)
+
+    def _resolve_client_timeout(self, client: ProviderClient) -> float:
+        metadata = getattr(client, "metadata", None)
+        if isinstance(metadata, Mapping):
+            candidate = metadata.get("timeout")
+            try:
+                if candidate is not None:
+                    value = float(candidate)
+                    return value if value > 0 else self._provider_timeout
+            except (TypeError, ValueError):
+                self._logger.debug(
+                    "Ignoring invalid timeout override %r for provider %s",
+                    candidate,
+                    client.provider,
+                )
+        timeout = getattr(client, "timeout", None)
+        if isinstance(timeout, (int, float)) and timeout > 0:
+            return float(timeout)
+        return self._provider_timeout
 
     @classmethod
     def clear_cache(cls) -> None:
@@ -327,6 +418,14 @@ class ProviderModelCatalogue:
         except (TypeError, ValueError):  # pragma: no cover - defensive cast
             return 0
         return max(ttl, 0)
+
+    @staticmethod
+    def _coerce_timeout(value: Any, default: float) -> float:
+        try:
+            timeout = float(value)
+        except (TypeError, ValueError):
+            return default
+        return timeout if timeout > 0 else default
 
 
 __all__ = ["ProviderModelCatalogue"]
