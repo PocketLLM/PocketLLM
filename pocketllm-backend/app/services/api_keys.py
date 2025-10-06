@@ -21,13 +21,12 @@ except Exception:  # pragma: no cover - defensive fallback when SDK missing
 _GROQ_IMPORT_ERROR: Exception | None = None
 
 try:  # pragma: no cover
-    from groq import AsyncGroq
-    from groq.errors import GroqError
+    from groq import APIError as GroqAPIError, AsyncGroq
 except Exception as exc:  # pragma: no cover
     AsyncGroq = None  # type: ignore[assignment]
     _GROQ_IMPORT_ERROR = exc
 
-    class GroqError(Exception):
+    class GroqAPIError(Exception):
         """Fallback Groq error."""
 
 
@@ -108,7 +107,7 @@ class APIKeyValidationService:
         client = AsyncGroq(**kwargs)
         try:
             await client.models.list()
-        except GroqError as exc:  # pragma: no cover
+        except GroqAPIError as exc:  # pragma: no cover
             raise ValueError(f"Groq API key validation failed: {exc}") from exc
         finally:
             await _close_client(client)
