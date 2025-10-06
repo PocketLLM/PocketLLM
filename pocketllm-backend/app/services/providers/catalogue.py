@@ -95,10 +95,17 @@ class ProviderModelCatalogue:
             self._logger.warning("No provider clients available for catalogue lookup")
             return []
 
-        if self._total_timeout > 0:
-            return await self._gather_models_with_deadline(clients, self._total_timeout)
-
-        return await self._gather_models_concurrent(clients)
+        try:
+            return await asyncio.wait_for(
+                self._gather_models_concurrent(clients),
+                timeout=self._total_timeout if self._total_timeout > 0 else None,
+            )
+        except asyncio.TimeoutError:
+            self._logger.error(
+                "Provider catalogue fetch exceeded %.2fs timeout; returning partial results.",
+                self._total_timeout,
+            )
+            return []
 
     async def list_models_for_provider(
         self,
@@ -274,77 +281,6 @@ class ProviderModelCatalogue:
                 )
                 continue
             models.extend(result)
-        return models
-
-    async def _gather_models_with_deadline(
-        self,
-        clients: Sequence[ProviderClient],
-        total_timeout: float,
-    ) -> list[ProviderModel]:
-        if not clients:
-            return []
-
-        task_pairs = [
-            (
-                client,
-                asyncio.create_task(
-                    self._fetch_with_timeout(
-                        client,
-                        self._resolve_client_timeout(client),
-                    )
-                ),
-            )
-            for client in clients
-        ]
-
-        tasks = [task for _, task in task_pairs]
-
-        all_tasks: set[asyncio.Task[Any]] = set(tasks)
-        pending: set[asyncio.Task[Any]] = set(all_tasks)
-        done: set[asyncio.Task[Any]] = set()
-        try:
-            done, pending = await asyncio.wait(
-                all_tasks,
-                timeout=total_timeout,
-                return_when=asyncio.ALL_COMPLETED,
-            )
-            if pending:
-                self._logger.error(
-                    (
-                        "Provider catalogue fetch exceeded %.2fs timeout; "
-                        "returning results from %d of %d providers."
-                    ),
-                    total_timeout,
-                    len(done),
-                    len(tasks),
-                )
-        finally:
-            if pending:
-                for task in pending:
-                    task.cancel()
-                await asyncio.gather(*pending, return_exceptions=True)
-
-        models: list[ProviderModel] = []
-        for client, task in task_pairs:
-            if not task.done():
-                continue
-            try:
-                result = task.result()
-            except asyncio.CancelledError:
-                self._logger.debug(
-                    "Provider %s fetch was cancelled when the catalogue deadline expired",
-                    getattr(client, "provider", "unknown"),
-                )
-                continue
-            except Exception as exc:  # pragma: no cover - defensive catch-all
-                self._logger.error(
-                    "Provider %s fetch failed with unexpected exception: %s",
-                    getattr(client, "provider", "unknown"),
-                    exc,
-                )
-                continue
-            models.extend(result)
-
         return models
 
     async def _fetch_with_timeout(
