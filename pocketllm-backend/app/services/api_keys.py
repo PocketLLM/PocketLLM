@@ -96,8 +96,9 @@ class APIKeyValidationService:
             await self._validate_groq_via_http(api_key, base_url, metadata)
             return
         kwargs: dict[str, Any] = {"api_key": api_key}
-        if base_url:
-            kwargs["base_url"] = base_url
+        sdk_base_url = _normalise_groq_sdk_base_url(base_url)
+        if sdk_base_url:
+            kwargs["base_url"] = sdk_base_url
         timeout = _coerce_positive_float(metadata.get("timeout")) if metadata else None
         if timeout is not None:
             kwargs["timeout"] = timeout
@@ -120,7 +121,8 @@ class APIKeyValidationService:
     ) -> None:
         timeout = _coerce_positive_float(metadata.get("timeout")) if metadata else None
         timeout = timeout or 10.0
-        url = _join_url_path(base_url or "https://api.groq.com/openai/v1", "models")
+        http_base_url = _normalise_groq_http_base_url(base_url)
+        url = _join_url_path(http_base_url, "models")
         headers = {"Authorization": f"Bearer {api_key}", "Accept": "application/json"}
         try:
             async with httpx.AsyncClient(timeout=timeout) as client:
@@ -233,4 +235,26 @@ def _join_url_path(base: str, path: str) -> str:
     if not base:
         return path
     return base.rstrip("/") + "/" + path.lstrip("/")
+
+
+def _normalise_groq_sdk_base_url(base_url: str | None) -> str | None:
+    """Strip the ``/openai/v1`` suffix Groq adds for OpenAI compatibility."""
+
+    if not base_url:
+        return None
+    trimmed = base_url.rstrip("/")
+    suffix = "/openai/v1"
+    if trimmed.lower().endswith(suffix):
+        trimmed = trimmed[: -len(suffix)]
+    return trimmed or base_url
+
+
+def _normalise_groq_http_base_url(base_url: str | None) -> str:
+    """Return a Groq base URL that always includes the OpenAI-compatible prefix."""
+
+    base = (base_url or "https://api.groq.com").rstrip("/")
+    suffix = "/openai/v1"
+    if base.lower().endswith(suffix):
+        return base
+    return _join_url_path(base, suffix.lstrip("/"))
 

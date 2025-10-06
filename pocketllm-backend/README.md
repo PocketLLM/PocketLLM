@@ -80,13 +80,17 @@ curl \
   -d '{
     "provider": "groq",
     "api_key": "gsk_your_api_key_here",
-    "base_url": "https://api.groq.com/openai/v1",
+    "base_url": "https://api.groq.com",
     "metadata": {
       "timeout": 30,
       "max_retries": 2
     }
   }'
 ```
+
+Providing the bare domain is sufficient—the backend automatically adds Groq's
+`/openai/v1` compatibility prefix for HTTP calls while stripping it for the
+official SDK.
 
 If you construct the request body dynamically (for example, in Postman), ensure the body is sent as JSON rather than plain text.
 

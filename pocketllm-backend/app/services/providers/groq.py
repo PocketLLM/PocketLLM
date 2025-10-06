@@ -68,6 +68,18 @@ async def _client_context(factory: ClientFactory, **kwargs: Any) -> AsyncIterato
             await _close_client(client)
 
 
+def _normalise_base_url(base_url: str | None) -> str | None:
+    """Strip the OpenAI compatibility suffix Groq adds at the HTTP layer."""
+
+    if not base_url:
+        return None
+    trimmed = base_url.rstrip("/")
+    suffix = "/openai/v1"
+    if trimmed.lower().endswith(suffix):
+        trimmed = trimmed[: -len(suffix)]
+    return trimmed or base_url
+
+
 def _build_client_kwargs(
     api_key: str | None,
     base_url: str | None,
@@ -76,8 +88,9 @@ def _build_client_kwargs(
     kwargs: dict[str, Any] = {}
     if api_key:
         kwargs["api_key"] = api_key
-    if base_url:
-        kwargs["base_url"] = base_url
+    normalised_base = _normalise_base_url(base_url)
+    if normalised_base:
+        kwargs["base_url"] = normalised_base
     if metadata:
         for key in ("timeout", "max_retries"):
             value = metadata.get(key)
@@ -90,7 +103,7 @@ class GroqProviderClient(ProviderClient):
     """Fetch available models from Groq Cloud using the official SDK."""
 
     provider = "groq"
-    default_base_url = "https://api.groq.com/openai/v1"
+    default_base_url = "https://api.groq.com"
 
     def __init__(
         self,
