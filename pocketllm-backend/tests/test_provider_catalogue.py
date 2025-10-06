@@ -88,7 +88,7 @@ class RecordingProviderClient(ProviderClient):
         return []
 
 
-class RecordingGroqClient(ProviderClient):
+class RecordingGroqProviderClient(ProviderClient):
     provider = "groq"
     default_base_url = "https://api.groq"
     requires_api_key = False
@@ -517,13 +517,13 @@ async def test_catalogue_uses_environment_fallback_configuration(caplog):
 @pytest.mark.asyncio
 async def test_catalogue_ignores_environment_fallback_for_unconfigured_provider():
     RecordingProviderClient.initialiser_calls = []
-    RecordingGroqClient.initialiser_calls = []
+    RecordingGroqProviderClient.initialiser_calls = []
     settings = make_settings(openai_api_key="env-key")
     catalogue = ProviderModelCatalogue(
         settings,
         client_factories={
             "openai": RecordingProviderClient,
-            "groq": RecordingGroqClient,
+            "groq": RecordingGroqProviderClient,
         },
     )
     groq_configuration = SimpleNamespace(
@@ -537,7 +537,7 @@ async def test_catalogue_ignores_environment_fallback_for_unconfigured_provider(
     models = await catalogue.list_all_models([groq_configuration])
 
     assert {model.provider for model in models} == {"groq"}
-    assert RecordingGroqClient.initialiser_calls
+    assert RecordingGroqProviderClient.initialiser_calls
     assert RecordingProviderClient.initialiser_calls == []
 
 
