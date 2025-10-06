@@ -112,8 +112,35 @@ class RemoteModelService {
       query: queryParams.isEmpty ? null : queryParams,
     );
 
-    final models = (data as List?) ?? [];
-    return models
+    Iterable<dynamic> modelsPayload;
+    if (data is List) {
+      modelsPayload = data;
+    } else if (data is Map) {
+      final payloadMap = Map<String, dynamic>.from(data);
+      final models = payloadMap['models'];
+      if (models is List) {
+        modelsPayload = models;
+      } else if (models == null) {
+        debugPrint(
+          'RemoteModelService.getAvailableModels response missing "models" key: $payloadMap',
+        );
+        modelsPayload = const <dynamic>[];
+      } else {
+        throw BackendApiException(
+          -1,
+          'Invalid models payload received from server',
+        );
+      }
+    } else if (data == null) {
+      modelsPayload = const <dynamic>[];
+    } else {
+      throw BackendApiException(
+        -1,
+        'Unexpected response when fetching available models',
+      );
+    }
+
+    return modelsPayload
         .map((entry) {
           final raw = Map<String, dynamic>.from(entry as Map);
           final providerId = raw['provider'] as String? ?? provider?.backendId ?? '';
