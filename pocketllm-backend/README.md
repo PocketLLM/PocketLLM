@@ -59,6 +59,29 @@ The hosted API is available at `https://pocket-llm-api.vercel.app`. OpenAPI docu
 pytest
 ```
 
+### Activating a provider
+
+Send JSON to `/v1/providers/activate` using the `application/json` content type. Raw JSON strings are also accepted, but must
+represent a valid JSON object. For example, to activate Groq with a custom timeout configuration:
+
+```bash
+curl \
+  -X POST http://127.0.0.1:8000/v1/providers/activate \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "provider": "groq",
+    "api_key": "gsk_your_api_key_here",
+    "base_url": "https://api.groq.com/openai/v1",
+    "metadata": {
+      "timeout": 30,
+      "max_retries": 2
+    }
+  }'
+```
+
+If you construct the request body dynamically (for example, in Postman), ensure the body is sent as JSON rather than plain text.
+
 ## Project Structure
 
 ```text

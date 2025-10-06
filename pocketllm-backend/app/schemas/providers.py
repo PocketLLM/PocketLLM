@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 
+import json
 from datetime import datetime
 from typing import Optional
 from uuid import UUID
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 
 class ProviderModel(BaseModel):
@@ -46,6 +47,28 @@ class ProviderActivationRequest(BaseModel):
     api_key: str = Field(min_length=16)
     base_url: Optional[str] = None
     metadata: dict | None = None
+
+    @model_validator(mode="before")
+    @classmethod
+    def ensure_mapping(cls, data: object) -> object:
+        """Coerce raw JSON strings into objects for compatibility."""
+
+        if isinstance(data, str):
+            try:
+                data = json.loads(data)
+            except json.JSONDecodeError as exc:  # pragma: no cover - defensive branch
+                raise ValueError("Provider activation payload must be a JSON object.") from exc
+
+        if isinstance(data, dict):
+            metadata = data.get("metadata")
+            if isinstance(metadata, str):
+                try:
+                    data["metadata"] = json.loads(metadata)
+                except json.JSONDecodeError as exc:
+                    raise ValueError("Metadata must be a JSON object.") from exc
+            return data
+
+        raise TypeError("Provider activation payload must be a JSON object.")
 
 
 class ProviderUpdateRequest(BaseModel):
