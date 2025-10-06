@@ -102,11 +102,8 @@ class ImageRouterProviderClient(ProviderClient):
         models: list[ProviderModel] = []
 
         try:
-            if isinstance(payload, Mapping) and "data" in payload:
-                model_list = payload["data"]
-            elif hasattr(payload, "data"):
-                model_list = payload.data
-            else:
+            model_list = self._extract_model_list(payload)
+            if model_list is None:
                 self._logger.warning(
                     "Unexpected ImageRouter models response format: %s", type(payload)
                 )
@@ -124,25 +121,28 @@ class ImageRouterProviderClient(ProviderClient):
                         )
                         continue
 
-                    model_id = model_mapping.get("id", "")
+                    model_id = str(model_mapping.get("id", "")).strip()
                     if not model_id:
                         continue
 
-                    name = model_mapping.get("name", model_id.replace("_", " ").title())
+                    name = model_mapping.get("name") or model_id.replace("_", " ").title()
 
-                    metadata: dict[str, Any] = {
-                        "created": model_mapping.get("created"),
-                        "owned_by": model_mapping.get("owned_by", "ImageRouter"),
-                        "capabilities": ["image_generation"],
-                        "provider": model_mapping.get("provider"),
-                    }
+                    metadata: dict[str, Any] = {}
+                    capabilities = model_mapping.get("capabilities")
+                    if isinstance(capabilities, list) and capabilities:
+                        metadata["capabilities"] = capabilities
+                    else:
+                        metadata["capabilities"] = ["image_generation"]
 
-                    if "supported_formats" in model_mapping:
-                        metadata["supported_formats"] = model_mapping["supported_formats"]
-                    if "quality_levels" in model_mapping:
-                        metadata["quality_levels"] = model_mapping["quality_levels"]
-                    if "size_options" in model_mapping:
-                        metadata["size_options"] = model_mapping["size_options"]
+                    for key in ("supported_formats", "quality_levels", "size_options"):
+                        value = model_mapping.get(key)
+                        if value:
+                            metadata[key] = value
+
+                    for key in ("created", "owned_by", "provider"):
+                        value = model_mapping.get(key)
+                        if value not in (None, ""):
+                            metadata[key] = value
 
                     models.append(
                         ProviderModel(
@@ -156,14 +156,13 @@ class ImageRouterProviderClient(ProviderClient):
                             max_output_tokens=None,
                             pricing=model_mapping.get("pricing"),
                             is_active=True,
-                            metadata=metadata,
+                            metadata=metadata or None,
                         )
                     )
 
                 except Exception as exc:
                     self._logger.warning(
-                        "Failed to parse ImageRouter model %s: %s",
-                        model_mapping.get("id", "unknown") if "model_mapping" in locals() else "unknown",
+                        "Failed to parse ImageRouter model entry: %s",
                         exc,
                     )
                     continue
@@ -172,6 +171,27 @@ class ImageRouterProviderClient(ProviderClient):
             self._logger.error("Failed to parse ImageRouter models response: %s", exc)
 
         return models
+
+    def _extract_model_list(self, payload: Any) -> list[Any] | None:
+        """Normalise the ImageRouter response payload into a list of model entries."""
+
+        if isinstance(payload, Mapping):
+            for key in ("data", "models"):
+                candidate = payload.get(key)
+                if isinstance(candidate, list):
+                    return candidate
+            if "data" in payload and hasattr(payload["data"], "values"):
+                candidate = payload["data"]
+                if isinstance(candidate, list):
+                    return candidate
+        elif hasattr(payload, "data"):
+            data = getattr(payload, "data")
+            if isinstance(data, list):
+                return data
+        elif isinstance(payload, list):
+            return payload
+
+        return None
 
     async def generate_image(self, prompt: str, model: str, **kwargs: Any) -> dict[str, Any]:
         """Generate an image using ImageRouter API."""

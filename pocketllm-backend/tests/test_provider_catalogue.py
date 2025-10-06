@@ -912,6 +912,31 @@ async def test_imagerouter_provider_client_fetches_models_via_http():
 
 
 @pytest.mark.asyncio
+async def test_imagerouter_provider_client_handles_models_key():
+    payload = {
+        "models": [
+            {
+                "id": "imagerouter/image-beta",
+                "name": "Image Beta",
+                "quality_levels": ["standard", "high"],
+            }
+        ]
+    }
+
+    transport = httpx.MockTransport(lambda _: httpx.Response(200, json=payload))
+    settings = make_settings(imagerouter_api_key="image-key")
+    client = ImageRouterProviderClient(settings, transport=transport)
+
+    models = await client.list_models()
+
+    assert [model.id for model in models] == ["imagerouter/image-beta"]
+    assert models[0].metadata == {
+        "capabilities": ["image_generation"],
+        "quality_levels": ["standard", "high"],
+    }
+
+
+@pytest.mark.asyncio
 async def test_providers_service_filters_models_by_attributes():
     models = [
         ProviderModel(
