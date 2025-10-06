@@ -84,7 +84,13 @@ class Settings(BaseSettings):
     imagerouter_api_key: str | None = Field(default=None, alias="IMAGEROUTER_API_KEY")
     imagerouter_api_base: str | None = Field(default=None, alias="IMAGEROUTER_API_BASE")
     provider_catalogue_cache_ttl: int = Field(
-        default=60, alias="PROVIDER_CATALOGUE_CACHE_TTL"
+        default=300, alias="PROVIDER_CATALOGUE_CACHE_TTL"
+    )
+    provider_catalogue_provider_timeout: float = Field(
+        default=4.0, alias="PROVIDER_CATALOGUE_PROVIDER_TIMEOUT"
+    )
+    provider_catalogue_total_timeout: float = Field(
+        default=8.0, alias="PROVIDER_CATALOGUE_TOTAL_TIMEOUT"
     )
 
 

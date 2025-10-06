@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 
 import '../component/models.dart';
 import '../services/backend_api_service.dart';
@@ -234,72 +235,133 @@ class _LibraryPageState extends State<LibraryPage> {
   }
 
   Widget _buildBody() {
+    Widget child;
+
     if (_isLoading && _availableModels.isEmpty) {
-      return const Center(child: CircularProgressIndicator());
-    }
-
-    if (_error != null && _availableModels.isEmpty) {
-      return _buildErrorState(_error!);
-    }
-
-    final filtered = _filteredModels;
-
-    if (!_isLoading && filtered.isEmpty) {
-      final emptyMessage = _searchQuery.isEmpty
-          ? (_catalogueMessage ?? 'Adjust your search or try refreshing the catalogue.')
-          : 'No models matched your search. Try adjusting your filters.';
-      return RefreshIndicator(
-        onRefresh: _loadModels,
-        color: const Color(0xFF6D28D9),
-        child: ListView(
-          physics: const AlwaysScrollableScrollPhysics(),
-          padding: const EdgeInsets.fromLTRB(24, 16, 24, 32),
-          children: [
-            _buildSearchBar(),
-            const SizedBox(height: 24),
-            _buildEmptyState(
-              icon: Icons.travel_explore,
-              title: 'No models found',
-              message: emptyMessage,
+      child = KeyedSubtree(key: const ValueKey('loading'), child: _buildLoadingState());
+    } else if (_error != null && _availableModels.isEmpty) {
+      child = KeyedSubtree(key: const ValueKey('error'), child: _buildErrorState(_error!));
+    } else {
+      final filtered = _filteredModels;
+      if (!_isLoading && filtered.isEmpty) {
+        final emptyMessage = _searchQuery.isEmpty
+            ? (_catalogueMessage ?? 'Adjust your search or try refreshing the catalogue.')
+            : 'No models matched your search. Try adjusting your filters.';
+        child = KeyedSubtree(
+          key: const ValueKey('empty'),
+          child: RefreshIndicator(
+            onRefresh: _loadModels,
+            color: const Color(0xFF6D28D9),
+            child: ListView(
+              physics: const AlwaysScrollableScrollPhysics(),
+              padding: const EdgeInsets.fromLTRB(24, 24, 24, 48),
+              children: [
+                _buildSearchBar(),
+                const SizedBox(height: 24),
+                Align(
+                  alignment: Alignment.topCenter,
+                  child: _buildEmptyState(
+                    icon: Icons.travel_explore,
+                    title: 'No models found',
+                    message: emptyMessage,
+                  ),
+                ),
+              ],
             ),
-          ],
-        ),
-      );
+          ),
+        );
+      } else {
+        final grouped = _groupModels(filtered);
+        final providers = grouped.keys.toList()
+          ..sort((a, b) => a.displayName.compareTo(b.displayName));
+        final notice = _buildCatalogueBanner();
+        final summary = _buildProviderSummary();
+
+        child = KeyedSubtree(
+          key: ValueKey('content-${filtered.length}'),
+          child: RefreshIndicator(
+            onRefresh: _loadModels,
+            color: const Color(0xFF6D28D9),
+            child: ListView(
+              physics: const AlwaysScrollableScrollPhysics(),
+              padding: const EdgeInsets.fromLTRB(24, 24, 24, 48),
+              children: [
+                _buildSearchBar(),
+                const SizedBox(height: 20),
+                if (summary != null) ...[
+                  summary,
+                  const SizedBox(height: 20),
+                ],
+                if (notice != null) ...[
+                  notice,
+                  const SizedBox(height: 16),
+                ],
+                for (var index = 0; index < providers.length; index++) ...
+                    _buildProviderSection(
+                  providers[index],
+                  grouped[providers[index]]!,
+                  index == providers.length - 1,
+                ),
+                if (_isLoading)
+                  const Center(
+                    child: Padding(
+                      padding: EdgeInsets.symmetric(vertical: 24),
+                      child: CircularProgressIndicator(),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        );
+      }
     }
 
-    final grouped = _groupModels(filtered);
-    final providers = grouped.keys.toList()
-      ..sort((a, b) => a.displayName.compareTo(b.displayName));
-    final notice = _buildCatalogueBanner();
+    return AnimatedSwitcher(
+      duration: const Duration(milliseconds: 250),
+      switchInCurve: Curves.easeOutCubic,
+      switchOutCurve: Curves.easeInCubic,
+      child: child,
+    );
+  }
 
+  Widget _buildLoadingState() {
     return RefreshIndicator(
       onRefresh: _loadModels,
       color: const Color(0xFF6D28D9),
-      child: ListView(
+      child: ListView.builder(
         physics: const AlwaysScrollableScrollPhysics(),
-        padding: const EdgeInsets.fromLTRB(24, 16, 24, 32),
-        children: [
-          _buildSearchBar(),
-          const SizedBox(height: 24),
-          if (notice != null) notice,
-          for (final provider in providers) ...[
-            _buildProviderHeader(provider),
-            const SizedBox(height: 12),
-            ...grouped[provider]!
-                .map((model) => Padding(
-                      padding: const EdgeInsets.only(bottom: 16),
-                      child: _buildModelCard(provider, model),
-                    ))
-                .toList(),
-            const SizedBox(height: 12),
+        padding: const EdgeInsets.fromLTRB(24, 32, 24, 48),
+        itemCount: 4,
+        itemBuilder: (context, index) {
+          return Padding(
+            padding: EdgeInsets.only(bottom: index == 3 ? 0 : 20),
+            child: _buildLoadingPlaceholderCard(),
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _buildLoadingPlaceholderCard() {
+    return Container(
+      height: 140,
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(20),
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            Colors.grey.shade200,
+            Colors.grey.shade100,
+            Colors.grey.shade200,
           ],
-          if (_isLoading)
-            const Center(
-              child: Padding(
-                padding: EdgeInsets.symmetric(vertical: 24),
-                child: CircularProgressIndicator(),
-              ),
-            ),
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.05),
+            blurRadius: 12,
+            offset: const Offset(0, 6),
+          ),
         ],
       ),
     );
@@ -388,31 +450,165 @@ class _LibraryPageState extends State<LibraryPage> {
     );
   }
 
-  Widget _buildProviderHeader(ModelProvider provider) {
-    return Row(
-      children: [
-        _buildProviderAvatar(provider, size: 44),
-        const SizedBox(width: 16),
-        Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
+  Widget? _buildProviderSummary() {
+    final response = _catalogueResponse;
+    if (response == null) {
+      return null;
+    }
+
+    final configured = response.configuredProviders.toSet().toList();
+    final missing = response.missingProviders.toSet().toList();
+
+    if (configured.isEmpty && missing.isEmpty) {
+      return null;
+    }
+
+    final theme = Theme.of(context);
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: Colors.grey.shade200),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.04),
+            blurRadius: 12,
+            offset: const Offset(0, 6),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          if (configured.isNotEmpty) ...[
             Text(
-              provider.displayName,
-              style: const TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.w700,
-              ),
+              'Connected providers',
+              style: theme.textTheme.titleSmall?.copyWith(
+                    fontWeight: FontWeight.w700,
+                  ) ??
+                  const TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
             ),
-            Text(
-              'Models from ${provider.displayName}',
-              style: TextStyle(
-                color: Colors.grey[600],
-              ),
+            const SizedBox(height: 12),
+            Wrap(
+              spacing: 12,
+              runSpacing: 12,
+              children: configured
+                  .map((providerId) => _buildProviderStatusChip(providerId, configured: true))
+                  .toList(),
             ),
           ],
+          if (configured.isNotEmpty && missing.isNotEmpty)
+            const SizedBox(height: 20),
+          if (missing.isNotEmpty) ...[
+            Text(
+              'Available to connect',
+              style: theme.textTheme.titleSmall?.copyWith(
+                    fontWeight: FontWeight.w700,
+                  ) ??
+                  const TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+            ),
+            const SizedBox(height: 12),
+            Wrap(
+              spacing: 12,
+              runSpacing: 12,
+              children: missing
+                  .map((providerId) => _buildProviderStatusChip(providerId, configured: false))
+                  .toList(),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildProviderStatusChip(String providerId, {required bool configured}) {
+    final provider = ModelProviderExtension.fromBackend(providerId);
+    final label = provider.displayName;
+    final color = configured ? const Color(0xFF4C1D95) : Colors.grey[700]!;
+    final background = configured ? const Color(0xFFEDE9FE) : Colors.grey.shade200;
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      decoration: BoxDecoration(
+        color: background,
+        borderRadius: BorderRadius.circular(24),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          SizedBox(
+            width: 20,
+            height: 20,
+            child: FittedBox(
+              fit: BoxFit.contain,
+              child: _buildProviderLogo(provider, size: 20, fallbackColor: color),
+            ),
+          ),
+          const SizedBox(width: 8),
+          Text(
+            label,
+            style: TextStyle(
+              color: color,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          if (!configured) ...[
+            const SizedBox(width: 8),
+            Icon(Icons.lock_open, size: 16, color: color.withOpacity(0.8)),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildProviderHeader(ModelProvider provider, int modelCount) {
+    return Row(
+      children: [
+        _buildProviderAvatar(provider, size: 48),
+        const SizedBox(width: 16),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                provider.displayName,
+                style: const TextStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                '$modelCount model${modelCount == 1 ? '' : 's'} available',
+                style: TextStyle(
+                  color: Colors.grey[600],
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ],
+          ),
         ),
       ],
     );
+  }
+
+  List<Widget> _buildProviderSection(
+    ModelProvider provider,
+    List<AvailableModelOption> models,
+    bool isLast,
+  ) {
+    return [
+      _buildProviderHeader(provider, models.length),
+      const SizedBox(height: 12),
+      ...models
+          .map((model) => Padding(
+                padding: const EdgeInsets.only(bottom: 16),
+                child: _buildModelCard(provider, model),
+              ))
+          .toList(),
+      if (!isLast) const SizedBox(height: 28),
+    ];
   }
 
   Widget _buildModelCard(ModelProvider provider, AvailableModelOption model) {
@@ -426,24 +622,87 @@ class _LibraryPageState extends State<LibraryPage> {
     final outputModalities = architecture is Map ? _stringList(architecture['output_modalities']) : <String>[];
     final isImporting = _importingModelIds.contains(model.id);
 
-    return InkWell(
-      borderRadius: BorderRadius.circular(20),
-      onTap: () => _showModelDetails(model),
-      child: Card(
-        elevation: 0,
-        color: Colors.white,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(20),
-          side: BorderSide(color: Colors.grey.shade200),
+    final accentColor = _resolveProviderColor(provider);
+    final metadataChips = <Widget>[];
+
+    if (contextWindow != null) {
+      metadataChips.add(
+        _buildMetadataChip(
+          icon: Icons.unfold_more,
+          label: 'Context ${contextWindow.toString()} tokens',
+          tint: accentColor,
         ),
-        child: Padding(
-          padding: const EdgeInsets.all(20),
+      );
+    }
+    if (maxOutput != null) {
+      metadataChips.add(
+        _buildMetadataChip(
+          icon: Icons.vertical_align_bottom,
+          label: 'Max output ${maxOutput.toString()} tokens',
+          tint: accentColor,
+        ),
+      );
+    }
+    if (capabilities.isNotEmpty) {
+      metadataChips.add(
+        _buildMetadataChip(
+          icon: Icons.extension,
+          label: capabilities.take(3).join(' • '),
+          tint: accentColor,
+        ),
+      );
+    }
+    if (inputModalities.isNotEmpty) {
+      metadataChips.add(
+        _buildMetadataChip(
+          icon: Icons.input,
+          label: 'Input: ${inputModalities.join(', ')}',
+          tint: accentColor,
+        ),
+      );
+    }
+    if (outputModalities.isNotEmpty) {
+      metadataChips.add(
+        _buildMetadataChip(
+          icon: Icons.output,
+          label: 'Output: ${outputModalities.join(', ')}',
+          tint: accentColor,
+        ),
+      );
+    }
+
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(24),
+        onTap: () => _showModelDetails(model),
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 200),
+          curve: Curves.easeOutCubic,
+          padding: const EdgeInsets.all(24),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(24),
+            border: Border.all(
+              color: isImporting ? accentColor.withOpacity(0.4) : Colors.grey.shade200,
+              width: 1.4,
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(isImporting ? 0.08 : 0.05),
+                blurRadius: isImporting ? 18 : 12,
+                offset: const Offset(0, 8),
+              ),
+            ],
+          ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  _buildProviderAvatar(provider, size: 56),
+                  const SizedBox(width: 16),
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -451,35 +710,27 @@ class _LibraryPageState extends State<LibraryPage> {
                         Text(
                           model.name,
                           style: const TextStyle(
-                            fontSize: 18,
+                            fontSize: 20,
                             fontWeight: FontWeight.w700,
                           ),
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
                         ),
-                        const SizedBox(height: 4),
+                        const SizedBox(height: 6),
                         Text(
                           model.id,
-                          style: TextStyle(color: Colors.grey[600]),
+                          style: TextStyle(
+                            color: Colors.grey[600],
+                            fontWeight: FontWeight.w500,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
                         ),
                       ],
                     ),
                   ),
-                  FilledButton.icon(
-                    onPressed: isImporting ? null : () => _importModel(model),
-                    style: FilledButton.styleFrom(
-                      backgroundColor: const Color(0xFF6D28D9),
-                      foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                    ),
-                    icon: isImporting
-                        ? const SizedBox(
-                            width: 18,
-                            height: 18,
-                            child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
-                          )
-                        : const Icon(Icons.download, size: 20),
-                    label: Text(isImporting ? 'Importing' : 'Import'),
-                  ),
+                  const SizedBox(width: 16),
+                  _buildImportButton(model, isImporting, accentColor),
                 ],
               ),
               if (description.isNotEmpty) ...[
@@ -488,46 +739,58 @@ class _LibraryPageState extends State<LibraryPage> {
                   description,
                   maxLines: 3,
                   overflow: TextOverflow.ellipsis,
-                  style: TextStyle(color: Colors.grey[700]),
+                  style: TextStyle(color: Colors.grey[700], height: 1.4),
                 ),
               ],
-              const SizedBox(height: 16),
-              Wrap(
-                spacing: 10,
-                runSpacing: 10,
-                children: [
-                  _buildMetadataChip(
-                    icon: Icons.business,
-                    label: provider.displayName,
-                  ),
-                  if (contextWindow != null)
-                    _buildMetadataChip(
-                      icon: Icons.unfold_more,
-                      label: 'Context ${contextWindow.toString()} tokens',
-                    ),
-                  if (maxOutput != null)
-                    _buildMetadataChip(
-                      icon: Icons.vertical_align_bottom,
-                      label: 'Max output ${maxOutput.toString()} tokens',
-                    ),
-                  if (capabilities.isNotEmpty)
-                    _buildMetadataChip(
-                      icon: Icons.extension,
-                      label: capabilities.take(2).join(' • '),
-                    ),
-                  if (inputModalities.isNotEmpty)
-                    _buildMetadataChip(
-                      icon: Icons.input,
-                      label: 'Input: ${inputModalities.join(', ')}',
-                    ),
-                  if (outputModalities.isNotEmpty)
-                    _buildMetadataChip(
-                      icon: Icons.output,
-                      label: 'Output: ${outputModalities.join(', ')}',
-                    ),
-                ],
-              ),
+              if (metadataChips.isNotEmpty) ...[
+                const SizedBox(height: 18),
+                Wrap(
+                  spacing: 12,
+                  runSpacing: 12,
+                  children: metadataChips,
+                ),
+              ],
             ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildImportButton(
+    AvailableModelOption model,
+    bool isImporting,
+    Color accentColor,
+  ) {
+    return ConstrainedBox(
+      constraints: const BoxConstraints(minWidth: 132),
+      child: FilledButton.icon(
+        onPressed: isImporting ? null : () => _importModel(model),
+        style: FilledButton.styleFrom(
+          backgroundColor: accentColor,
+          foregroundColor: Colors.white,
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+        ),
+        icon: AnimatedSwitcher(
+          duration: const Duration(milliseconds: 200),
+          switchInCurve: Curves.easeOutCubic,
+          switchOutCurve: Curves.easeInCubic,
+          child: isImporting
+              ? const SizedBox(
+                  key: ValueKey('spinner'),
+                  width: 18,
+                  height: 18,
+                  child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                )
+              : const Icon(Icons.download, key: ValueKey('icon'), size: 20),
+        ),
+        label: AnimatedSwitcher(
+          duration: const Duration(milliseconds: 200),
+          child: Text(
+            isImporting ? 'Importing…' : 'Import',
+            key: ValueKey<bool>(isImporting),
+            style: const TextStyle(fontWeight: FontWeight.w600),
           ),
         ),
       ),
@@ -600,6 +863,7 @@ class _LibraryPageState extends State<LibraryPage> {
                               _buildMetadataChip(
                                 icon: Icons.business,
                                 label: provider.displayName,
+                                tint: _resolveProviderColor(provider),
                               ),
                             ],
                           ),
@@ -812,13 +1076,33 @@ class _LibraryPageState extends State<LibraryPage> {
         : normalized[0].toUpperCase() + normalized.substring(1);
   }
 
-  Widget _buildMetadataChip({required IconData icon, required String label}) {
-    return Chip(
-      avatar: Icon(icon, size: 18, color: const Color(0xFF6D28D9)),
-      backgroundColor: const Color(0xFFEDE9FE),
-      label: Text(
-        label,
-        style: const TextStyle(color: Color(0xFF4C1D95), fontWeight: FontWeight.w600),
+  Widget _buildMetadataChip({
+    required IconData icon,
+    required String label,
+    Color? tint,
+  }) {
+    final color = tint ?? const Color(0xFF6D28D9);
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.1),
+        borderRadius: BorderRadius.circular(14),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 18, color: color),
+          const SizedBox(width: 6),
+          Text(
+            label,
+            style: TextStyle(
+              color: color,
+              fontWeight: FontWeight.w600,
+            ),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+        ],
       ),
     );
   }
@@ -851,13 +1135,26 @@ class _LibraryPageState extends State<LibraryPage> {
   }
 
   Widget _buildErrorState(String message) {
-    return _buildEmptyState(
-      icon: Icons.lock_outline,
-      title: 'Unable to fetch models',
-      message: message,
-      action: TextButton(
-        onPressed: _loadModels,
-        child: const Text('Try again'),
+    return RefreshIndicator(
+      onRefresh: _loadModels,
+      color: const Color(0xFF6D28D9),
+      child: ListView(
+        physics: const AlwaysScrollableScrollPhysics(),
+        padding: const EdgeInsets.fromLTRB(24, 80, 24, 48),
+        children: [
+          Align(
+            alignment: Alignment.topCenter,
+            child: _buildEmptyState(
+              icon: Icons.lock_outline,
+              title: 'Unable to fetch models',
+              message: message,
+              action: TextButton(
+                onPressed: _loadModels,
+                child: const Text('Try again'),
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -868,45 +1165,144 @@ class _LibraryPageState extends State<LibraryPage> {
     required String message,
     Widget? action,
   }) {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 32),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(icon, size: 48, color: Colors.grey[500]),
-            const SizedBox(height: 16),
-            Text(
-              title,
-              style: const TextStyle(
-                fontSize: 20,
-                fontWeight: FontWeight.w600,
-              ),
-              textAlign: TextAlign.center,
+    final theme = Theme.of(context);
+    return Container(
+      constraints: const BoxConstraints(maxWidth: 420),
+      padding: const EdgeInsets.all(24),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(color: Colors.grey.shade200),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.05),
+            blurRadius: 18,
+            offset: const Offset(0, 10),
+          ),
+        ],
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 64,
+            height: 64,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: const Color(0xFFEDE9FE),
             ),
-            const SizedBox(height: 8),
-            Text(
-              message,
-              style: TextStyle(color: Colors.grey[600]),
-              textAlign: TextAlign.center,
-            ),
-            if (action != null) ...[
-              const SizedBox(height: 16),
-              action,
-            ],
+            child: Icon(icon, size: 32, color: const Color(0xFF6D28D9)),
+          ),
+          const SizedBox(height: 16),
+          Text(
+            title,
+            style: theme.textTheme.titleMedium?.copyWith(
+                  fontWeight: FontWeight.w700,
+                ) ??
+                const TextStyle(fontSize: 20, fontWeight: FontWeight.w700),
+            textAlign: TextAlign.center,
+          ),
+          const SizedBox(height: 8),
+          Text(
+            message,
+            style: theme.textTheme.bodyMedium?.copyWith(
+                  color: Colors.grey[600],
+                  height: 1.5,
+                ) ??
+                TextStyle(color: Colors.grey[600]),
+            textAlign: TextAlign.center,
+          ),
+          if (action != null) ...[
+            const SizedBox(height: 20),
+            action,
           ],
-        ),
+        ],
       ),
     );
   }
 
   Widget _buildProviderAvatar(ModelProvider provider, {double size = 44}) {
-    final iconData = _resolveProviderIcon(provider);
     final color = _resolveProviderColor(provider);
-    return CircleAvatar(
-      radius: size / 2,
-      backgroundColor: color.withOpacity(0.15),
-      child: Icon(iconData, color: color, size: size / 2),
+    final asset = provider.brandAsset;
+    final logoSize = size * 0.6;
+
+    Widget child;
+    if (asset != null) {
+      child = ClipOval(
+        child: SizedBox(
+          width: logoSize,
+          height: logoSize,
+          child: FittedBox(
+            fit: BoxFit.contain,
+            child: _buildBrandAsset(asset, logoSize, color),
+          ),
+        ),
+      );
+    } else {
+      child = Icon(
+        _resolveProviderIcon(provider),
+        color: color,
+        size: logoSize,
+      );
+    }
+
+    return Container(
+      width: size,
+      height: size,
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        color: color.withOpacity(0.12),
+        border: Border.all(color: color.withOpacity(0.3)),
+      ),
+      alignment: Alignment.center,
+      child: child,
+    );
+  }
+
+  Widget _buildProviderLogo(
+    ModelProvider provider, {
+    required double size,
+    Color? fallbackColor,
+  }) {
+    final color = fallbackColor ?? _resolveProviderColor(provider);
+    final asset = provider.brandAsset;
+    if (asset != null) {
+      return _buildBrandAsset(asset, size, color);
+    }
+    return Icon(
+      _resolveProviderIcon(provider),
+      size: size,
+      color: color,
+    );
+  }
+
+  Widget _buildBrandAsset(String asset, double size, Color fallbackColor) {
+    final lower = asset.toLowerCase();
+    if (lower.endsWith('.svg')) {
+      return SvgPicture.asset(
+        asset,
+        width: size,
+        height: size,
+        fit: BoxFit.contain,
+        placeholderBuilder: (context) => Icon(
+          Icons.image_outlined,
+          size: size,
+          color: fallbackColor,
+        ),
+      );
+    }
+
+    return Image.asset(
+      asset,
+      width: size,
+      height: size,
+      fit: BoxFit.contain,
+      filterQuality: FilterQuality.high,
+      errorBuilder: (context, error, stackTrace) => Icon(
+        Icons.image_outlined,
+        size: size,
+        color: fallbackColor,
+      ),
     );
   }
 
