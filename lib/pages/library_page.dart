@@ -111,10 +111,12 @@ class _LibraryPageState extends State<LibraryPage> {
     return _availableModels.where((model) {
       final provider = ModelProviderExtension.fromBackend(model.provider);
       final description = _resolveDescription(model).toLowerCase();
+      final metadataTerms = _metadataSearchTerms(model);
       return model.name.toLowerCase().contains(query) ||
           model.id.toLowerCase().contains(query) ||
           provider.displayName.toLowerCase().contains(query) ||
-          description.contains(query);
+          description.contains(query) ||
+          metadataTerms.any((term) => term.contains(query));
     }).toList();
   }
 
@@ -1539,6 +1541,16 @@ class _LibraryPageState extends State<LibraryPage> {
           .toList();
     }
     return <String>[];
+  }
+
+  List<String> _metadataSearchTerms(AvailableModelOption model) {
+    final metadata = _normalizeMetadata(model.metadata);
+    final metadataFields = <String>[
+      ..._stringList(metadata['capabilities']),
+      ..._stringList(metadata['tags']),
+    ];
+
+    return metadataFields.map((value) => value.toLowerCase()).toList();
   }
 
   Widget _buildErrorState(String message, AvailableModelOption? highlight) {
