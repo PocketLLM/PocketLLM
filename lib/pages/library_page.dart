@@ -641,6 +641,25 @@ class _LibraryPageState extends State<LibraryPage> {
     );
   }
 
+  Widget _buildSectionTitle(String title) {
+    final theme = Theme.of(context);
+    final defaultStyle = const TextStyle(
+      fontSize: 18,
+      fontWeight: FontWeight.w600,
+    );
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 4),
+      child: Text(
+        title,
+        style: theme.textTheme.titleMedium?.copyWith(
+              fontWeight: FontWeight.w600,
+            ) ??
+            defaultStyle,
+      ),
+    );
+  }
+
   Widget _buildInfoTile({
     required IconData icon,
     required String label,
