@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import binascii
+import hashlib
 import logging
 from base64 import urlsafe_b64encode
 from typing import TYPE_CHECKING
@@ -19,7 +20,7 @@ def _derive_fernet_token(secret: str) -> bytes:
     """Derive a valid Fernet token from an arbitrary secret string."""
 
     digest = hashlib.sha256(secret.encode("utf-8")).digest()
-    return base64.urlsafe_b64encode(digest)
+    return urlsafe_b64encode(digest)
 
 
 def _load_fernet(settings: "Settings") -> Fernet:
@@ -30,22 +31,35 @@ def _load_fernet(settings: "Settings") -> Fernet:
         raise RuntimeError(
             "Application encryption key is not configured. Set ENCRYPTION_KEY to a valid Fernet key."
         )
+
     token = key.encode("utf-8")
     try:
         return Fernet(token)
     except (ValueError, TypeError, binascii.Error) as exc:
+        derived_token: bytes | None = None
         if len(token) == 32:
-            derived_key = urlsafe_b64encode(token)
+            derived_token = urlsafe_b64encode(token)
             logger.warning(
                 "Provided ENCRYPTION_KEY was not base64 encoded; derived Fernet key from raw 32-byte string."
             )
-            return Fernet(derived_key)
+        elif len(token) >= 16:
+            derived_token = _derive_fernet_token(key)
+            logger.warning(
+                "Provided ENCRYPTION_KEY was not a valid Fernet key; derived key using SHA-256 digest of the supplied secret."
+            )
+        if derived_token is not None:
+            try:
+                return Fernet(derived_token)
+            except Exception as derived_exc:  # pragma: no cover - defensive guard for invalid derived keys
+                raise RuntimeError(
+                    "Invalid encryption key format. Ensure ENCRYPTION_KEY is a base64 encoded Fernet key or a sufficiently long string."
+                ) from derived_exc
         raise RuntimeError(
-            "Invalid encryption key format. Ensure ENCRYPTION_KEY is a base64 encoded Fernet key or a 32-character string."
+            "Invalid encryption key format. Ensure ENCRYPTION_KEY is a base64 encoded Fernet key or a sufficiently long string."
         ) from exc
     except Exception as exc:  # pragma: no cover - defensive guard for invalid keys
         raise RuntimeError(
-            "Invalid encryption key format. Ensure ENCRYPTION_KEY is a base64 encoded Fernet key or a 32-character string."
+            "Invalid encryption key format. Ensure ENCRYPTION_KEY is a base64 encoded Fernet key or a sufficiently long string."
         ) from exc
 
 
