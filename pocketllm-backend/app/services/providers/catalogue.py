@@ -16,6 +16,7 @@ from app.schemas.providers import ProviderModel
 
 from .base import ProviderClient
 from .groq import GroqProviderClient
+from .imagerouter import ImageRouterProviderClient
 from .openai import OpenAIProviderClient
 from .openrouter import OpenRouterProviderClient
 
@@ -54,6 +55,7 @@ class ProviderModelCatalogue:
                 "openai": OpenAIProviderClient,
                 "groq": GroqProviderClient,
                 "openrouter": OpenRouterProviderClient,
+                "imagerouter": ImageRouterProviderClient,
             }
         )
         self._cache_ttl_seconds = self._coerce_ttl(
@@ -200,6 +202,15 @@ class ProviderModelCatalogue:
                 base_url=getattr(self._settings, "openrouter_api_base", None),
                 api_key=openrouter_key,
                 metadata=metadata or None,
+            )
+
+        imagerouter_key = getattr(self._settings, "imagerouter_api_key", None)
+        if isinstance(imagerouter_key, str) and imagerouter_key:
+            fallbacks["imagerouter"] = _ProviderConfig(
+                provider="imagerouter",
+                base_url=getattr(self._settings, "imagerouter_api_base", None),
+                api_key=imagerouter_key,
+                metadata=None,
             )
 
         return fallbacks

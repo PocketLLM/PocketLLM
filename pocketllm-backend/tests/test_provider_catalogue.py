@@ -16,6 +16,7 @@ from app.services.providers import (
     ProviderClient,
     GroqProviderClient,
     GroqSDKService,
+    ImageRouterProviderClient,
     OpenAIProviderClient,
     OpenRouterProviderClient,
     ProviderModelCatalogue,
@@ -162,6 +163,8 @@ def make_settings(**overrides: Any) -> SimpleNamespace:
         "openrouter_api_base": None,
         "openrouter_app_url": None,
         "openrouter_app_name": None,
+        "imagerouter_api_key": None,
+        "imagerouter_api_base": None,
         "provider_catalogue_cache_ttl": 0,
     }
     defaults.update(overrides)
@@ -851,7 +854,7 @@ async def test_openrouter_provider_client_includes_headers():
 
 @pytest.mark.asyncio
 async def test_openrouter_provider_client_requires_sdk_when_unavailable(monkeypatch, caplog):
-    monkeypatch.setattr("app.services.providers.openrouter.AsyncOpenRouter", None, raising=False)
+    monkeypatch.setattr("app.services.providers.openrouter.AsyncOpenAI", None, raising=False)
     captured_requests: list[httpx.Request] = []
 
     def handler(request: httpx.Request) -> httpx.Response:  # pragma: no cover - should not be called
@@ -872,6 +875,40 @@ async def test_openrouter_provider_client_requires_sdk_when_unavailable(monkeypa
     assert models == []
     assert captured_requests == []
     assert "cannot list models" in caplog.text.lower()
+
+
+@pytest.mark.asyncio
+async def test_imagerouter_provider_client_fetches_models_via_http():
+    captured: list[httpx.Request] = []
+    payload = {
+        "data": [
+            {
+                "id": "imagerouter/image-alpha",
+                "name": "Image Alpha",
+                "capabilities": ["image_generation"],
+                "supported_formats": ["png"],
+                "pricing": {"usd": 0.02},
+            }
+        ]
+    }
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        captured.append(request)
+        return httpx.Response(200, json=payload)
+
+    transport = httpx.MockTransport(handler)
+    settings = make_settings(imagerouter_api_key="image-key")
+    client = ImageRouterProviderClient(settings, transport=transport)
+
+    models = await client.list_models()
+
+    assert [model.id for model in models] == ["imagerouter/image-alpha"]
+    assert models[0].metadata == {
+        "capabilities": ["image_generation"],
+        "supported_formats": ["png"],
+    }
+    assert captured and captured[0].headers["Authorization"] == "Bearer image-key"
+    assert captured[0].url.path.endswith("/models")
 
 
 @pytest.mark.asyncio

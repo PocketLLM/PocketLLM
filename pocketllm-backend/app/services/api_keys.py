@@ -30,15 +30,6 @@ except Exception as exc:  # pragma: no cover
         """Fallback Groq error."""
 
 
-try:  # pragma: no cover
-    from openrouter import AsyncOpenRouter, OpenRouterError
-except Exception:  # pragma: no cover
-    AsyncOpenRouter = None  # type: ignore[assignment]
-
-    class OpenRouterError(Exception):
-        """Fallback OpenRouter error."""
-
-
 logger = logging.getLogger(__name__)
 
 
@@ -141,11 +132,13 @@ class APIKeyValidationService:
         base_url: str | None,
         metadata: Mapping[str, Any] | None,
     ) -> None:
-        if AsyncOpenRouter is None:
-            raise RuntimeError("The 'openrouter' package is required to validate OpenRouter API keys.")
-        kwargs: dict[str, Any] = {"api_key": api_key}
-        if base_url:
-            kwargs["base_url"] = base_url
+        if AsyncOpenAI is None:
+            raise RuntimeError("The 'openai' package is required to validate OpenRouter API keys.")
+
+        kwargs: dict[str, Any] = {
+            "api_key": api_key,
+            "base_url": base_url or "https://openrouter.ai/api/v1",
+        }
         headers: dict[str, str] = {}
         if metadata:
             referer = metadata.get("http_referer") or metadata.get("referer")
@@ -157,18 +150,23 @@ class APIKeyValidationService:
                 headers.setdefault("HTTP-Referer", str(referer))
             if title:
                 headers.setdefault("X-Title", str(title))
+            for key in ("timeout", "max_retries"):
+                value = metadata.get(key)
+                if value is not None:
+                    kwargs[key] = value
         if headers:
             kwargs["default_headers"] = headers
-        client = AsyncOpenRouter(**kwargs)
+
+        client = AsyncOpenAI(**kwargs)
         try:
             await client.models.list()
-        except OpenRouterError as exc:  # pragma: no cover
+        except OpenAIError as exc:  # pragma: no cover - depends on SDK runtime
             raise ValueError(f"OpenRouter API key validation failed: {exc}") from exc
         finally:
             await _close_client(client)
 
     async def _validate_imagerouter(self, api_key: str, base_url: str | None) -> None:
-        url = (base_url or "https://api.imagerouter.com") + "/v1/models"
+        url = (base_url or "https://api.imagerouter.io/v1/openai") + "/models"
         headers = {"Authorization": f"Bearer {api_key}", "Accept": "application/json"}
         async with httpx.AsyncClient(timeout=10.0) as client:
             response = await client.get(url, headers=headers)

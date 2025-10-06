@@ -1,4 +1,4 @@
-"""OpenRouter provider client implementation backed by the official SDK."""
+"""OpenRouter provider client implementation backed by the OpenAI SDK."""
 
 from __future__ import annotations
 
@@ -15,26 +15,23 @@ from app.schemas.providers import ProviderModel
 from .base import ProviderClient
 
 try:  # pragma: no cover - exercised in production environments
-    from openrouter import AsyncOpenRouter
+    from openai import AsyncOpenAI, OpenAIError
 except Exception:  # pragma: no cover - defensive fallback for environments without the SDK
-    AsyncOpenRouter = None  # type: ignore[assignment]
+    AsyncOpenAI = None  # type: ignore[assignment]
 
-try:  # pragma: no cover - exercised in production environments
-    from openrouter import OpenRouterError
-except Exception:  # pragma: no cover - defensive fallback
-    class OpenRouterError(Exception):
-        """Fallback error when the OpenRouter SDK is unavailable."""
+    class OpenAIError(Exception):
+        """Fallback error when the OpenAI SDK is unavailable."""
 
 
 ClientFactory = Callable[..., Any]
 
 
 def _default_client_factory(**kwargs: Any) -> Any:
-    if AsyncOpenRouter is None:
+    if AsyncOpenAI is None:
         raise RuntimeError(
-            "The 'openrouter' package is required to use the OpenRouter provider client. Install it via 'pip install openrouter'."
+            "The 'openai' package is required to use the OpenRouter provider client. Install it via 'pip install openai'."
         )
-    return AsyncOpenRouter(**kwargs)
+    return AsyncOpenAI(**kwargs)
 
 
 async def _close_client(client: Any) -> None:
@@ -100,7 +97,7 @@ def _build_client_kwargs(
 
 
 class OpenRouterProviderClient(ProviderClient):
-    """Fetch available models through the OpenRouter catalogue using the official SDK."""
+    """Fetch available models through the OpenRouter catalogue using the OpenAI SDK."""
 
     provider = "openrouter"
     default_base_url = "https://openrouter.ai/api/v1"
@@ -132,16 +129,9 @@ class OpenRouterProviderClient(ProviderClient):
         return api_base or self.default_base_url
 
     async def list_models(self) -> list[ProviderModel]:
-        if AsyncOpenRouter is None and self._client_factory is _default_client_factory:
+        if AsyncOpenAI is None and self._client_factory is _default_client_factory:
             self._logger.error(
-                "OpenRouter SDK is not installed; cannot list models. Install it via 'pip install openrouter'."
-            )
-            return []
-
-    async def list_models(self) -> list[ProviderModel]:
-        if AsyncOpenRouter is None and self._client_factory is _default_client_factory:
-            self._logger.error(
-                "OpenRouter SDK is not installed; cannot list models. Install it via 'pip install openrouter'."
+                "OpenAI SDK is not installed; cannot list models. Install it via 'pip install openai'."
             )
             return []
         api_key = self._get_api_key()
@@ -153,8 +143,8 @@ class OpenRouterProviderClient(ProviderClient):
         try:
             async with _client_context(self._client_factory, **client_kwargs) as client:
                 payload = await client.models.list()
-        except OpenRouterError as exc:  # pragma: no cover - depends on SDK runtime
-            self._logger.error("OpenRouter SDK request failed: %s", exc)
+        except OpenAIError as exc:  # pragma: no cover - depends on SDK runtime
+            self._logger.error("OpenAI SDK request failed while querying OpenRouter: %s", exc)
             return []
         except Exception:  # pragma: no cover - defensive catch-all
             self._logger.exception("Unexpected error while fetching models from %s", self.provider)
