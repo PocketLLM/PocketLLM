@@ -95,7 +95,7 @@ class RemoteModelService {
     return models.map((raw) => _mapModel(Map<String, dynamic>.from(raw as Map))).toList();
   }
 
-  Future<List<AvailableModelOption>> getAvailableModels({
+  Future<AvailableModelsResponse> getAvailableModels({
     ModelProvider? provider,
     String? query,
   }) async {
@@ -112,41 +112,56 @@ class RemoteModelService {
       query: queryParams.isEmpty ? null : queryParams,
     );
 
-    Iterable<dynamic> modelsPayload;
-    if (data is List) {
-      modelsPayload = data;
-    } else if (data is Map) {
-      final payloadMap = Map<String, dynamic>.from(data);
-      final models = payloadMap['models'];
-      if (models is List) {
-        modelsPayload = models;
-      } else if (models == null) {
-        debugPrint(
-          'RemoteModelService.getAvailableModels response missing "models" key: $payloadMap',
-        );
-        modelsPayload = const <dynamic>[];
-      } else {
-        throw BackendApiException(
-          -1,
-          'Invalid models payload received from server',
-        );
-      }
-    } else if (data == null) {
-      modelsPayload = const <dynamic>[];
-    } else {
-      throw BackendApiException(
-        -1,
-        'Unexpected response when fetching available models',
-      );
+    final payloadMap = _normalizeCataloguePayload(data);
+    final modelsPayload = (payloadMap['models'] as List?) ?? const <dynamic>[];
+    final message = payloadMap['message'] as String?;
+    final configured = _stringList(payloadMap['configured_providers']);
+    final missing = _stringList(payloadMap['missing_providers']);
+    final usingFallback = payloadMap['using_fallback'] == true;
+
+    final models = modelsPayload.map((entry) {
+      final raw = Map<String, dynamic>.from(entry as Map);
+      final providerId = raw['provider'] as String? ?? provider?.backendId ?? '';
+      return AvailableModelOption.fromJson(raw, providerId);
+    }).toList();
+
+    return AvailableModelsResponse(
+      models: models,
+      message: message?.trim().isEmpty ?? true ? null : message,
+      configuredProviders: configured,
+      missingProviders: missing,
+      usingFallback: usingFallback,
+    );
+  }
+
+  Map<String, dynamic> _normalizeCataloguePayload(dynamic data) {
+    if (data == null) {
+      return <String, dynamic>{'models': const <dynamic>[]};
     }
 
-    return modelsPayload
-        .map((entry) {
-          final raw = Map<String, dynamic>.from(entry as Map);
-          final providerId = raw['provider'] as String? ?? provider?.backendId ?? '';
-          return AvailableModelOption.fromJson(raw, providerId);
-        })
-        .toList();
+    if (data is List) {
+      return <String, dynamic>{'models': data};
+    }
+
+    if (data is Map) {
+      return Map<String, dynamic>.from(data);
+    }
+
+    throw BackendApiException(
+      -1,
+      'Unexpected response when fetching available models',
+    );
+  }
+
+  List<String> _stringList(dynamic value) {
+    if (value is List) {
+      return value
+          .map((entry) => entry?.toString().trim())
+          .whereType<String>()
+          .where((entry) => entry.isNotEmpty)
+          .toList();
+    }
+    return const <String>[];
   }
 
   Future<List<ModelConfig>> importModels({

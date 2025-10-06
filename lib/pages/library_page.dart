@@ -20,6 +20,8 @@ class _LibraryPageState extends State<LibraryPage> {
   bool _isLoading = false;
   String? _error;
   List<AvailableModelOption> _availableModels = [];
+  AvailableModelsResponse? _catalogueResponse;
+  String? _catalogueMessage;
   String _searchQuery = '';
   final Set<String> _importingModelIds = <String>{};
 
@@ -43,10 +45,14 @@ class _LibraryPageState extends State<LibraryPage> {
     });
 
     try {
-      final models = await _remoteModelService.getAvailableModels();
+      final response = await _remoteModelService.getAvailableModels();
+      final trimmedMessage = response.message?.trim();
       if (!mounted) return;
       setState(() {
-        _availableModels = models;
+        _catalogueResponse = response;
+        _availableModels = response.models;
+        _catalogueMessage =
+            (trimmedMessage == null || trimmedMessage.isEmpty) ? null : trimmedMessage;
       });
     } on BackendApiException catch (e) {
       if (!mounted) return;
@@ -239,6 +245,9 @@ class _LibraryPageState extends State<LibraryPage> {
     final filtered = _filteredModels;
 
     if (!_isLoading && filtered.isEmpty) {
+      final emptyMessage = _searchQuery.isEmpty
+          ? (_catalogueMessage ?? 'Adjust your search or try refreshing the catalogue.')
+          : 'No models matched your search. Try adjusting your filters.';
       return RefreshIndicator(
         onRefresh: _loadModels,
         color: const Color(0xFF6D28D9),
@@ -251,7 +260,7 @@ class _LibraryPageState extends State<LibraryPage> {
             _buildEmptyState(
               icon: Icons.travel_explore,
               title: 'No models found',
-              message: 'Adjust your search or try refreshing the catalogue.',
+              message: emptyMessage,
             ),
           ],
         ),
@@ -261,6 +270,7 @@ class _LibraryPageState extends State<LibraryPage> {
     final grouped = _groupModels(filtered);
     final providers = grouped.keys.toList()
       ..sort((a, b) => a.displayName.compareTo(b.displayName));
+    final notice = _buildCatalogueBanner();
 
     return RefreshIndicator(
       onRefresh: _loadModels,
@@ -271,6 +281,7 @@ class _LibraryPageState extends State<LibraryPage> {
         children: [
           _buildSearchBar(),
           const SizedBox(height: 24),
+          if (notice != null) notice,
           for (final provider in providers) ...[
             _buildProviderHeader(provider),
             const SizedBox(height: 12),
@@ -295,23 +306,26 @@ class _LibraryPageState extends State<LibraryPage> {
   }
 
   Widget _buildSearchBar() {
+    final colorScheme = Theme.of(context).colorScheme;
     return Container(
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: colorScheme.surface,
         borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: colorScheme.outline.withOpacity(0.15)),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.04),
-            blurRadius: 12,
-            offset: const Offset(0, 4),
+            color: colorScheme.shadow.withOpacity(0.08),
+            blurRadius: 14,
+            offset: const Offset(0, 6),
           ),
         ],
       ),
       child: TextField(
         controller: _searchController,
         onChanged: _onSearchChanged,
+        style: TextStyle(color: colorScheme.onSurface),
         decoration: InputDecoration(
-          prefixIcon: const Icon(Icons.search),
+          prefixIcon: Icon(Icons.search, color: colorScheme.onSurface.withOpacity(0.6)),
           suffixIcon: _searchQuery.isNotEmpty
               ? IconButton(
                   icon: const Icon(Icons.clear),
@@ -319,12 +333,57 @@ class _LibraryPageState extends State<LibraryPage> {
                     _searchController.clear();
                     _onSearchChanged('');
                   },
+                  color: colorScheme.onSurface.withOpacity(0.6),
                 )
               : null,
           hintText: 'Search by model, provider, or capability',
           border: InputBorder.none,
           contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+          filled: false,
         ),
+      ),
+    );
+  }
+
+  Widget? _buildCatalogueBanner() {
+    final message = _catalogueMessage?.trim();
+    if (message == null || message.isEmpty) {
+      return null;
+    }
+
+    final colorScheme = Theme.of(context).colorScheme;
+    final isFallback = _catalogueResponse?.usingFallback ?? false;
+    final accent = isFallback ? const Color(0xFF6D28D9) : colorScheme.primary;
+    final background = isFallback
+        ? const Color(0xFFEDE9FE)
+        : colorScheme.surface.withOpacity(0.95);
+    final border = isFallback
+        ? const Color(0xFFDDD6FE)
+        : colorScheme.outline.withOpacity(0.35);
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 16),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: background,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: border),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(isFallback ? Icons.auto_awesome : Icons.info_outline, color: accent),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Text(
+              message,
+              style: TextStyle(
+                color: colorScheme.onSurface.withOpacity(0.85),
+                height: 1.3,
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
