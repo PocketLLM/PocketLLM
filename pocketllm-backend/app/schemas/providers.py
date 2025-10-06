@@ -117,6 +117,7 @@ class ProviderModelsResponse(BaseModel):
     message: Optional[str] = None
     configured_providers: list[str] = Field(default_factory=list)
     missing_providers: list[str] = Field(default_factory=list)
+    using_fallback: bool = False
 
 
 __all__ = [

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import replace
-from typing import Any
+from typing import Any, Iterable
 from uuid import UUID
 
 from fastapi import HTTPException, status
@@ -20,6 +20,7 @@ from app.schemas.providers import (
     ProviderStatus,
     ProviderUpdateRequest,
 )
+from app.data.static_models import load_static_models, load_static_models_for_provider
 from app.services.api_keys import APIKeyValidationService
 from app.services.providers import (
     GroqProviderClient,
@@ -222,38 +223,51 @@ class ProvidersService:
     ) -> ProviderModelsResponse:
         records = await self._fetch_provider_records(user_id)
         active_records = [
-            record
-            for record in records
-            if self._record_is_usable(record)
+            record for record in records if self._record_is_usable(record)
         ]
 
         configured_providers_set = {record.provider.lower() for record in active_records}
         configured_providers = sorted(configured_providers_set)
         supported_providers = sorted(_SUPPORTED_PROVIDERS)
 
-        if provider is None:
-            if not active_records:
-                return ProviderModelsResponse(
-                    models=[],
-                    message=(
-                        "No providers are configured for this workspace. "
-                        "Add a provider to browse available models."
-                    ),
-                    configured_providers=[],
-                    missing_providers=supported_providers,
-                )
-
-            models = await self._catalogue.list_all_models(active_records)
-            filtered = self._filter_models(
-                models,
+        def _apply_filters(models: Iterable[ProviderModel]) -> list[ProviderModel]:
+            return self._filter_models(
+                list(models),
                 name=name,
                 model_id=model_id,
                 query=query,
             )
-            message = None
+
+        filters_applied = any([name, model_id, query])
+
+        if provider is None:
+            models: list[ProviderModel] = []
+            if active_records:
+                models = await self._catalogue.list_all_models(active_records)
+
+            filtered = _apply_filters(models)
+            fallback_used = False
+            message: str | None = None
+
             if not filtered:
-                if any([name, model_id, query]):
+                fallback_candidates = _apply_filters(load_static_models())
+                if fallback_candidates:
+                    filtered = fallback_candidates
+                    fallback_used = True
+                    message = (
+                        "Showing PocketLLM's curated model catalogue until you connect your own providers."
+                        if not active_records
+                        else "Live provider catalogue is temporarily unavailable; showing curated results instead."
+                    )
+
+            if not filtered:
+                if filters_applied:
                     message = "No models matched the provided filters."
+                elif not active_records:
+                    message = (
+                        "No providers are configured for this workspace. "
+                        "Add a provider to browse available models."
+                    )
                 else:
                     message = "No models are currently available from the configured providers."
 
@@ -267,6 +281,7 @@ class ProvidersService:
                 message=message,
                 configured_providers=configured_providers,
                 missing_providers=missing,
+                using_fallback=fallback_used,
             )
 
         provider_key = provider.lower()
@@ -276,35 +291,61 @@ class ProvidersService:
             if record.provider.lower() == provider_key
         ]
 
+        fallback_missing = sorted(
+            {provider_key}
+            | {
+                name
+                for name in supported_providers
+                if name not in configured_providers_set
+            }
+        )
+
         if not provider_records:
-            message = (
-                f"Provider '{provider}' is not configured or is inactive for this workspace."
+            fallback_candidates = _apply_filters(
+                load_static_models_for_provider(provider_key)
             )
-            missing = sorted({provider_key} | set(
-                p for p in supported_providers if p not in configured_providers_set
-            ))
+            if fallback_candidates:
+                return ProviderModelsResponse(
+                    models=fallback_candidates,
+                    message=(
+                        f"Provider '{provider}' is not yet configured for this workspace. "
+                        "Showing curated catalogue results."
+                    ),
+                    configured_providers=configured_providers,
+                    missing_providers=fallback_missing,
+                    using_fallback=True,
+                )
+
             return ProviderModelsResponse(
                 models=[],
-                message=message,
+                message=(
+                    f"Provider '{provider}' is not configured or is inactive for this workspace."
+                ),
                 configured_providers=configured_providers,
-                missing_providers=missing,
+                missing_providers=fallback_missing,
             )
 
         models = await self._catalogue.list_models_for_provider(provider_key, provider_records)
-        filtered = self._filter_models(
-            models,
-            name=name,
-            model_id=model_id,
-            query=query,
-        )
-        message = None
+        filtered = _apply_filters(models)
+        fallback_used = False
+        message: str | None = None
+
         if not filtered:
-            if any([name, model_id, query]):
+            fallback_candidates = _apply_filters(
+                load_static_models_for_provider(provider_key)
+            )
+            if fallback_candidates:
+                filtered = fallback_candidates
+                fallback_used = True
+                message = (
+                    f"Live catalogue for provider '{provider}' is unavailable; showing curated results instead."
+                )
+
+        if not filtered:
+            if filters_applied:
                 message = "No models matched the provided filters."
             else:
-                message = (
-                    f"No models are currently available for provider '{provider}'."
-                )
+                message = f"No models are currently available for provider '{provider}'."
 
         return ProviderModelsResponse(
             models=filtered,
@@ -315,6 +356,7 @@ class ProvidersService:
                 for provider_name in supported_providers
                 if provider_name not in configured_providers_set
             ],
+            using_fallback=fallback_used,
         )
 
     def _filter_models(

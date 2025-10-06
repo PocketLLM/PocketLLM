@@ -431,6 +431,22 @@ class AvailableModelOption {
   }
 }
 
+class AvailableModelsResponse {
+  final List<AvailableModelOption> models;
+  final String? message;
+  final List<String> configuredProviders;
+  final List<String> missingProviders;
+  final bool usingFallback;
+
+  const AvailableModelsResponse({
+    required this.models,
+    this.message,
+    this.configuredProviders = const <String>[],
+    this.missingProviders = const <String>[],
+    this.usingFallback = false,
+  });
+}
+
 // Model configuration class
 class ModelConfig {
   String id;
