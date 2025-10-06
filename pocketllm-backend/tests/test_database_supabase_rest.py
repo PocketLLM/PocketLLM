@@ -44,6 +44,7 @@ class _RecordingClient:
         self.table_calls: list[str] = []
         self.upsert_calls: list[dict[str, object]] = []
         self.kwarg_calls: list[dict[str, object]] = []
+        self.on_conflict_calls: list[str] = []
         self._payload: object | None = None
 
     def table(self, name: str) -> "_RecordingClient":
@@ -56,6 +57,10 @@ class _RecordingClient:
         self.upsert_calls.append(payload)
         self.kwarg_calls.append(kwargs)
         self._payload = payload
+        return self
+
+    def on_conflict(self, target):  # type: ignore[no-untyped-def]
+        self.on_conflict_calls.append(target)
         return self
 
     def execute(self):  # type: ignore[no-untyped-def]
@@ -123,9 +128,9 @@ def test_upsert_falls_back_when_on_conflict_unavailable(caplog) -> None:  # type
         on_conflict="user_id,provider",
     )
 
-    # The first attempt raises a TypeError which triggers a second call with
-    # no kwargs. We only care that the fallback call succeeds without kwargs
-    # and that a warning is logged for operators.
+    # The first attempt raises a TypeError which triggers a second call that
+    # chains ``.on_conflict()`` instead of passing the keyword directly.
     assert client.kwarg_calls[-1] == {}
+    assert client.on_conflict_calls == ["user_id,provider"]
     assert result == [{"id": "456", "provider": "anthropic"}]
-    assert "does not support on_conflict" in caplog.text
+    assert "retrying with chained on_conflict()" in caplog.text
