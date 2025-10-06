@@ -24,6 +24,7 @@ class _LibraryPageState extends State<LibraryPage> {
   AvailableModelsResponse? _catalogueResponse;
   String? _catalogueMessage;
   String _searchQuery = '';
+  String? _activeFilter;
   final Set<String> _importingModelIds = <String>{};
 
   @override
@@ -78,7 +79,27 @@ class _LibraryPageState extends State<LibraryPage> {
   void _onSearchChanged(String value) {
     setState(() {
       _searchQuery = value;
+      if (_activeFilter != null && _activeFilter != value) {
+        _activeFilter = null;
+      }
     });
+  }
+
+  void _onFilterSelected(String filter) {
+    if (_activeFilter == filter) {
+      _searchController.clear();
+      _onSearchChanged('');
+      return;
+    }
+
+    setState(() {
+      _activeFilter = filter;
+    });
+    _searchController.value = TextEditingValue(
+      text: filter,
+      selection: TextSelection.collapsed(offset: filter.length),
+    );
+    _onSearchChanged(filter);
   }
 
   List<AvailableModelOption> get _filteredModels {
@@ -95,6 +116,39 @@ class _LibraryPageState extends State<LibraryPage> {
           provider.displayName.toLowerCase().contains(query) ||
           description.contains(query);
     }).toList();
+  }
+
+  List<String> get _discoveryTags {
+    final ordered = <String, String>{};
+
+    for (final model in _availableModels) {
+      final metadata = _normalizeMetadata(model.metadata);
+      final rawTags = <String>[]
+        ..addAll(_stringList(metadata['capabilities']))
+        ..addAll(_stringList(metadata['tags']));
+
+      for (final entry in rawTags) {
+        if (entry.isEmpty) continue;
+        ordered.putIfAbsent(entry.toLowerCase(), () => _formatTag(entry));
+      }
+    }
+
+    final tags = ordered.values.where((value) => value.isNotEmpty).toList();
+    if (tags.isEmpty) {
+      return const <String>['Chat', 'Reasoning', 'Vision', 'Coding', 'Voice', 'Agentic'];
+    }
+    return tags.take(8).toList();
+  }
+
+  String _formatTag(String tag) {
+    final words = tag
+        .split(RegExp(r'[\s_\-]+'))
+        .where((word) => word.trim().isNotEmpty)
+        .map((word) {
+      final lower = word.toLowerCase();
+      return lower[0].toUpperCase() + lower.substring(1);
+    }).toList();
+    return words.join(' ');
   }
 
   Map<ModelProvider, List<AvailableModelOption>> _groupModels(
@@ -205,69 +259,65 @@ class _LibraryPageState extends State<LibraryPage> {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
     return Scaffold(
-      backgroundColor: Colors.grey[50],
-      appBar: AppBar(
-        backgroundColor: Colors.grey[50],
-        elevation: 0,
-        titleSpacing: 24,
-        title: const Text(
-          'Model Library',
-          style: TextStyle(
-            color: Colors.black,
-            fontSize: 30,
-            fontWeight: FontWeight.bold,
+      backgroundColor: theme.colorScheme.surface,
+      body: Container(
+        decoration: const BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [
+              Color(0xFFF6F3FF),
+              Color(0xFFFFFFFF),
+            ],
           ),
         ),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.refresh, color: Colors.black),
-            tooltip: 'Refresh models',
-            onPressed: _loadModels,
-          ),
-          const SizedBox(width: 8),
-        ],
-      ),
-      body: SafeArea(
-        child: _buildBody(),
+        child: SafeArea(
+          child: _buildBody(),
+        ),
       ),
     );
   }
 
   Widget _buildBody() {
+    final highlight = _filteredModels.isNotEmpty
+        ? _filteredModels.first
+        : (_availableModels.isNotEmpty ? _availableModels.first : null);
+
     Widget child;
 
     if (_isLoading && _availableModels.isEmpty) {
-      child = KeyedSubtree(key: const ValueKey('loading'), child: _buildLoadingState());
+      child = KeyedSubtree(
+        key: const ValueKey('loading'),
+        child: _buildLoadingState(highlight),
+      );
     } else if (_error != null && _availableModels.isEmpty) {
-      child = KeyedSubtree(key: const ValueKey('error'), child: _buildErrorState(_error!));
+      child = KeyedSubtree(
+        key: const ValueKey('error'),
+        child: _buildErrorState(_error!, highlight),
+      );
     } else {
       final filtered = _filteredModels;
       if (!_isLoading && filtered.isEmpty) {
         final emptyMessage = _searchQuery.isEmpty
             ? (_catalogueMessage ?? 'Adjust your search or try refreshing the catalogue.')
             : 'No models matched your search. Try adjusting your filters.';
+
         child = KeyedSubtree(
           key: const ValueKey('empty'),
-          child: RefreshIndicator(
-            onRefresh: _loadModels,
-            color: const Color(0xFF6D28D9),
-            child: ListView(
-              physics: const AlwaysScrollableScrollPhysics(),
-              padding: const EdgeInsets.fromLTRB(24, 24, 24, 48),
-              children: [
-                _buildSearchBar(),
-                const SizedBox(height: 24),
-                Align(
-                  alignment: Alignment.topCenter,
-                  child: _buildEmptyState(
-                    icon: Icons.travel_explore,
-                    title: 'No models found',
-                    message: emptyMessage,
-                  ),
+          child: _buildDiscoveryLayout(
+            highlight: highlight,
+            bodyChildren: [
+              Align(
+                alignment: Alignment.topCenter,
+                child: _buildEmptyState(
+                  icon: Icons.travel_explore,
+                  title: 'No models found',
+                  message: emptyMessage,
                 ),
-              ],
-            ),
+              ),
+            ],
           ),
         );
       } else {
@@ -279,38 +329,29 @@ class _LibraryPageState extends State<LibraryPage> {
 
         child = KeyedSubtree(
           key: ValueKey('content-${filtered.length}'),
-          child: RefreshIndicator(
-            onRefresh: _loadModels,
-            color: const Color(0xFF6D28D9),
-            child: ListView(
-              physics: const AlwaysScrollableScrollPhysics(),
-              padding: const EdgeInsets.fromLTRB(24, 24, 24, 48),
-              children: [
-                _buildSearchBar(),
-                const SizedBox(height: 20),
-                if (summary != null) ...[
-                  summary,
-                  const SizedBox(height: 20),
-                ],
-                if (notice != null) ...[
-                  notice,
-                  const SizedBox(height: 16),
-                ],
-                for (var index = 0; index < providers.length; index++) ...
-                    _buildProviderSection(
-                  providers[index],
-                  grouped[providers[index]]!,
-                  index == providers.length - 1,
-                ),
-                if (_isLoading)
-                  const Center(
-                    child: Padding(
-                      padding: EdgeInsets.symmetric(vertical: 24),
-                      child: CircularProgressIndicator(),
-                    ),
-                  ),
+          child: _buildDiscoveryLayout(
+            highlight: highlight,
+            bodyChildren: [
+              if (summary != null) ...[
+                summary,
+                const SizedBox(height: 24),
               ],
-            ),
+              if (notice != null) ...[
+                notice,
+                const SizedBox(height: 20),
+              ],
+              for (var index = 0; index < providers.length; index++) ...
+                  _buildProviderSection(
+                providers[index],
+                grouped[providers[index]]!,
+                index == providers.length - 1,
+              ),
+              if (_isLoading)
+                const Padding(
+                  padding: EdgeInsets.symmetric(vertical: 24),
+                  child: Center(child: CircularProgressIndicator()),
+                ),
+            ],
           ),
         );
       }
@@ -324,84 +365,386 @@ class _LibraryPageState extends State<LibraryPage> {
     );
   }
 
-  Widget _buildLoadingState() {
+  Widget _buildDiscoveryLayout({
+    required AvailableModelOption? highlight,
+    required List<Widget> bodyChildren,
+    bool includeSearch = true,
+    bool includeFilters = true,
+  }) {
+    final children = <Widget>[
+      _buildTopSection(),
+      const SizedBox(height: 24),
+      _buildHeroCard(highlight),
+    ];
+
+    if (includeSearch) {
+      children.addAll([
+        const SizedBox(height: 24),
+        _buildSearchBar(),
+      ]);
+    }
+
+    if (includeFilters) {
+      final filters = _buildCategoryFilters();
+      if (filters != null) {
+        children.addAll([
+          const SizedBox(height: 16),
+          filters,
+        ]);
+      }
+    }
+
+    children.add(const SizedBox(height: 24));
+    children.addAll(bodyChildren);
+    children.add(const SizedBox(height: 32));
+
+    final listView = ListView(
+      physics: const AlwaysScrollableScrollPhysics(),
+      padding: const EdgeInsets.fromLTRB(24, 24, 24, 56),
+      children: children,
+    );
+
     return RefreshIndicator(
       onRefresh: _loadModels,
       color: const Color(0xFF6D28D9),
-      child: ListView.builder(
-        physics: const AlwaysScrollableScrollPhysics(),
-        padding: const EdgeInsets.fromLTRB(24, 32, 24, 48),
-        itemCount: 4,
+      child: listView,
+    );
+  }
+
+  Widget _buildTopSection() {
+    final theme = Theme.of(context);
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Model Library',
+                style: theme.textTheme.headlineMedium?.copyWith(
+                      fontWeight: FontWeight.w800,
+                      color: theme.colorScheme.onSurface,
+                    ) ??
+                    const TextStyle(
+                      fontSize: 30,
+                      fontWeight: FontWeight.w800,
+                      color: Colors.black,
+                    ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'Discover curated AI models and import them into your workspace.',
+                style: theme.textTheme.bodyMedium?.copyWith(
+                      color: theme.colorScheme.onSurface.withOpacity(0.7),
+                    ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(width: 16),
+        _buildCircularAction(
+          icon: Icons.refresh_rounded,
+          tooltip: 'Refresh models',
+          onTap: _loadModels,
+        ),
+      ],
+    );
+  }
+
+  Widget _buildHeroCard(AvailableModelOption? highlight) {
+    final theme = Theme.of(context);
+    final provider = highlight != null
+        ? ModelProviderExtension.fromBackend(highlight.provider)
+        : null;
+    final accentColor = highlight != null
+        ? _resolveProviderColor(provider!)
+        : const Color(0xFF4338CA);
+    final description = highlight != null
+        ? _resolveDescription(highlight)
+        : 'Explore new models tailored for chat, vision, coding, and more.';
+
+    return Material(
+      color: Colors.transparent,
+      borderRadius: BorderRadius.circular(28),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(28),
+        onTap: highlight != null ? () => _showModelDetails(highlight) : null,
+        child: Ink(
+          padding: const EdgeInsets.all(28),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(28),
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [
+                accentColor.withOpacity(0.16),
+                accentColor.withOpacity(0.08),
+                Colors.white,
+              ],
+            ),
+            border: Border.all(color: accentColor.withOpacity(0.2)),
+            boxShadow: [
+              BoxShadow(
+                color: accentColor.withOpacity(0.15),
+                blurRadius: 32,
+                offset: const Offset(0, 24),
+              ),
+            ],
+          ),
+          child: Stack(
+            children: [
+              Positioned(
+                top: -40,
+                right: -30,
+                child: Container(
+                  width: 160,
+                  height: 160,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: accentColor.withOpacity(0.18),
+                  ),
+                ),
+              ),
+              Positioned(
+                bottom: -30,
+                right: 40,
+                child: Container(
+                  width: 120,
+                  height: 120,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: accentColor.withOpacity(0.12),
+                  ),
+                ),
+              ),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                    decoration: BoxDecoration(
+                      color: accentColor.withOpacity(0.18),
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.auto_awesome, size: 18, color: accentColor),
+                        const SizedBox(width: 8),
+                        Text(
+                          highlight != null ? 'Featured model' : 'Discover models',
+                          style: theme.textTheme.labelLarge?.copyWith(
+                                color: accentColor,
+                                fontWeight: FontWeight.w700,
+                              ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  Text(
+                    highlight?.name ?? 'Explore our curated catalogue',
+                    style: theme.textTheme.headlineSmall?.copyWith(
+                          fontWeight: FontWeight.w800,
+                          color: theme.colorScheme.onSurface,
+                        ) ??
+                        const TextStyle(
+                          fontSize: 24,
+                          fontWeight: FontWeight.w800,
+                          color: Colors.black,
+                        ),
+                  ),
+                  if (provider != null) ...[
+                    const SizedBox(height: 4),
+                    Text(
+                      provider.displayName,
+                      style: theme.textTheme.bodyMedium?.copyWith(
+                            fontWeight: FontWeight.w600,
+                            color: accentColor,
+                          ),
+                    ),
+                  ],
+                  const SizedBox(height: 12),
+                  Text(
+                    description,
+                    maxLines: 3,
+                    overflow: TextOverflow.ellipsis,
+                    style: theme.textTheme.bodyMedium?.copyWith(
+                          color: theme.colorScheme.onSurface.withOpacity(0.72),
+                          height: 1.4,
+                        ),
+                  ),
+                  const SizedBox(height: 20),
+                  Row(
+                    children: [
+                      FilledButton(
+                        style: FilledButton.styleFrom(
+                          backgroundColor: accentColor,
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(16),
+                          ),
+                        ),
+                        onPressed: highlight != null ? () => _showModelDetails(highlight) : _loadModels,
+                        child: Text(highlight != null ? 'View details' : 'Browse models'),
+                      ),
+                      const SizedBox(width: 12),
+                      TextButton(
+                        onPressed: _loadModels,
+                        child: const Text('Refresh'),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget? _buildCategoryFilters() {
+    final tags = _discoveryTags;
+    if (tags.isEmpty) {
+      return null;
+    }
+
+    final theme = Theme.of(context);
+    return SizedBox(
+      height: 42,
+      child: ListView.separated(
+        scrollDirection: Axis.horizontal,
         itemBuilder: (context, index) {
-          return Padding(
-            padding: EdgeInsets.only(bottom: index == 3 ? 0 : 20),
-            child: _buildLoadingPlaceholderCard(),
+          final tag = tags[index];
+          final selected = _activeFilter == tag;
+          return FilterChip(
+            label: Text(tag),
+            selected: selected,
+            showCheckmark: false,
+            onSelected: (_) => _onFilterSelected(tag),
+            backgroundColor: Colors.white,
+            selectedColor: theme.colorScheme.primary,
+            labelStyle: TextStyle(
+              color: selected ? Colors.white : theme.colorScheme.onSurface.withOpacity(0.8),
+              fontWeight: FontWeight.w600,
+            ),
+            side: BorderSide(color: selected ? Colors.transparent : Colors.black.withOpacity(0.08)),
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
           );
         },
+        separatorBuilder: (_, __) => const SizedBox(width: 12),
+        itemCount: tags.length,
       ),
+    );
+  }
+
+  Widget _buildCircularAction({
+    required IconData icon,
+    required String tooltip,
+    required VoidCallback onTap,
+  }) {
+    final theme = Theme.of(context);
+    return Tooltip(
+      message: tooltip,
+      child: Material(
+        color: Colors.white,
+        shape: const CircleBorder(),
+        elevation: 4,
+        shadowColor: Colors.black.withOpacity(0.08),
+        child: InkWell(
+          customBorder: const CircleBorder(),
+          onTap: onTap,
+          child: Padding(
+            padding: const EdgeInsets.all(12),
+            child: Icon(icon, color: theme.colorScheme.primary, size: 22),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildLoadingState(AvailableModelOption? highlight) {
+    final placeholders = List<Widget>.generate(3, (index) {
+      return Padding(
+        padding: EdgeInsets.only(bottom: index == 2 ? 0 : 20),
+        child: _buildLoadingPlaceholderCard(),
+      );
+    });
+
+    return _buildDiscoveryLayout(
+      highlight: highlight,
+      bodyChildren: placeholders,
     );
   }
 
   Widget _buildLoadingPlaceholderCard() {
     return Container(
-      height: 140,
+      height: 164,
       decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(20),
-        gradient: LinearGradient(
+        borderRadius: BorderRadius.circular(28),
+        gradient: const LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
           colors: [
-            Colors.grey.shade200,
-            Colors.grey.shade100,
-            Colors.grey.shade200,
+            Color(0xFFEDE9FE),
+            Color(0xFFFBF7FF),
+            Color(0xFFFFFFFF),
           ],
         ),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.05),
-            blurRadius: 12,
-            offset: const Offset(0, 6),
+      ),
+      child: Align(
+        alignment: Alignment.bottomLeft,
+        child: Container(
+          margin: const EdgeInsets.all(24),
+          width: 120,
+          height: 16,
+          decoration: BoxDecoration(
+            color: Colors.white.withOpacity(0.6),
+            borderRadius: BorderRadius.circular(12),
           ),
-        ],
+        ),
       ),
     );
   }
 
   Widget _buildSearchBar() {
-    final colorScheme = Theme.of(context).colorScheme;
-    return Container(
-      decoration: BoxDecoration(
-        color: colorScheme.surface,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: colorScheme.outline.withOpacity(0.15)),
-        boxShadow: [
-          BoxShadow(
-            color: colorScheme.shadow.withOpacity(0.08),
-            blurRadius: 14,
-            offset: const Offset(0, 6),
+    final theme = Theme.of(context);
+    return TextField(
+      controller: _searchController,
+      onChanged: _onSearchChanged,
+      style: theme.textTheme.bodyLarge?.copyWith(
+            color: theme.colorScheme.onSurface,
           ),
-        ],
-      ),
-      child: TextField(
-        controller: _searchController,
-        onChanged: _onSearchChanged,
-        style: TextStyle(color: colorScheme.onSurface),
-        decoration: InputDecoration(
-          prefixIcon: Icon(Icons.search, color: colorScheme.onSurface.withOpacity(0.6)),
-          suffixIcon: _searchQuery.isNotEmpty
-              ? IconButton(
-                  icon: const Icon(Icons.clear),
-                  onPressed: () {
-                    _searchController.clear();
-                    _onSearchChanged('');
-                  },
-                  color: colorScheme.onSurface.withOpacity(0.6),
-                )
-              : null,
-          hintText: 'Search by model, provider, or capability',
-          border: InputBorder.none,
-          contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
-          filled: false,
+      decoration: InputDecoration(
+        hintText: 'Search by model, provider, or capability',
+        prefixIcon: Icon(Icons.search, color: theme.colorScheme.onSurface.withOpacity(0.6)),
+        suffixIcon: _searchQuery.isNotEmpty
+            ? IconButton(
+                icon: const Icon(Icons.close),
+                onPressed: () {
+                  _searchController.clear();
+                  _onSearchChanged('');
+                },
+              )
+            : null,
+        filled: true,
+        fillColor: Colors.white,
+        contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 18),
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(20),
+          borderSide: BorderSide(color: Colors.black.withOpacity(0.05)),
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(20),
+          borderSide: BorderSide(color: Colors.black.withOpacity(0.05)),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(20),
+          borderSide: BorderSide(color: theme.colorScheme.primary.withOpacity(0.4), width: 1.6),
         ),
       ),
     );
@@ -416,32 +759,43 @@ class _LibraryPageState extends State<LibraryPage> {
     final colorScheme = Theme.of(context).colorScheme;
     final isFallback = _catalogueResponse?.usingFallback ?? false;
     final accent = isFallback ? const Color(0xFF6D28D9) : colorScheme.primary;
-    final background = isFallback
-        ? const Color(0xFFEDE9FE)
-        : colorScheme.surface.withOpacity(0.95);
-    final border = isFallback
-        ? const Color(0xFFDDD6FE)
-        : colorScheme.outline.withOpacity(0.35);
-
     return Container(
-      margin: const EdgeInsets.only(bottom: 16),
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: background,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: border),
+        borderRadius: BorderRadius.circular(24),
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            accent.withOpacity(0.16),
+            accent.withOpacity(0.08),
+            Colors.white,
+          ],
+        ),
+        border: Border.all(color: accent.withOpacity(0.22)),
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(isFallback ? Icons.auto_awesome : Icons.info_outline, color: accent),
-          const SizedBox(width: 12),
+          Container(
+            width: 40,
+            height: 40,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: Colors.white.withOpacity(0.7),
+            ),
+            child: Icon(
+              isFallback ? Icons.auto_awesome : Icons.info_outline,
+              color: accent,
+            ),
+          ),
+          const SizedBox(width: 16),
           Expanded(
             child: Text(
               message,
               style: TextStyle(
-                color: colorScheme.onSurface.withOpacity(0.85),
-                height: 1.3,
+                color: colorScheme.onSurface.withOpacity(0.8),
+                height: 1.35,
               ),
             ),
           ),
@@ -464,19 +818,20 @@ class _LibraryPageState extends State<LibraryPage> {
     }
 
     final theme = Theme.of(context);
+    final accent = theme.colorScheme.primary;
     return Container(
-      padding: const EdgeInsets.all(20),
+      padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: Colors.grey.shade200),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.04),
-            blurRadius: 12,
-            offset: const Offset(0, 6),
-          ),
-        ],
+        borderRadius: BorderRadius.circular(28),
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            accent.withOpacity(0.12),
+            Colors.white,
+          ],
+        ),
+        border: Border.all(color: accent.withOpacity(0.18)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -525,37 +880,49 @@ class _LibraryPageState extends State<LibraryPage> {
   Widget _buildProviderStatusChip(String providerId, {required bool configured}) {
     final provider = ModelProviderExtension.fromBackend(providerId);
     final label = provider.displayName;
-    final color = configured ? const Color(0xFF4C1D95) : Colors.grey[700]!;
-    final background = configured ? const Color(0xFFEDE9FE) : Colors.grey.shade200;
+    final accent = _resolveProviderColor(provider);
+    final baseColor = configured ? accent : Colors.grey[700]!;
+    final gradient = configured
+        ? [accent.withOpacity(0.18), Colors.white]
+        : [Colors.white, Colors.white];
 
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
       decoration: BoxDecoration(
-        color: background,
-        borderRadius: BorderRadius.circular(24),
+        borderRadius: BorderRadius.circular(22),
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: gradient,
+        ),
+        border: Border.all(color: baseColor.withOpacity(0.2)),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          SizedBox(
-            width: 20,
-            height: 20,
+          Container(
+            width: 26,
+            height: 26,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: Colors.white.withOpacity(0.75),
+            ),
             child: FittedBox(
               fit: BoxFit.contain,
-              child: _buildProviderLogo(provider, size: 20, fallbackColor: color),
+              child: _buildProviderLogo(provider, size: 20, fallbackColor: baseColor),
             ),
           ),
-          const SizedBox(width: 8),
+          const SizedBox(width: 10),
           Text(
             label,
             style: TextStyle(
-              color: color,
+              color: baseColor,
               fontWeight: FontWeight.w600,
             ),
           ),
           if (!configured) ...[
-            const SizedBox(width: 8),
-            Icon(Icons.lock_open, size: 16, color: color.withOpacity(0.8)),
+            const SizedBox(width: 10),
+            Icon(Icons.lock_open, size: 16, color: baseColor.withOpacity(0.75)),
           ],
         ],
       ),
@@ -563,6 +930,7 @@ class _LibraryPageState extends State<LibraryPage> {
   }
 
   Widget _buildProviderHeader(ModelProvider provider, int modelCount) {
+    final theme = Theme.of(context);
     return Row(
       children: [
         _buildProviderAvatar(provider, size: 48),
@@ -573,18 +941,22 @@ class _LibraryPageState extends State<LibraryPage> {
             children: [
               Text(
                 provider.displayName,
-                style: const TextStyle(
-                  fontSize: 20,
-                  fontWeight: FontWeight.w700,
-                ),
+                style: theme.textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.w800,
+                      color: theme.colorScheme.onSurface,
+                    ) ??
+                    const TextStyle(
+                      fontSize: 20,
+                      fontWeight: FontWeight.w800,
+                    ),
               ),
               const SizedBox(height: 4),
               Text(
                 '$modelCount model${modelCount == 1 ? '' : 's'} available',
-                style: TextStyle(
-                  color: Colors.grey[600],
-                  fontWeight: FontWeight.w500,
-                ),
+                style: theme.textTheme.bodyMedium?.copyWith(
+                      color: theme.colorScheme.onSurface.withOpacity(0.6),
+                      fontWeight: FontWeight.w600,
+                    ),
               ),
             ],
           ),
@@ -671,86 +1043,104 @@ class _LibraryPageState extends State<LibraryPage> {
       );
     }
 
+    final theme = Theme.of(context);
+
     return Material(
       color: Colors.transparent,
       child: InkWell(
-        borderRadius: BorderRadius.circular(24),
+        borderRadius: BorderRadius.circular(28),
         onTap: () => _showModelDetails(model),
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 200),
-          curve: Curves.easeOutCubic,
-          padding: const EdgeInsets.all(24),
+        child: Ink(
           decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(24),
+            borderRadius: BorderRadius.circular(28),
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [
+                accentColor.withOpacity(isImporting ? 0.22 : 0.16),
+                accentColor.withOpacity(0.08),
+                Colors.white,
+              ],
+            ),
             border: Border.all(
-              color: isImporting ? accentColor.withOpacity(0.4) : Colors.grey.shade200,
-              width: 1.4,
+              color: accentColor.withOpacity(isImporting ? 0.45 : 0.18),
+              width: 1.2,
             ),
             boxShadow: [
               BoxShadow(
-                color: Colors.black.withOpacity(isImporting ? 0.08 : 0.05),
-                blurRadius: isImporting ? 18 : 12,
-                offset: const Offset(0, 8),
+                color: accentColor.withOpacity(isImporting ? 0.22 : 0.14),
+                blurRadius: isImporting ? 28 : 22,
+                offset: const Offset(0, 20),
               ),
             ],
           ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  _buildProviderAvatar(provider, size: 56),
-                  const SizedBox(width: 16),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          model.name,
-                          style: const TextStyle(
-                            fontSize: 20,
-                            fontWeight: FontWeight.w700,
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _buildProviderAvatar(provider, size: 54),
+                    const SizedBox(width: 18),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            model.name,
+                            style: theme.textTheme.titleLarge?.copyWith(
+                                  fontWeight: FontWeight.w800,
+                                  color: theme.colorScheme.onSurface,
+                                ) ??
+                                const TextStyle(
+                                  fontSize: 20,
+                                  fontWeight: FontWeight.w800,
+                                  color: Colors.black,
+                                ),
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
                           ),
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                        const SizedBox(height: 6),
-                        Text(
-                          model.id,
-                          style: TextStyle(
-                            color: Colors.grey[600],
-                            fontWeight: FontWeight.w500,
+                          const SizedBox(height: 6),
+                          Text(
+                            model.id,
+                            style: theme.textTheme.bodyMedium?.copyWith(
+                                  color: theme.colorScheme.onSurface.withOpacity(0.6),
+                                  fontWeight: FontWeight.w600,
+                                ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
                           ),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ],
+                        ],
+                      ),
                     ),
+                    const SizedBox(width: 16),
+                    _buildImportButton(model, isImporting, accentColor),
+                  ],
+                ),
+                if (description.isNotEmpty) ...[
+                  const SizedBox(height: 14),
+                  Text(
+                    description,
+                    maxLines: 3,
+                    overflow: TextOverflow.ellipsis,
+                    style: theme.textTheme.bodyMedium?.copyWith(
+                          color: theme.colorScheme.onSurface.withOpacity(0.72),
+                          height: 1.45,
+                        ),
                   ),
-                  const SizedBox(width: 16),
-                  _buildImportButton(model, isImporting, accentColor),
                 ],
-              ),
-              if (description.isNotEmpty) ...[
-                const SizedBox(height: 12),
-                Text(
-                  description,
-                  maxLines: 3,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(color: Colors.grey[700], height: 1.4),
-                ),
+                if (metadataChips.isNotEmpty) ...[
+                  const SizedBox(height: 20),
+                  Wrap(
+                    spacing: 10,
+                    runSpacing: 10,
+                    children: metadataChips,
+                  ),
+                ],
               ],
-              if (metadataChips.isNotEmpty) ...[
-                const SizedBox(height: 18),
-                Wrap(
-                  spacing: 12,
-                  runSpacing: 12,
-                  children: metadataChips,
-                ),
-              ],
-            ],
+            ),
           ),
         ),
       ),
@@ -1081,22 +1471,39 @@ class _LibraryPageState extends State<LibraryPage> {
     required String label,
     Color? tint,
   }) {
-    final color = tint ?? const Color(0xFF6D28D9);
+    final color = tint ?? const Color(0xFF4338CA);
+    final textColor = Color.lerp(color, Colors.black, 0.4)!;
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
       decoration: BoxDecoration(
-        color: color.withOpacity(0.1),
-        borderRadius: BorderRadius.circular(14),
+        borderRadius: BorderRadius.circular(18),
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            color.withOpacity(0.18),
+            color.withOpacity(0.08),
+          ],
+        ),
+        border: Border.all(color: color.withOpacity(0.2)),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(icon, size: 18, color: color),
-          const SizedBox(width: 6),
+          Container(
+            width: 24,
+            height: 24,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: Colors.white.withOpacity(0.65),
+            ),
+            child: Icon(icon, size: 14, color: color),
+          ),
+          const SizedBox(width: 8),
           Text(
             label,
             style: TextStyle(
-              color: color,
+              color: textColor,
               fontWeight: FontWeight.w600,
             ),
             maxLines: 1,
@@ -1134,28 +1541,23 @@ class _LibraryPageState extends State<LibraryPage> {
     return <String>[];
   }
 
-  Widget _buildErrorState(String message) {
-    return RefreshIndicator(
-      onRefresh: _loadModels,
-      color: const Color(0xFF6D28D9),
-      child: ListView(
-        physics: const AlwaysScrollableScrollPhysics(),
-        padding: const EdgeInsets.fromLTRB(24, 80, 24, 48),
-        children: [
-          Align(
-            alignment: Alignment.topCenter,
-            child: _buildEmptyState(
-              icon: Icons.lock_outline,
-              title: 'Unable to fetch models',
-              message: message,
-              action: TextButton(
-                onPressed: _loadModels,
-                child: const Text('Try again'),
-              ),
+  Widget _buildErrorState(String message, AvailableModelOption? highlight) {
+    return _buildDiscoveryLayout(
+      highlight: highlight,
+      bodyChildren: [
+        Align(
+          alignment: Alignment.topCenter,
+          child: _buildEmptyState(
+            icon: Icons.lock_outline,
+            title: 'Unable to fetch models',
+            message: message,
+            action: TextButton(
+              onPressed: _loadModels,
+              child: const Text('Try again'),
             ),
           ),
-        ],
-      ),
+        ),
+      ],
     );
   }
 
@@ -1166,20 +1568,21 @@ class _LibraryPageState extends State<LibraryPage> {
     Widget? action,
   }) {
     final theme = Theme.of(context);
+    final accent = theme.colorScheme.primary;
     return Container(
       constraints: const BoxConstraints(maxWidth: 420),
-      padding: const EdgeInsets.all(24),
+      padding: const EdgeInsets.fromLTRB(28, 32, 28, 32),
       decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: Colors.grey.shade200),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.05),
-            blurRadius: 18,
-            offset: const Offset(0, 10),
-          ),
-        ],
+        borderRadius: BorderRadius.circular(28),
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            accent.withOpacity(0.12),
+            Colors.white,
+          ],
+        ),
+        border: Border.all(color: accent.withOpacity(0.18)),
       ),
       child: Column(
         mainAxisSize: MainAxisSize.min,
@@ -1189,9 +1592,9 @@ class _LibraryPageState extends State<LibraryPage> {
             height: 64,
             decoration: BoxDecoration(
               shape: BoxShape.circle,
-              color: const Color(0xFFEDE9FE),
+              color: accent.withOpacity(0.15),
             ),
-            child: Icon(icon, size: 32, color: const Color(0xFF6D28D9)),
+            child: Icon(icon, size: 32, color: accent),
           ),
           const SizedBox(height: 16),
           Text(
@@ -1206,8 +1609,8 @@ class _LibraryPageState extends State<LibraryPage> {
           Text(
             message,
             style: theme.textTheme.bodyMedium?.copyWith(
-                  color: Colors.grey[600],
-                  height: 1.5,
+                  color: theme.colorScheme.onSurface.withOpacity(0.7),
+                  height: 1.45,
                 ) ??
                 TextStyle(color: Colors.grey[600]),
             textAlign: TextAlign.center,
