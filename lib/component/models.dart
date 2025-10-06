@@ -192,6 +192,33 @@ extension ModelProviderExtension on ModelProvider {
     }
   }
 
+  String? get brandAsset {
+    switch (this) {
+      case ModelProvider.pocketLLM:
+        return 'assets/icons/logo2.png';
+      case ModelProvider.ollama:
+        return 'assets/brand_icons/ollama.png';
+      case ModelProvider.openAI:
+        return 'assets/brand_icons/openai.svg';
+      case ModelProvider.groq:
+        return 'assets/brand_icons/groq.svg';
+      case ModelProvider.anthropic:
+        return null;
+      case ModelProvider.openRouter:
+        return 'assets/brand_icons/openrouter.jpeg';
+      case ModelProvider.imageRouter:
+        return 'assets/brand_icons/hyperbrowser.svg';
+      case ModelProvider.mistral:
+        return null;
+      case ModelProvider.deepseek:
+        return null;
+      case ModelProvider.lmStudio:
+        return null;
+      case ModelProvider.googleAI:
+        return 'assets/brand_icons/gemini.svg';
+    }
+  }
+
   String get defaultBaseUrl {
     switch (this) {
       case ModelProvider.pocketLLM:

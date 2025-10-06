@@ -38,6 +38,19 @@ class ProviderClient(ABC):
         self._api_key_override = api_key
         self._metadata: dict[str, Any] = dict(metadata or {})
 
+        timeout_override = self._metadata.get("timeout")
+        try:
+            if timeout_override is not None:
+                timeout_value = float(timeout_override)
+                if timeout_value > 0:
+                    self.timeout = timeout_value
+        except (TypeError, ValueError):
+            self._logger.debug(
+                "Ignoring invalid timeout override %r for provider %s",
+                timeout_override,
+                self.provider,
+            )
+
     @property
     def base_url(self) -> str:
         """Return the base URL for the provider API."""

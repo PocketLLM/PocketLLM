@@ -87,7 +87,7 @@ flutter:
   assets:
     - assets/avatar1.jpg
     - assets/avatar2.jpg
-    - assets/brand_icons/google.png
+    - assets/brand_icons/
     - assets/icons/logo.png
     - assets/icons/logo2.png
 
