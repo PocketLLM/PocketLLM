@@ -21,7 +21,12 @@ from app.schemas.providers import (
     ProviderUpdateRequest,
 )
 from app.services.api_keys import APIKeyValidationService
-from app.services.providers import ProviderModelCatalogue
+from app.services.providers import (
+    GroqProviderClient,
+    OpenAIProviderClient,
+    OpenRouterProviderClient,
+    ProviderModelCatalogue,
+)
 from app.utils import decrypt_secret, encrypt_secret
 from app.utils.security import hash_secret, mask_secret
 from database import ProviderRecord
@@ -52,12 +57,18 @@ class ProvidersService:
         user_id: UUID,
         payload: ProviderActivationRequest,
     ) -> ProviderActivationResponse:
+        base_url, metadata = self._apply_provider_defaults(
+            payload.provider,
+            payload.base_url,
+            payload.metadata,
+        )
+
         try:
             await self._validator.validate(
                 payload.provider,
                 payload.api_key,
-                base_url=payload.base_url,
-                metadata=payload.metadata,
+                base_url=base_url,
+                metadata=metadata,
             )
         except ValueError as exc:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
@@ -70,8 +81,8 @@ class ProvidersService:
         provider_payload = {
             "user_id": str(user_id),
             "provider": payload.provider,
-            "base_url": payload.base_url,
-            "metadata": payload.metadata or {},
+            "base_url": base_url,
+            "metadata": metadata or {},
             "api_key_hash": api_key_hash,
             "api_key_preview": api_key_preview,
             "api_key_encrypted": api_key_encrypted,
@@ -86,6 +97,51 @@ class ProvidersService:
             raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to save provider")
         provider = ProviderRecord.from_mapping(records[0]).to_schema()
         return ProviderActivationResponse(provider=provider)
+
+    def _apply_provider_defaults(
+        self,
+        provider: str,
+        base_url: str | None,
+        metadata: dict[str, Any] | None,
+    ) -> tuple[str | None, dict[str, Any] | None]:
+        """Populate provider defaults when the client omits optional fields."""
+
+        provider_key = provider.lower()
+        cleaned_base_url = (base_url or "").strip() or None
+        resolved_metadata: dict[str, Any] = dict(metadata or {})
+
+        if provider_key == "openai":
+            cleaned_base_url = (
+                cleaned_base_url
+                or getattr(self._settings, "openai_api_base", None)
+                or OpenAIProviderClient.default_base_url
+            )
+        elif provider_key == "groq":
+            cleaned_base_url = (
+                cleaned_base_url
+                or getattr(self._settings, "groq_api_base", None)
+                or GroqProviderClient.default_base_url
+            )
+        elif provider_key == "openrouter":
+            cleaned_base_url = (
+                cleaned_base_url
+                or getattr(self._settings, "openrouter_api_base", None)
+                or OpenRouterProviderClient.default_base_url
+            )
+            referer = resolved_metadata.get("http_referer") or resolved_metadata.get("referer")
+            if not referer:
+                default_referer = getattr(self._settings, "openrouter_app_url", None)
+                if default_referer:
+                    resolved_metadata.setdefault("http_referer", default_referer)
+            title = resolved_metadata.get("x_title") or resolved_metadata.get("app_name")
+            if not title:
+                default_title = getattr(self._settings, "openrouter_app_name", None)
+                if default_title:
+                    resolved_metadata.setdefault("x_title", default_title)
+        elif provider_key == "imagerouter":
+            cleaned_base_url = cleaned_base_url or "https://api.imagerouter.com"
+
+        return cleaned_base_url, (resolved_metadata or None)
 
     async def update_provider(self, user_id: UUID, provider: str, payload: ProviderUpdateRequest) -> ProviderConfiguration:
         provided_fields = payload.model_dump(exclude_unset=True)

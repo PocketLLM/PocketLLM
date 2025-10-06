@@ -39,3 +39,19 @@ def test_encrypt_with_invalid_key_raises() -> None:
 
     with pytest.raises(RuntimeError):
         encrypt_secret("secret", settings)
+
+
+@pytest.mark.parametrize(
+    "secret",
+    [
+        "value",
+        "another secret",
+    ],
+)
+def test_encrypt_decrypt_with_long_non_base64_key(secret: str) -> None:
+    key = "bj1-8kO9s993W4D7mJ3yVv6bB5gB7x4xL3dY2qV5mQ8kbh"
+    settings = _Settings(encryption_key=key)
+
+    token = encrypt_secret(secret, settings)
+
+    assert decrypt_secret(token, settings) == secret
