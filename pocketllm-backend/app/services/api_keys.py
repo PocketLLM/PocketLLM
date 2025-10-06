@@ -18,11 +18,14 @@ except Exception:  # pragma: no cover - defensive fallback when SDK missing
         """Fallback OpenAI error."""
 
 
+_GROQ_IMPORT_ERROR: Exception | None = None
+
 try:  # pragma: no cover
     from groq import AsyncGroq
     from groq.errors import GroqError
-except Exception:  # pragma: no cover
+except Exception as exc:  # pragma: no cover
     AsyncGroq = None  # type: ignore[assignment]
+    _GROQ_IMPORT_ERROR = exc
 
     class GroqError(Exception):
         """Fallback Groq error."""
@@ -87,15 +90,21 @@ class APIKeyValidationService:
         metadata: Mapping[str, Any] | None,
     ) -> None:
         if AsyncGroq is None:
-            raise RuntimeError("The 'groq' package is required to validate Groq API keys.")
-        kwargs = {"api_key": api_key}
+            logger.warning(
+                "Groq SDK not available%s; falling back to HTTP-based validation.",
+                f" ({_GROQ_IMPORT_ERROR})" if _GROQ_IMPORT_ERROR else "",
+            )
+            await self._validate_groq_via_http(api_key, base_url, metadata)
+            return
+        kwargs: dict[str, Any] = {"api_key": api_key}
         if base_url:
             kwargs["base_url"] = base_url
-        if metadata:
-            for key in ("timeout", "max_retries"):
-                value = metadata.get(key)
-                if value is not None:
-                    kwargs[key] = value
+        timeout = _coerce_positive_float(metadata.get("timeout")) if metadata else None
+        if timeout is not None:
+            kwargs["timeout"] = timeout
+        retries = _coerce_non_negative_int(metadata.get("max_retries")) if metadata else None
+        if retries is not None:
+            kwargs["max_retries"] = retries
         client = AsyncGroq(**kwargs)
         try:
             await client.models.list()
@@ -103,6 +112,27 @@ class APIKeyValidationService:
             raise ValueError(f"Groq API key validation failed: {exc}") from exc
         finally:
             await _close_client(client)
+
+    async def _validate_groq_via_http(
+        self,
+        api_key: str,
+        base_url: str | None,
+        metadata: Mapping[str, Any] | None,
+    ) -> None:
+        timeout = _coerce_positive_float(metadata.get("timeout")) if metadata else None
+        timeout = timeout or 10.0
+        url = _join_url_path(base_url or "https://api.groq.com/openai/v1", "models")
+        headers = {"Authorization": f"Bearer {api_key}", "Accept": "application/json"}
+        try:
+            async with httpx.AsyncClient(timeout=timeout) as client:
+                response = await client.get(url, headers=headers)
+        except httpx.HTTPError as exc:
+            raise ValueError(f"Groq API key validation failed: {exc}") from exc
+        if response.status_code != 200:
+            raise ValueError(
+                "Groq API key validation failed with status "
+                f"{response.status_code}: {response.text.strip()}"
+            )
 
     async def _validate_openrouter(
         self,
@@ -158,4 +188,50 @@ async def _close_client(client: Any) -> None:
 
 
 __all__ = ["APIKeyValidationService"]
+
+
+def _coerce_positive_float(value: Any) -> float | None:
+    """Attempt to coerce ``value`` into a positive float."""
+
+    if isinstance(value, (int, float)):
+        coerced = float(value)
+    elif isinstance(value, str):
+        value = value.strip()
+        if not value:
+            return None
+        try:
+            coerced = float(value)
+        except ValueError:
+            return None
+    else:
+        return None
+    return coerced if coerced > 0 else None
+
+
+def _coerce_non_negative_int(value: Any) -> int | None:
+    """Attempt to coerce ``value`` into a non-negative integer."""
+
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, int):
+        return value if value >= 0 else None
+    if isinstance(value, float):
+        if value.is_integer() and value >= 0:
+            return int(value)
+        return None
+    if isinstance(value, str):
+        value = value.strip()
+        if not value:
+            return None
+        if value.isdigit():
+            return int(value)
+    return None
+
+
+def _join_url_path(base: str, path: str) -> str:
+    """Return ``base`` joined with ``path`` ensuring a single slash."""
+
+    if not base:
+        return path
+    return base.rstrip("/") + "/" + path.lstrip("/")
 

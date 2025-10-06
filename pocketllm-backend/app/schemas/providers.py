@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Mapping
 from datetime import datetime
-from typing import Optional
+from typing import Any, Optional
 from uuid import UUID
 
 from pydantic import BaseModel, Field, model_validator
@@ -59,16 +60,26 @@ class ProviderActivationRequest(BaseModel):
             except json.JSONDecodeError as exc:  # pragma: no cover - defensive branch
                 raise ValueError("Provider activation payload must be a JSON object.") from exc
 
-        if isinstance(data, dict):
-            metadata = data.get("metadata")
+        if isinstance(data, Mapping):
+            # Convert arbitrary mapping implementations (e.g. FormData) to a
+            # standard dictionary so that downstream validation works reliably.
+            normalized: dict[str, Any] = {}
+            for key, value in data.items():
+                if isinstance(value, list) and len(value) == 1:
+                    value = value[0]
+                if isinstance(value, bytes):
+                    value = value.decode()
+                normalized[key] = value
+
+            metadata = normalized.get("metadata")
             if isinstance(metadata, str):
                 try:
-                    data["metadata"] = json.loads(metadata)
+                    normalized["metadata"] = json.loads(metadata)
                 except json.JSONDecodeError as exc:
                     raise ValueError("Metadata must be a JSON object.") from exc
-            return data
+            return normalized
 
-        raise TypeError("Provider activation payload must be a JSON object.")
+        raise ValueError("Provider activation payload must be a JSON object.")
 
 
 class ProviderUpdateRequest(BaseModel):
