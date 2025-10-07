@@ -4,8 +4,10 @@
 /// - Backend Migration: Keep UI but ensure key storage/activation happens on
 ///   the backend rather than device-side.
 import 'package:flutter/material.dart';
-import '../services/model_service.dart';
+
 import '../component/models.dart';
+import '../services/backend_api_service.dart';
+import '../services/model_service.dart';
 
 class ApiKeysPage extends StatefulWidget {
   const ApiKeysPage({Key? key}) : super(key: key);
@@ -27,6 +29,7 @@ class _ApiKeysPageState extends State<ApiKeysPage> {
 
   List<ProviderConnection> _providers = [];
   bool _isLoading = true;
+  String? _loadError;
 
   @override
   void initState() {
@@ -37,6 +40,7 @@ class _ApiKeysPageState extends State<ApiKeysPage> {
   Future<void> _loadProviders() async {
     setState(() {
       _isLoading = true;
+      _loadError = null;
     });
 
     try {
@@ -66,11 +70,16 @@ class _ApiKeysPageState extends State<ApiKeysPage> {
       setState(() {
         _providers = providerMap.values.toList()
           ..sort((a, b) => a.displayName.compareTo(b.displayName));
+        _loadError = null;
       });
     } catch (e) {
       if (!mounted) return;
+      final message = _mapErrorToMessage(e, action: 'load your providers');
+      setState(() {
+        _loadError = message;
+      });
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Failed to load providers: $e')),
+        SnackBar(content: Text(message)),
       );
     } finally {
       if (mounted) {
@@ -127,8 +136,9 @@ class _ApiKeysPageState extends State<ApiKeysPage> {
       );
     } catch (e) {
       if (!mounted) return;
+      final message = _mapErrorToMessage(e, action: 'update ${provider.displayName}');
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Failed to update provider: $e')),
+        SnackBar(content: Text(message)),
       );
     } finally {
       if (mounted) {
@@ -141,107 +151,122 @@ class _ApiKeysPageState extends State<ApiKeysPage> {
 
   Widget _buildProviderCard(ProviderConnection provider) {
     final requiresApiKey = provider.provider != ModelProvider.ollama;
-    return Card(
-      margin: const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: provider.provider.color.withOpacity(0.12),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Icon(provider.provider.icon, color: provider.provider.color),
-                ),
-                const SizedBox(width: 16),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        provider.displayName,
-                        style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
-                      ),
-                      Text(
-                        provider.isActive ? 'Active' : 'Inactive',
-                        style: TextStyle(color: provider.isActive ? Colors.green : Colors.grey[600]),
-                      ),
-                    ],
-                  ),
-                ),
-                IconButton(
-                  icon: const Icon(Icons.settings),
-                  tooltip: 'Configure',
-                  onPressed: () => _configureProvider(provider),
-                ),
-              ],
-            ),
-            const SizedBox(height: 12),
-            _buildInfoRow('Base URL', provider.baseUrl ?? provider.provider.defaultBaseUrl),
-            if (requiresApiKey)
-              _buildInfoRow(
-                'API Key',
-                provider.hasApiKey
-                    ? '•••• ${provider.apiKeyPreview ?? ''}'
-                    : 'Not configured',
-              ),
-            if (provider.metadata != null && provider.metadata!.isNotEmpty)
-              _buildInfoRow('Metadata', provider.metadata.toString()),
-            if (provider.statusMessage != null && provider.statusMessage!.isNotEmpty)
-              Padding(
-                padding: const EdgeInsets.symmetric(vertical: 4),
-                child: Text(
-                  provider.statusMessage!,
-                  style: TextStyle(
-                    color: provider.isActive ? Colors.green[700] : Colors.orange[700],
-                    fontSize: 13,
-                  ),
-                ),
-              ),
-            const SizedBox(height: 8),
-            Align(
-              alignment: Alignment.centerRight,
-              child: TextButton.icon(
-                onPressed: () => _configureProvider(provider),
-                icon: const Icon(Icons.edit),
-                label: Text(provider.isActive ? 'Update Settings' : 'Activate'),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
+    final isConfigured = provider.id.isNotEmpty || provider.hasApiKey || provider.isActive;
+    final statusColor = provider.isActive
+        ? Colors.green[700]
+        : (isConfigured ? Colors.orange[700] : Colors.grey[600]);
+    final statusText = provider.isActive
+        ? 'Active and ready to use'
+        : (isConfigured
+            ? 'Configured but inactive'
+            : 'Not configured yet');
+    final baseUrl = (provider.baseUrl?.isNotEmpty ?? false)
+        ? provider.baseUrl!
+        : provider.provider.defaultBaseUrl;
 
-  Widget _buildInfoRow(String label, String value) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          SizedBox(
-            width: 110,
-            child: Text(
-              label,
-              style: TextStyle(color: Colors.grey[600], fontWeight: FontWeight.w500),
-            ),
+    return Card(
+      margin: const EdgeInsets.symmetric(vertical: 6, horizontal: 16),
+      elevation: 0,
+      color: Colors.transparent,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(12),
+        onTap: () => _configureProvider(provider),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                height: 16,
+                width: 16,
+                margin: const EdgeInsets.only(top: 6),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  shape: BoxShape.circle,
+                  border: Border.all(
+                    color: provider.isActive
+                        ? Theme.of(context).colorScheme.primary
+                        : Colors.grey.shade400,
+                    width: 2,
+                  ),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.08),
+                      blurRadius: 2,
+                      offset: const Offset(0, 1),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 16),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Icon(provider.provider.icon, color: provider.provider.color, size: 20),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            provider.displayName,
+                            style: const TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      statusText,
+                      style: TextStyle(
+                        color: statusColor,
+                        fontSize: 13,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      'Base URL: $baseUrl',
+                      style: const TextStyle(fontSize: 13),
+                    ),
+                    if (requiresApiKey)
+                      Text(
+                        provider.hasApiKey
+                            ? 'API Key: •••• ${provider.apiKeyPreview ?? ''}'
+                            : 'API Key not provided',
+                        style: const TextStyle(fontSize: 13),
+                      ),
+                    if (provider.statusMessage != null && provider.statusMessage!.isNotEmpty)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 4),
+                        child: Text(
+                          provider.statusMessage!,
+                          style: TextStyle(
+                            color: Colors.grey[700],
+                            fontSize: 12,
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 8),
+              const Icon(Icons.chevron_right, size: 20),
+            ],
           ),
-          Expanded(
-            child: Text(value, style: const TextStyle(fontSize: 14)),
-          ),
-        ],
+        ),
       ),
     );
   }
 
   @override
   Widget build(BuildContext context) {
+    final configuredProviders = _providers.where((p) => p.id.isNotEmpty || p.isActive || p.hasApiKey).toList();
+    final pendingProviders = _providers.where((p) => !(p.id.isNotEmpty || p.isActive || p.hasApiKey)).toList();
+
     return Scaffold(
       appBar: AppBar(
         title: const Text('Provider Settings'),
@@ -251,6 +276,7 @@ class _ApiKeysPageState extends State<ApiKeysPage> {
           : RefreshIndicator(
               onRefresh: _loadProviders,
               child: ListView(
+                physics: const AlwaysScrollableScrollPhysics(),
                 children: [
                   const SizedBox(height: 16),
                   Padding(
@@ -261,23 +287,87 @@ class _ApiKeysPageState extends State<ApiKeysPage> {
                     ),
                   ),
                   const SizedBox(height: 12),
-                  if (_providers.isEmpty)
+                  if (_loadError != null && _providers.isEmpty)
                     Padding(
-                      padding: const EdgeInsets.all(24),
-                      child: Center(
+                      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 32),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(Icons.warning_amber_rounded, size: 36, color: Colors.orange),
+                          const SizedBox(height: 12),
+                          Text(
+                            _loadError!,
+                            textAlign: TextAlign.center,
+                            style: const TextStyle(fontSize: 15),
+                          ),
+                          const SizedBox(height: 16),
+                          OutlinedButton.icon(
+                            onPressed: _loadProviders,
+                            icon: const Icon(Icons.refresh),
+                            label: const Text('Retry'),
+                          ),
+                        ],
+                      ),
+                    )
+                  else ...[
+                    if (configuredProviders.isNotEmpty)
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                         child: Text(
-                          'No providers configured yet. Tap a provider to add your credentials.',
+                          'Configured providers',
+                          style: Theme.of(context).textTheme.titleMedium,
+                        ),
+                      ),
+                    if (configuredProviders.isNotEmpty)
+                      ...configuredProviders.map(_buildProviderCard),
+                    if (configuredProviders.isEmpty)
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                        child: Text(
+                          'No providers configured yet. Start by selecting one below.',
                           style: TextStyle(color: Colors.grey[600]),
                         ),
                       ),
-                    )
-                  else
-                    ..._providers.map(_buildProviderCard),
+                    const SizedBox(height: 12),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                      child: Text(
+                        'Available providers',
+                        style: Theme.of(context).textTheme.titleMedium,
+                      ),
+                    ),
+                    if (pendingProviders.isNotEmpty)
+                      ...pendingProviders.map(_buildProviderCard)
+                    else
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                        child: Text(
+                          'Great! Every provider has been set up.',
+                          style: TextStyle(color: Colors.green[700]),
+                        ),
+                      ),
+                  ],
                   const SizedBox(height: 24),
                 ],
               ),
             ),
     );
+  }
+
+  String _mapErrorToMessage(Object error, {required String action}) {
+    if (error is BackendApiException) {
+      if (error.statusCode >= 500) {
+        return 'We couldn\'t $action because the server responded with an error. Please try again shortly.';
+      }
+      if (error.statusCode == 401 || error.statusCode == 403) {
+        return 'You don\'t have permission to $action. Please verify your credentials and try again.';
+      }
+      if (error.message.isNotEmpty) {
+        return error.message;
+      }
+    }
+
+    return 'We couldn\'t $action. Please check your connection and try again.';
   }
 }
 
