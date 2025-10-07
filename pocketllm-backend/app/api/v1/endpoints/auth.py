@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from fastapi.security import HTTPAuthorizationCredentials
 
 from app.api.deps import get_database_dependency, get_settings_dependency, reusable_oauth2
@@ -20,6 +20,11 @@ from app.schemas.auth import (
     SignUpResponse,
 )
 from app.services.auth import AuthService
+from app.utils.auth_cookies import (
+    clear_auth_cookies,
+    get_refresh_token_from_request,
+    set_auth_cookies,
+)
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -27,25 +32,33 @@ router = APIRouter(prefix="/auth", tags=["auth"])
 @router.post("/signup", response_model=SignUpResponse, summary="Sign up a new user")
 async def sign_up(
     payload: SignUpRequest,
+    response: Response,
     settings=Depends(get_settings_dependency),
     database=Depends(get_database_dependency),
 ) -> SignUpResponse:
     service = AuthService(settings=settings, database=database)
-    return await service.sign_up(payload)
+    result = await service.sign_up(payload)
+    if result.tokens and result.session:
+        set_auth_cookies(response, result.tokens, result.session, settings)
+    return result
 
 
 @router.post("/signin", response_model=SignInResponse, summary="Sign in an existing user")
 async def sign_in(
     payload: SignInRequest,
+    response: Response,
     settings=Depends(get_settings_dependency),
     database=Depends(get_database_dependency),
 ) -> SignInResponse:
     service = AuthService(settings=settings, database=database)
-    return await service.sign_in(payload)
+    result = await service.sign_in(payload)
+    set_auth_cookies(response, result.tokens, result.session, settings)
+    return result
 
 
 @router.post("/signout", response_model=SignOutResponse, summary="Sign out current user")
 async def sign_out(
+    response: Response,
     credentials: HTTPAuthorizationCredentials | None = Depends(reusable_oauth2),
     settings=Depends(get_settings_dependency),
     database=Depends(get_database_dependency),
@@ -53,17 +66,31 @@ async def sign_out(
     if credentials is None:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Not authenticated")
     service = AuthService(settings=settings, database=database)
-    return await service.sign_out(credentials.credentials)
+    result = await service.sign_out(credentials.credentials)
+    clear_auth_cookies(response)
+    return result
 
 
 @router.post("/refresh", response_model=RefreshTokenResponse, summary="Refresh access token")
 async def refresh_token(
     payload: RefreshTokenRequest,
+    request: Request,
+    response: Response,
     settings=Depends(get_settings_dependency),
     database=Depends(get_database_dependency),
 ) -> RefreshTokenResponse:
     service = AuthService(settings=settings, database=database)
-    return await service.refresh_token(payload)
+    refresh_value = (payload.refresh_token or "").strip()
+    if not refresh_value:
+        cookie_token = get_refresh_token_from_request(request)
+        if cookie_token:
+            refresh_value = cookie_token
+    if not refresh_value:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Refresh token required")
+
+    refreshed = await service.refresh_token(RefreshTokenRequest(refresh_token=refresh_value))
+    set_auth_cookies(response, refreshed.tokens, refreshed.session, settings)
+    return refreshed
 
 
 @router.post(
