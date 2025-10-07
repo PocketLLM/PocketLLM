@@ -38,6 +38,8 @@ class Database:
         """Supabase connections are stateless; nothing to close."""
 
     def _ensure_client_ready(self) -> None:
+        if getattr(self._supabase, "_skip_client_validation", False):
+            return
         self._supabase.client
         if not self._supabase.test_connection():
             raise RuntimeError("Supabase connection validation failed")

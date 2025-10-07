@@ -172,6 +172,7 @@ class ProviderModelCatalogue:
                 base_url=base_url,
                 api_key=direct_key.strip(),
                 metadata=metadata,
+            )
 
         return configs
 

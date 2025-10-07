@@ -50,6 +50,13 @@ class SupabaseDatabase:
     def _setup_connection(self) -> None:
         """Initialise the client using ONLY the official Supabase SDK."""
 
+        self._skip_client_validation = False
+        if _should_skip_initialisation():
+            logger.info("🧪 Skipping Supabase client initialisation in test mode")
+            self._client = None
+            self._skip_client_validation = True
+            return
+
         try:
             url = os.getenv("DATABASE_URL") or os.getenv("SUPABASE_URL")
             service_key = os.getenv("SUPABASE_SERVICE_ROLE_KEY") or os.getenv("SUPABASE_SERVICE_ROLE")
@@ -382,6 +389,24 @@ class SupabaseDatabase:
         return serialize_dates_for_json(value)
 
 
-db = SupabaseDatabase()
+def _should_skip_initialisation() -> bool:
+    env = os.getenv("ENVIRONMENT", "").strip().lower()
+    if env == "test":
+        return True
+    if os.getenv("PYTEST_CURRENT_TEST"):
+        return True
+    flag = os.getenv("SUPABASE_SKIP_INITIALISATION", os.getenv("SUPABASE_SKIP_INIT", "0"))
+    return flag.strip().lower() in {"1", "true", "yes", "on"}
+
+
+if _should_skip_initialisation():
+    _placeholder = object.__new__(SupabaseDatabase)
+    setattr(_placeholder, "_initialised", True)
+    setattr(_placeholder, "_client", None)
+    setattr(_placeholder, "_skip_client_validation", True)
+    SupabaseDatabase._instance = _placeholder
+    db = _placeholder  # type: ignore[assignment]
+else:
+    db = SupabaseDatabase()
 
 __all__ = ["SupabaseDatabase", "db"]

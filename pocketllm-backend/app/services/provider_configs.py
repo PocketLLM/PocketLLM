@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import replace
-from typing import Any
+from typing import Any, Mapping
 from uuid import UUID
 
 from fastapi import HTTPException, status
@@ -46,6 +46,27 @@ class ProvidersService:
     async def list_providers(self, user_id: UUID) -> list[ProviderConfiguration]:
         records = await self._fetch_provider_records(user_id)
         return [record.to_schema() for record in records]
+
+    async def list_provider_statuses(self, user_id: UUID) -> list[ProviderStatus]:
+        records = await self._fetch_provider_records(user_id)
+        record_map = {record.provider.lower(): record for record in records}
+
+        statuses: list[ProviderStatus] = []
+        for provider_key, metadata in _SUPPORTED_PROVIDERS.items():
+            record = record_map.pop(provider_key, None)
+            statuses.append(self._build_status(provider_key, metadata, record))
+
+        for provider_key in sorted(record_map.keys()):
+            record = record_map[provider_key]
+            statuses.append(
+                self._build_status(
+                    provider_key,
+                    {"name": record.display_name or record.provider},
+                    record,
+                )
+            )
+
+        return statuses
 
     async def activate_provider(
         self,
@@ -217,6 +238,55 @@ class ProvidersService:
                     )
             decrypted.append(replace(provider_record, api_key=api_key))
         return decrypted
+
+    def _build_status(
+        self,
+        provider_key: str,
+        metadata: Mapping[str, str] | None,
+        record: ProviderRecord | None,
+    ) -> ProviderStatus:
+        provider_name = record.provider if record else provider_key
+        display_name: str | None = None
+        if record and record.display_name:
+            display_name = record.display_name
+        elif metadata is not None:
+            name_value = metadata.get("name")
+            if isinstance(name_value, str):
+                display_name = name_value
+
+        configured = record is not None
+        is_active = bool(record.is_active) if record else False
+        has_api_key = bool(
+            record
+            and (
+                record.api_key
+                or record.api_key_encrypted
+                or record.api_key_hash
+                or record.api_key_preview
+            )
+        )
+
+        message = self._compose_status_message(configured, is_active, has_api_key)
+
+        return ProviderStatus(
+            provider=provider_name,
+            display_name=display_name,
+            configured=configured,
+            is_active=is_active,
+            has_api_key=has_api_key,
+            api_key_preview=record.api_key_preview if record else None,
+            message=message,
+        )
+
+    @staticmethod
+    def _compose_status_message(configured: bool, is_active: bool, has_api_key: bool) -> str:
+        if not configured:
+            return "Provider is not configured yet."
+        if not has_api_key:
+            return "Provider is configured but missing an API key."
+        if not is_active:
+            return "Provider is configured but currently inactive."
+        return "Provider is active and ready to use."
 
 
 __all__ = ["ProvidersService"]
