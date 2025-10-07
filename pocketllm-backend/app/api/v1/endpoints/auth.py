@@ -22,6 +22,7 @@ from app.schemas.auth import (
 from app.services.auth import AuthService
 from app.utils.auth_cookies import (
     clear_auth_cookies,
+    get_access_token_from_request,
     get_refresh_token_from_request,
     set_auth_cookies,
 )
@@ -58,15 +59,20 @@ async def sign_in(
 
 @router.post("/signout", response_model=SignOutResponse, summary="Sign out current user")
 async def sign_out(
+    request: Request,
     response: Response,
     credentials: HTTPAuthorizationCredentials | None = Depends(reusable_oauth2),
     settings=Depends(get_settings_dependency),
     database=Depends(get_database_dependency),
 ) -> SignOutResponse:
-    if credentials is None:
+    token = credentials.credentials.strip() if credentials and credentials.credentials else ""
+    if not token:
+        cookie_token = get_access_token_from_request(request)
+        token = cookie_token or ""
+    if not token:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Not authenticated")
     service = AuthService(settings=settings, database=database)
-    result = await service.sign_out(credentials.credentials)
+    result = await service.sign_out(token)
     clear_auth_cookies(response)
     return result
 

@@ -98,11 +98,32 @@ def get_refresh_token_from_request(request: Request) -> str | None:
     return None
 
 
+def get_access_token_from_request(request: Request) -> str | None:
+    """Extract an access token from request cookies or headers if available."""
+
+    cookie_candidates = (
+        request.cookies.get(ACCESS_COOKIE_NAME),
+        request.cookies.get("access_token"),
+    )
+    for token in cookie_candidates:
+        if token and token.strip():
+            return token.strip()
+
+    auth_header = request.headers.get("Authorization")
+    if auth_header and auth_header.strip():
+        scheme, _, token = auth_header.partition(" ")
+        if scheme.lower() == "bearer" and token.strip():
+            return token.strip()
+
+    return None
+
+
 __all__ = [
     "ACCESS_COOKIE_NAME",
     "REFRESH_COOKIE_NAME",
     "set_auth_cookies",
     "clear_auth_cookies",
     "get_refresh_token_from_request",
+    "get_access_token_from_request",
 ]
 

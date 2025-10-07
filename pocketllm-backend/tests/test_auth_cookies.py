@@ -13,6 +13,7 @@ from app.utils.auth_cookies import (
     ACCESS_COOKIE_NAME,
     REFRESH_COOKIE_NAME,
     clear_auth_cookies,
+    get_access_token_from_request,
     get_refresh_token_from_request,
     set_auth_cookies,
 )
@@ -70,3 +71,33 @@ def test_get_refresh_token_from_request_falls_back_to_header() -> None:
 
     request = DummyRequest()
     assert get_refresh_token_from_request(request) == "header-token"
+
+
+def test_get_access_token_from_request_prefers_cookie() -> None:
+    class DummyRequest:
+        def __init__(self) -> None:
+            self.cookies = {ACCESS_COOKIE_NAME: " cookie-token "}
+            self.headers = {"Authorization": "Bearer header-token"}
+
+    request = DummyRequest()
+    assert get_access_token_from_request(request) == "cookie-token"
+
+
+def test_get_access_token_from_request_handles_header() -> None:
+    class DummyRequest:
+        def __init__(self) -> None:
+            self.cookies = {}
+            self.headers = {"Authorization": "Bearer header-token"}
+
+    request = DummyRequest()
+    assert get_access_token_from_request(request) == "header-token"
+
+
+def test_get_access_token_from_request_returns_none_when_missing() -> None:
+    class DummyRequest:
+        def __init__(self) -> None:
+            self.cookies = {}
+            self.headers = {}
+
+    request = DummyRequest()
+    assert get_access_token_from_request(request) is None
