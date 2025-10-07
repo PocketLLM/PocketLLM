@@ -309,16 +309,7 @@ class BackendApiService {
       String.fromEnvironment('POCKETLLM_BACKEND_ROOT_URL', defaultValue: ''),
       String.fromEnvironment('BACKEND_BASE_URL', defaultValue: ''),
     ];
-
-    const fallbackEnvironmentCandidates = [
-      String.fromEnvironment('POCKETLLM_FALLBACK_BACKEND_URL', defaultValue: ''),
-      String.fromEnvironment('FALLBACK_BACKEND_URL', defaultValue: ''),
-    ];
-
-    final environmentCandidates = <String>[
-      ...primaryEnvironmentCandidates,
-      ...fallbackEnvironmentCandidates,
-    ];
+    final environmentCandidates = <String>[...primaryEnvironmentCandidates];
 
     final environmentOrder = <String>[];
     final environmentSet = <String>{};
@@ -338,9 +329,7 @@ class BackendApiService {
       }
     }
 
-    final merged = List.of(
-      ApiEndpoints.mergeBaseUrls(environmentCandidates),
-    );
+    final merged = List.of(ApiEndpoints.mergeBaseUrls(environmentCandidates));
 
     final ordered = <String>[];
     final seen = <String>{};
