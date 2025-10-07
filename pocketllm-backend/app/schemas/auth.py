@@ -135,7 +135,7 @@ class TokenPayload(BaseModel):
 class RefreshTokenRequest(BaseModel):
     """Request body for refreshing tokens."""
 
-    refresh_token: str
+    refresh_token: str | None = None
 
 
 class RefreshTokenResponse(BaseModel):

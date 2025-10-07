@@ -119,6 +119,13 @@ class AuthService:
 
         self._require_supabase()
 
+        refresh_token = (payload.refresh_token or "").strip()
+        if not refresh_token:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Refresh token is required",
+            )
+
         async with httpx.AsyncClient(timeout=10.0) as client:
             response = await client.post(
                 f"{self._settings.supabase_url}/auth/v1/token?grant_type=refresh_token",
@@ -126,7 +133,7 @@ class AuthService:
                     "apikey": self._settings.supabase_anon_key,
                     "Authorization": f"Bearer {self._settings.supabase_anon_key}",
                 },
-                json={"refresh_token": payload.refresh_token},
+                json={"refresh_token": refresh_token},
             )
 
         if response.status_code >= 400:
