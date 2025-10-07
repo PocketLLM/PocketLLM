@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 
 import '../component/models.dart';
-import '../component/custom_app_bar.dart';
 import '../services/backend_api_service.dart';
 import '../services/model_service.dart';
 import '../services/remote_model_service.dart';
@@ -57,6 +56,7 @@ class _LibraryPageState extends State<LibraryPage> {
   String? _catalogueMessage;
   String _searchQuery = '';
   String? _activeFilter;
+  ModelProvider? _providerFilter;
   final Set<String> _importingModelIds = <String>{};
   SortOption _currentSort = SortOption.newest;
 
@@ -118,10 +118,18 @@ class _LibraryPageState extends State<LibraryPage> {
     });
   }
 
+  void _clearSearchFilters() {
+    if (_searchQuery.isEmpty && _activeFilter == null) {
+      return;
+    }
+
+    _searchController.clear();
+    _onSearchChanged('');
+  }
+
   void _onFilterSelected(String filter) {
     if (_activeFilter == filter) {
-      _searchController.clear();
-      _onSearchChanged('');
+      _clearSearchFilters();
       return;
     }
 
@@ -133,6 +141,16 @@ class _LibraryPageState extends State<LibraryPage> {
       selection: TextSelection.collapsed(offset: filter.length),
     );
     _onSearchChanged(filter);
+  }
+
+  void _clearProviderFilter() {
+    if (_providerFilter == null) {
+      return;
+    }
+
+    setState(() {
+      _providerFilter = null;
+    });
   }
 
   List<AvailableModelOption> get _filteredModels {
@@ -295,64 +313,250 @@ class _LibraryPageState extends State<LibraryPage> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
     return Scaffold(
-      backgroundColor: Colors.white,
-      appBar: CustomAppBar(
-        appName: 'PocketLLM',
-        onSettingsPressed: () {
-          Navigator.pop(context);
-        },
+      backgroundColor: colorScheme.background,
+      appBar: AppBar(
+        backgroundColor: colorScheme.background,
+        elevation: 0,
+        leading: IconButton(
+          icon: Icon(Icons.arrow_back, color: colorScheme.onBackground, size: 28),
+          onPressed: () => Navigator.pop(context),
+        ),
+        titleSpacing: 0,
+        title: Text(
+          'Model Library',
+          style: TextStyle(
+            color: colorScheme.onBackground,
+            fontSize: 28,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+        actions: [
+          IconButton(
+            icon: Icon(Icons.refresh, color: colorScheme.onBackground.withOpacity(0.8)),
+            tooltip: 'Refresh catalogue',
+            onPressed: _isLoading ? null : _loadModels,
+          ),
+        ],
       ),
       body: _buildBody(),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: _showFilterDialog,
-        backgroundColor: Colors.white,
-        foregroundColor: Colors.black,
-        elevation: 2,
-        icon: const Icon(Icons.tune),
-        label: const Text(
-          'Filter',
-          style: TextStyle(fontWeight: FontWeight.w600),
-        ),
-      ),
     );
   }
 
-  void _showFilterDialog() {
+  void _showFilterSheet() {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+    final providers = _availableModels
+        .map((model) => ModelProviderExtension.fromBackend(model.provider))
+        .toSet()
+        .toList()
+      ..sort((a, b) => a.displayName.compareTo(b.displayName));
+    final tags = _discoveryTags;
+
     showModalBottomSheet(
       context: context,
+      backgroundColor: colorScheme.surface,
+      isScrollControlled: true,
       shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+        borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
       ),
-      builder: (context) {
-        return Container(
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text(
-                'Filter Models',
-                style: TextStyle(
-                  fontSize: 20,
-                  fontWeight: FontWeight.bold,
+      builder: (sheetContext) {
+        ModelProvider? localProvider = _providerFilter;
+        String? localTag = _activeFilter;
+
+        return StatefulBuilder(
+          builder: (context, setModalState) {
+            return SafeArea(
+              top: false,
+              child: Padding(
+                padding: EdgeInsets.only(
+                  left: 24,
+                  right: 24,
+                  top: 12,
+                  bottom: 24 + MediaQuery.of(context).viewPadding.bottom,
+                ),
+                child: ConstrainedBox(
+                  constraints: BoxConstraints(
+                    maxHeight: MediaQuery.of(context).size.height * 0.7,
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Center(
+                        child: Container(
+                          width: 40,
+                          height: 4,
+                          decoration: BoxDecoration(
+                            color: colorScheme.outline.withOpacity(0.2),
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      Text(
+                        'Filters',
+                        style: theme.textTheme.titleLarge?.copyWith(
+                              fontWeight: FontWeight.w700,
+                              color: colorScheme.onSurface,
+                            ) ??
+                            TextStyle(
+                              fontSize: 20,
+                              fontWeight: FontWeight.w700,
+                              color: colorScheme.onSurface,
+                            ),
+                      ),
+                      const SizedBox(height: 24),
+                      Expanded(
+                        child: SingleChildScrollView(
+                          padding: const EdgeInsets.only(bottom: 12),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              if (providers.isNotEmpty) ...[
+                                Text(
+                                  'Provider',
+                                  style: theme.textTheme.titleSmall?.copyWith(
+                                        fontWeight: FontWeight.w600,
+                                        color: colorScheme.onSurface.withOpacity(0.8),
+                                      ),
+                                ),
+                                const SizedBox(height: 12),
+                                Wrap(
+                                  spacing: 12,
+                                  runSpacing: 12,
+                                  children: providers
+                                      .map((provider) => ChoiceChip(
+                                            labelPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                                            showCheckmark: false,
+                                            selected: localProvider == provider,
+                                            side: BorderSide(
+                                              color: localProvider == provider
+                                                  ? Colors.transparent
+                                                  : colorScheme.outline.withOpacity(0.4),
+                                            ),
+                                            label: Row(
+                                              mainAxisSize: MainAxisSize.min,
+                                              children: [
+                                                _buildProviderAvatar(provider, size: 28),
+                                                const SizedBox(width: 10),
+                                                Text(
+                                                  provider.displayName,
+                                                  style: TextStyle(
+                                                    color: localProvider == provider
+                                                        ? Colors.white
+                                                        : colorScheme.onSurface.withOpacity(0.8),
+                                                    fontWeight: FontWeight.w600,
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
+                                            backgroundColor: colorScheme.surfaceVariant,
+                                            selectedColor: _resolveProviderColor(provider),
+                                            onSelected: (selected) {
+                                              setModalState(() {
+                                                localProvider = selected ? provider : null;
+                                              });
+                                            },
+                                          ))
+                                      .toList(),
+                                ),
+                                const SizedBox(height: 28),
+                              ],
+                              if (tags.isNotEmpty) ...[
+                                Text(
+                                  'Capabilities',
+                                  style: theme.textTheme.titleSmall?.copyWith(
+                                        fontWeight: FontWeight.w600,
+                                        color: colorScheme.onSurface.withOpacity(0.8),
+                                      ),
+                                ),
+                                const SizedBox(height: 12),
+                                Wrap(
+                                  spacing: 10,
+                                  runSpacing: 10,
+                                  children: tags
+                                      .map((tag) => FilterChip(
+                                            label: Text(
+                                              tag,
+                                              style: TextStyle(
+                                                fontWeight: FontWeight.w600,
+                                                color: localTag == tag
+                                                    ? Colors.white
+                                                    : colorScheme.onSurface.withOpacity(0.75),
+                                              ),
+                                            ),
+                                            selected: localTag == tag,
+                                            onSelected: (_) {
+                                              setModalState(() {
+                                                localTag = localTag == tag ? null : tag;
+                                              });
+                                            },
+                                            showCheckmark: false,
+                                            backgroundColor: colorScheme.surfaceVariant,
+                                            selectedColor: colorScheme.primary,
+                                            side: BorderSide(
+                                              color: localTag == tag
+                                                  ? Colors.transparent
+                                                  : colorScheme.outline.withOpacity(0.4),
+                                            ),
+                                            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                                          ))
+                                      .toList(),
+                                ),
+                                const SizedBox(height: 28),
+                              ],
+                            ],
+                          ),
+                        ),
+                      ),
+                      Row(
+                        children: [
+                          TextButton(
+                            onPressed: () {
+                              setModalState(() {
+                                localProvider = null;
+                                localTag = null;
+                              });
+                            },
+                            child: const Text('Reset'),
+                          ),
+                          const Spacer(),
+                          FilledButton(
+                            onPressed: () {
+                              Navigator.of(sheetContext).pop();
+
+                              if (localTag != _activeFilter) {
+                                if (localTag == null) {
+                                  _clearSearchFilters();
+                                } else {
+                                  _onFilterSelected(localTag!);
+                                }
+                              }
+
+                              setState(() {
+                                _providerFilter = localProvider;
+                              });
+                            },
+                            style: FilledButton.styleFrom(
+                              backgroundColor: colorScheme.primary,
+                              foregroundColor: colorScheme.onPrimary,
+                              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                            ),
+                            child: const Text(
+                              'Apply filters',
+                              style: TextStyle(fontWeight: FontWeight.w600),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
                 ),
               ),
-              const SizedBox(height: 20),
-              const Text(
-                'Filter options coming soon...',
-                style: TextStyle(color: Colors.grey),
-              ),
-              const SizedBox(height: 20),
-              SizedBox(
-                width: double.infinity,
-                child: ElevatedButton(
-                  onPressed: () => Navigator.pop(context),
-                  child: const Text('Close'),
-                ),
-              ),
-            ],
-          ),
+            );
+          },
         );
       },
     );
@@ -361,31 +565,59 @@ class _LibraryPageState extends State<LibraryPage> {
   Widget _buildBody() {
     return Column(
       children: [
-        // Header with title and sort button
         Padding(
-          padding: const EdgeInsets.fromLTRB(20, 16, 20, 16),
+          padding: const EdgeInsets.fromLTRB(20, 16, 20, 12),
           child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text(
-                'Models',
-                style: TextStyle(
-                  fontSize: 32,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.black,
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Browse curated models',
+                      style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                            fontWeight: FontWeight.w700,
+                            color: Theme.of(context).colorScheme.onBackground,
+                          ) ??
+                          const TextStyle(
+                            fontSize: 20,
+                            fontWeight: FontWeight.w700,
+                          ),
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      'Import providers and stay in sync with the latest releases.',
+                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                            color: Theme.of(context).colorScheme.onBackground.withOpacity(0.65),
+                          ),
+                    ),
+                  ],
                 ),
               ),
+              const SizedBox(width: 16),
               _buildSortButton(),
             ],
           ),
         ),
-        // Search/Filter bar
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 20),
           child: _buildSearchBar(),
         ),
-        const SizedBox(height: 16),
-        // Model list
+        const SizedBox(height: 12),
+        Builder(
+          builder: (context) {
+            final activeFilters = _buildActiveFilterChips();
+            if (activeFilters == null) {
+              return const SizedBox.shrink();
+            }
+            return Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 20),
+              child: activeFilters,
+            );
+          },
+        ),
+        const SizedBox(height: 12),
         Expanded(
           child: _buildModelList(),
         ),
@@ -394,6 +626,8 @@ class _LibraryPageState extends State<LibraryPage> {
   }
 
   Widget _buildSortButton() {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
     return PopupMenuButton<SortOption>(
       initialValue: _currentSort,
       onSelected: (SortOption value) {
@@ -408,8 +642,9 @@ class _LibraryPageState extends State<LibraryPage> {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
         decoration: BoxDecoration(
-          border: Border.all(color: Colors.grey.shade300),
-          borderRadius: BorderRadius.circular(8),
+          color: colorScheme.surface,
+          border: Border.all(color: colorScheme.outline.withOpacity(0.2)),
+          borderRadius: BorderRadius.circular(12),
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
@@ -422,7 +657,7 @@ class _LibraryPageState extends State<LibraryPage> {
               ),
             ),
             const SizedBox(width: 8),
-            Icon(Icons.unfold_more, size: 20, color: Colors.grey.shade700),
+            Icon(Icons.unfold_more, size: 20, color: colorScheme.onSurface.withOpacity(0.6)),
           ],
         ),
       ),
@@ -806,38 +1041,111 @@ class _LibraryPageState extends State<LibraryPage> {
   }
 
   Widget _buildSearchBar() {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+
     return TextField(
       controller: _searchController,
       onChanged: _onSearchChanged,
       decoration: InputDecoration(
-        hintText: 'Filter',
-        hintStyle: TextStyle(color: Colors.grey.shade500),
-        prefixIcon: Icon(Icons.search, color: Colors.grey.shade600, size: 22),
-        suffixIcon: _searchQuery.isNotEmpty
-            ? IconButton(
-                icon: const Icon(Icons.close, size: 20),
-                onPressed: () {
-                  _searchController.clear();
-                  _onSearchChanged('');
-                },
-              )
-            : null,
+        hintText: 'Search models',
+        hintStyle: TextStyle(color: colorScheme.onSurface.withOpacity(0.4)),
+        prefixIcon: Icon(Icons.search, color: colorScheme.onSurface.withOpacity(0.6), size: 22),
+        suffixIcon: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (_searchQuery.isNotEmpty)
+              IconButton(
+                icon: Icon(Icons.close, size: 20, color: colorScheme.onSurface.withOpacity(0.6)),
+                tooltip: 'Clear search',
+                onPressed: _clearSearchFilters,
+              ),
+            Padding(
+              padding: const EdgeInsets.only(right: 6),
+              child: IconButton(
+                icon: Icon(Icons.tune, color: colorScheme.onSurface.withOpacity(0.7)),
+                tooltip: 'Open filters',
+                onPressed: _showFilterSheet,
+              ),
+            ),
+          ],
+        ),
+        suffixIconConstraints: const BoxConstraints(minHeight: 0, minWidth: 0),
         filled: true,
-        fillColor: Colors.grey.shade50,
+        fillColor: colorScheme.surface,
         contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
         border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(8),
-          borderSide: BorderSide(color: Colors.grey.shade300),
+          borderRadius: BorderRadius.circular(12),
+          borderSide: BorderSide(color: colorScheme.outline.withOpacity(0.2)),
         ),
         enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(8),
-          borderSide: BorderSide(color: Colors.grey.shade300),
+          borderRadius: BorderRadius.circular(12),
+          borderSide: BorderSide(color: colorScheme.outline.withOpacity(0.2)),
         ),
         focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(8),
-          borderSide: BorderSide(color: Colors.grey.shade400, width: 1.5),
+          borderRadius: BorderRadius.circular(12),
+          borderSide: BorderSide(color: colorScheme.primary.withOpacity(0.6), width: 1.4),
         ),
       ),
+    );
+  }
+
+  Widget? _buildActiveFilterChips() {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+    final chips = <Widget>[];
+
+    if (_providerFilter != null) {
+      final provider = _providerFilter!;
+      final providerColor = _resolveProviderColor(provider);
+      chips.add(
+        InputChip(
+          avatar: _buildProviderAvatar(provider, size: 28),
+          label: Text(
+            provider.displayName,
+            style: TextStyle(
+              fontWeight: FontWeight.w600,
+              color: providerColor,
+            ),
+          ),
+          onDeleted: _clearProviderFilter,
+          deleteIconColor: providerColor,
+          backgroundColor: providerColor.withOpacity(0.12),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        ),
+      );
+    }
+
+    if (_activeFilter != null && _activeFilter!.isNotEmpty) {
+      chips.add(
+        InputChip(
+          avatar: CircleAvatar(
+            backgroundColor: colorScheme.primary.withOpacity(0.12),
+            child: Icon(Icons.tag, size: 18, color: colorScheme.primary),
+          ),
+          label: Text(
+            _activeFilter!,
+            style: TextStyle(
+              fontWeight: FontWeight.w600,
+              color: colorScheme.primary,
+            ),
+          ),
+          onDeleted: _clearSearchFilters,
+          deleteIconColor: colorScheme.primary,
+          backgroundColor: colorScheme.primary.withOpacity(0.1),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        ),
+      );
+    }
+
+    if (chips.isEmpty) {
+      return null;
+    }
+
+    return Wrap(
+      spacing: 8,
+      runSpacing: 8,
+      children: chips,
     );
   }
 
@@ -921,6 +1229,15 @@ class _LibraryPageState extends State<LibraryPage> {
 
   List<AvailableModelOption> get _sortedAndFilteredModels {
     var models = _filteredModels;
+
+    if (_providerFilter != null) {
+      models = models
+          .where(
+            (model) =>
+                ModelProviderExtension.fromBackend(model.provider) == _providerFilter,
+          )
+          .toList();
+    }
 
     // Apply sorting
     switch (_currentSort) {
@@ -1323,14 +1640,19 @@ class _LibraryPageState extends State<LibraryPage> {
                 ),
                 const SizedBox(height: 12),
               ],
-              // Provider tag
-              Text(
-                'by ${provider.displayName}',
-                style: TextStyle(
-                  fontSize: 13,
-                  color: Colors.grey.shade600,
-                  fontWeight: FontWeight.w500,
-                ),
+              Row(
+                children: [
+                  _buildProviderAvatar(provider, size: 32),
+                  const SizedBox(width: 10),
+                  Text(
+                    provider.displayName,
+                    style: TextStyle(
+                      fontSize: 14,
+                      color: Colors.grey.shade700,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ],
               ),
               const SizedBox(height: 12),
               // Tags/Capabilities
