@@ -125,7 +125,7 @@ class BackendApiService {
       final tokensPayload = payload['tokens'];
       final sessionPayload = payload['session'];
       if (tokensPayload is! Map) {
-        throw const BackendApiException(500, 'Refresh response missing tokens payload');
+        throw BackendApiException(500, 'Refresh response missing tokens payload');
       }
 
       final accessToken = tokensPayload['access_token'] as String?;
@@ -133,7 +133,7 @@ class BackendApiService {
       final expiresIn = tokensPayload['expires_in'];
 
       if (accessToken == null || accessToken.isEmpty) {
-        throw const BackendApiException(500, 'Refresh response missing access token');
+        throw BackendApiException(500, 'Refresh response missing access token');
       }
 
       DateTime? expiresAt;
