@@ -3,6 +3,7 @@
 ///   injection for backend API access.
 /// - Backend Migration: Keep but audit once backend consolidates URLs and
 ///   authentication; may be replaced by generated client.
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
@@ -22,8 +23,18 @@ class BackendApiService {
   static List<String> get baseUrls => _baseUrls;
 
   final FlutterSecureStorage _secureStorage = const FlutterSecureStorage();
+  final Duration _tokenRefreshWindow = const Duration(minutes: 5);
+  final Duration _tokenExpiryGrace = const Duration(seconds: 30);
+
+  Completer<bool>? _refreshCompleter;
+
+  static const String _accessTokenKey = 'auth.accessToken';
+  static const String _refreshTokenKey = 'auth.refreshToken';
+  static const String _tokenExpiryKey = 'auth.accessTokenExpiry';
 
   Future<Map<String, String>> _buildHeaders() async {
+    await _ensureValidAccessToken();
+
     final headers = <String, String>{
       'Content-Type': 'application/json',
       'Accept': 'application/json',
@@ -31,6 +42,7 @@ class BackendApiService {
 
     final candidates = [
       await _secureStorage.read(key: 'supabase_access_token'),
+      await _secureStorage.read(key: _accessTokenKey),
       await _secureStorage.read(key: 'auth.accessToken'),
     ];
 
@@ -43,6 +55,150 @@ class BackendApiService {
     }
 
     return headers;
+  }
+
+  Future<void> _ensureValidAccessToken() async {
+    final expiryIso = await _secureStorage.read(key: _tokenExpiryKey);
+    if (expiryIso == null || expiryIso.isEmpty) {
+      return;
+    }
+
+    DateTime? expiry;
+    try {
+      expiry = DateTime.parse(expiryIso).toUtc();
+    } catch (error) {
+      debugPrint('BackendApiService: Failed to parse access token expiry: $error');
+      await _secureStorage.delete(key: _tokenExpiryKey);
+      return;
+    }
+
+    final now = DateTime.now().toUtc();
+    final timeUntilExpiry = expiry.difference(now);
+
+    if (timeUntilExpiry <= Duration.zero || timeUntilExpiry <= _tokenExpiryGrace) {
+      final refreshed = await _refreshAccessToken(force: true);
+      if (!refreshed) {
+        await _clearStoredTokens();
+      }
+      return;
+    }
+
+    if (timeUntilExpiry <= _tokenRefreshWindow) {
+      await _refreshAccessToken(force: false);
+    }
+  }
+
+  Future<bool> _refreshAccessToken({required bool force}) async {
+    final existingRefreshToken = await _secureStorage.read(key: _refreshTokenKey);
+    if (existingRefreshToken == null || existingRefreshToken.isEmpty) {
+      if (force) {
+        await _clearStoredTokens();
+      }
+      return false;
+    }
+
+    if (_refreshCompleter != null) {
+      return _refreshCompleter!.future;
+    }
+
+    final completer = Completer<bool>();
+    _refreshCompleter = completer;
+    final future = completer.future;
+
+    try {
+      final response = await _executeWithFallback(
+        (baseUrl) => http.post(
+          _resolveUri(baseUrl, 'auth/refresh'),
+          headers: const {
+            'Content-Type': 'application/json',
+            'Accept': 'application/json',
+          },
+          body: jsonEncode({'refresh_token': existingRefreshToken}),
+        ),
+      );
+
+      final payload = _handleResponse(response);
+      if (payload is! Map) {
+        throw BackendApiException(response.statusCode, 'Unexpected refresh response payload');
+      }
+
+      final tokensPayload = payload['tokens'];
+      final sessionPayload = payload['session'];
+      if (tokensPayload is! Map) {
+        throw const BackendApiException(500, 'Refresh response missing tokens payload');
+      }
+
+      final accessToken = tokensPayload['access_token'] as String?;
+      final refreshToken = tokensPayload['refresh_token'] as String?;
+      final expiresIn = tokensPayload['expires_in'];
+
+      if (accessToken == null || accessToken.isEmpty) {
+        throw const BackendApiException(500, 'Refresh response missing access token');
+      }
+
+      DateTime? expiresAt;
+      if (expiresIn is num) {
+        expiresAt = DateTime.now().toUtc().add(Duration(seconds: expiresIn.toInt()));
+      } else if (sessionPayload is Map && sessionPayload['expires_at'] is String) {
+        try {
+          expiresAt = DateTime.parse(sessionPayload['expires_at'] as String).toUtc();
+        } catch (error) {
+          debugPrint('BackendApiService: Failed to parse refreshed session expiry: $error');
+        }
+      }
+
+      await _secureStorage.write(key: _accessTokenKey, value: accessToken);
+      await _secureStorage.write(key: 'auth.accessToken', value: accessToken);
+      await _secureStorage.write(key: 'supabase_access_token', value: accessToken);
+
+      if (refreshToken != null && refreshToken.isNotEmpty) {
+        await _secureStorage.write(key: _refreshTokenKey, value: refreshToken);
+        await _secureStorage.write(key: 'auth.refreshToken', value: refreshToken);
+      }
+
+      if (expiresAt != null) {
+        final expiryValue = expiresAt.toIso8601String();
+        await _secureStorage.write(key: _tokenExpiryKey, value: expiryValue);
+        await _secureStorage.write(key: 'auth.accessTokenExpiry', value: expiryValue);
+      } else {
+        await _secureStorage.delete(key: _tokenExpiryKey);
+      }
+
+      if (!completer.isCompleted) {
+        completer.complete(true);
+      }
+    } on BackendApiException catch (error) {
+      debugPrint('BackendApiService: Token refresh failed: $error');
+      if (force || error.statusCode == 401) {
+        await _clearStoredTokens();
+      }
+      if (!completer.isCompleted) {
+        completer.complete(false);
+      }
+    } catch (error, stackTrace) {
+      debugPrint('BackendApiService: Unexpected token refresh error: $error');
+      debugPrint(stackTrace.toString());
+      if (force) {
+        await _clearStoredTokens();
+      }
+      if (!completer.isCompleted) {
+        completer.complete(false);
+      }
+    } finally {
+      _refreshCompleter = null;
+    }
+
+    return future;
+  }
+
+  Future<void> _clearStoredTokens() async {
+    await _secureStorage.delete(key: _accessTokenKey);
+    await _secureStorage.delete(key: 'auth.accessToken');
+    await _secureStorage.delete(key: _refreshTokenKey);
+    await _secureStorage.delete(key: 'auth.refreshToken');
+    await _secureStorage.delete(key: _tokenExpiryKey);
+    await _secureStorage.delete(key: 'auth.accessTokenExpiry');
+    await _secureStorage.delete(key: 'supabase_access_token');
   }
 
   Uri _resolveUri(
