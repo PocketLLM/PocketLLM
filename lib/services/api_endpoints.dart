@@ -30,7 +30,6 @@ class ApiEndpoints {
   static const List<String> defaultBaseUrls = <String>[
     defaultBackendBaseUrl,
     'https://pocket-llm-api.vercel.app',
-    'http://localhost:8000', // Local development fallback
   ];
 
   static String resolveBaseUrl([String? override]) {
