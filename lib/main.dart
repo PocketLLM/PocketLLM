@@ -16,9 +16,6 @@ import 'services/error_service.dart';
 import 'services/app_lifecycle_service.dart';
 import 'services/auth_state.dart';
 import 'services/theme_service.dart';
-import 'services/vpn_connection_service.dart';
-import 'services/speed_test_service.dart';
-import 'services/speed_test_controller.dart';
 
 import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:async';
@@ -48,13 +45,6 @@ Widget _buildApp(AppLifecycleService appLifecycleService, {String? initializatio
   return MultiProvider(
     providers: [
       ChangeNotifierProvider(create: (_) => AuthState()),
-      ChangeNotifierProvider(create: (_) => VpnConnectionService()),
-      ChangeNotifierProvider(
-        create: (context) => SpeedTestController(
-          speedTestService: SpeedTestService(),
-          connectionService: context.read<VpnConnectionService>(),
-        ),
-      ),
     ],
     child: MyApp(
       appLifecycleService: appLifecycleService,
