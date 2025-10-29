@@ -90,6 +90,7 @@ flutter:
     - assets/brand_icons/
     - assets/icons/logo.png
     - assets/icons/logo2.png
+    - assets/illustrations/
 
 
   # assets:
