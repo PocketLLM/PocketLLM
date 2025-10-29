@@ -180,7 +180,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
         );
       case 2:
         return _OnboardingStepData(
-          illustration: 'assets/illustrations/ob3.png',
+          illustration: 'assets/illustrations/ob3.gif',
           title: 'Pick your favorite model',
           subtitle:
               'Choose a default model and preview it with a sample chat. You can change anytime!',
@@ -195,7 +195,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
         );
       case 3:
         return _OnboardingStepData(
-          illustration: 'assets/illustrations/ob4.png',
+          illustration: 'assets/illustrations/ob4.gif',
           title: 'Make it yours!',
           subtitle:
               'Choose a theme, chat layout, and accessibility options for your best experience.',
@@ -210,7 +210,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
         );
       case 4:
         return _OnboardingStepData(
-          illustration: 'assets/illustrations/ob5.png',
+          illustration: 'assets/illustrations/ob5.gif',
           title: 'Say hello to your new AI assistant!',
           subtitle:
               'Try your first message below. Need inspiration? Use these tips.',
@@ -263,7 +263,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
             _layoutDensity == LayoutDensity.compact ? 'Compact bubbles' : 'Comfortable spacing';
 
         return _OnboardingStepData(
-          illustration: 'assets/illustrations/ob6.png',
+          illustration: 'assets/illustrations/ob6.gif',
           title: 'All set!',
           subtitle:
               'Here’s what you’ve enabled: Provider X, Model Y, Theme Z. Explore chat history, model catalogue, or settings any time.',
@@ -424,7 +424,13 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   }
 
   Future<void> _removeProvider(ProviderOption option) async {
-    await _secureStorage.delete(key: 'provider_api_key_${option.id}');
+    await _secureStorage.delete(
+      key: 'provider_api_key_${option.id}',
+      aOptions: const AndroidOptions(encryptedSharedPreferences: true),
+      iOptions: const IOSOptions(
+        accessibility: IOSAccessibility.first_unlock_this_device_only,
+      ),
+    );
     setState(() {
       _apiKeys.remove(option.id);
       _connectedProviders.remove(option.id);
