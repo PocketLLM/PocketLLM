@@ -2,6 +2,8 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:flutter_secure_storage_platform_interface/flutter_secure_storage_platform_interface.dart'
+    show IOSAccessibility;
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../pages/auth/auth_flow_screen.dart';

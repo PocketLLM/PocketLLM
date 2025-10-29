@@ -383,7 +383,7 @@ packages:
     source: hosted
     version: "3.1.3"
   flutter_secure_storage_platform_interface:
-    dependency: transitive
+    dependency: "direct main"
     description:
       name: flutter_secure_storage_platform_interface
       sha256: cf91ad32ce5adef6fba4d736a542baca9daf3beac4db2d04be350b87f69ac4a8
