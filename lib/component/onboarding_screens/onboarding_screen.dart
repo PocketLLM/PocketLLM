@@ -408,8 +408,9 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
       key: 'provider_api_key_${option.id}',
       value: value,
       aOptions: const AndroidOptions(encryptedSharedPreferences: true),
-      iOptions:
-          IOSOptions(accessibility: IOSAccessibility.first_unlock_this_device_only),
+      iOptions: IOSOptions(
+        accessibility: _firstUnlockThisDeviceOnlyAccessibility,
+      ),
     );
 
     setState(() {
@@ -431,7 +432,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
       key: 'provider_api_key_${option.id}',
       aOptions: const AndroidOptions(encryptedSharedPreferences: true),
       iOptions: IOSOptions(
-        accessibility: IOSAccessibility.first_unlock_this_device_only,
+        accessibility: _firstUnlockThisDeviceOnlyAccessibility,
       ),
     );
     setState(() {
@@ -629,3 +630,27 @@ class _QuickLink extends StatelessWidget {
     );
   }
 }
+final IOSAccessibility _firstUnlockThisDeviceOnlyAccessibility =
+    _resolveFirstUnlockThisDeviceOnly();
+
+IOSAccessibility _resolveFirstUnlockThisDeviceOnly() {
+  IOSAccessibility? matched;
+  for (final option in IOSAccessibility.values) {
+    switch (option.name) {
+      case 'first_unlock_this_device_only':
+      case 'first_unlockThisDeviceOnly':
+      case 'firstUnlockThisDeviceOnly':
+      case 'afterFirstUnlockThisDeviceOnly':
+        return option;
+      case 'first_unlock':
+      case 'firstUnlock':
+      case 'afterFirstUnlock':
+        matched ??= option;
+        break;
+      default:
+        break;
+    }
+  }
+  return matched ?? IOSAccessibility.values.first;
+}
+
