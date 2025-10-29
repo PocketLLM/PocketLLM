@@ -408,6 +408,51 @@ async def test_catalogue_handles_provider_errors(caplog):
 
 
 @pytest.mark.asyncio
+async def test_catalogue_uses_imagerouter_fallback_without_api_key():
+    class TrackingImageRouterClient(ImageRouterProviderClient):
+        created: list[dict[str, Any]] = []
+
+        def __init__(
+            self,
+            settings: Settings,
+            *,
+            base_url: str | None = None,
+            api_key: str | None = None,
+            metadata: Mapping[str, Any] | None = None,
+            transport: Any | None = None,
+        ) -> None:
+            type(self).created.append(
+                {
+                    "base_url": base_url,
+                    "api_key": api_key,
+                    "metadata": dict(metadata or {}),
+                }
+            )
+            super().__init__(
+                settings,
+                base_url=base_url,
+                api_key=api_key,
+                metadata=metadata,
+                transport=transport,
+            )
+
+        async def list_models(self) -> list[ProviderModel]:  # pragma: no cover - not exercised
+            return []
+
+    settings = make_settings()
+    TrackingImageRouterClient.created.clear()
+    catalogue = ProviderModelCatalogue(
+        settings,
+        client_factories={"imagerouter": TrackingImageRouterClient},
+    )
+
+    clients = catalogue._get_clients(None)
+
+    assert [client.provider for client in clients] == ["imagerouter"]
+    assert TrackingImageRouterClient.created[-1]["api_key"] is None
+
+
+@pytest.mark.asyncio
 async def test_catalogue_uses_cache_for_repeated_requests():
     class CountingClient:
         def __init__(self) -> None:
@@ -909,6 +954,33 @@ async def test_imagerouter_provider_client_fetches_models_via_http():
     }
     assert captured and captured[0].headers["Authorization"] == "Bearer image-key"
     assert captured[0].url.path.endswith("/models")
+
+
+@pytest.mark.asyncio
+async def test_imagerouter_provider_client_lists_models_without_api_key():
+    payload = {
+        "data": [
+            {
+                "id": "imagerouter/image-public",
+                "name": "Image Public",
+            }
+        ]
+    }
+
+    captured: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        captured.append(request)
+        return httpx.Response(200, json=payload)
+
+    transport = httpx.MockTransport(handler)
+    settings = make_settings()
+    client = ImageRouterProviderClient(settings, transport=transport)
+
+    models = await client.list_models()
+
+    assert [model.id for model in models] == ["imagerouter/image-public"]
+    assert captured and "authorization" not in captured[0].headers
 
 
 @pytest.mark.asyncio

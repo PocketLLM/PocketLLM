@@ -19,6 +19,7 @@ class ImageRouterProviderClient(ProviderClient):
     provider = "imagerouter"
     default_base_url = "https://api.imagerouter.io"
     models_endpoint = "/v1/models"
+    requires_api_key = False
 
     def __init__(
         self,
@@ -42,7 +43,20 @@ class ImageRouterProviderClient(ProviderClient):
     def base_url(self) -> str:
         if self._base_url_override:
             return self._base_url_override
+        api_base = getattr(self._settings, "imagerouter_api_base", None)
+        if isinstance(api_base, str) and api_base.strip():
+            return api_base.strip()
         return self.default_base_url
+
+    def _get_api_key(self) -> str | None:
+        if self._api_key_override:
+            return self._api_key_override
+        api_key = getattr(self._settings, "imagerouter_api_key", None)
+        if isinstance(api_key, str):
+            api_key = api_key.strip()
+            if api_key:
+                return api_key
+        return None
 
     async def list_models(self) -> list[ProviderModel]:
         """Fetch available image generation models from ImageRouter."""
