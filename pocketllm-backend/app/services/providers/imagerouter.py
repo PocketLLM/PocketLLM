@@ -125,6 +125,12 @@ class ImageRouterProviderClient(ProviderClient):
         models: list[ProviderModel] = []
 
         try:
+            if isinstance(payload, Mapping):
+                mapped_models = self._parse_models_from_mapping(payload)
+                if mapped_models:
+                    models.extend(mapped_models)
+                    return models
+
             model_list = self._extract_model_list(payload)
             if model_list is None:
                 self._logger.warning(
@@ -146,44 +152,10 @@ class ImageRouterProviderClient(ProviderClient):
                         )
                         continue
 
-                    model_id = str(model_mapping.get("id", "")).strip()
-                    if not model_id:
+                    parsed = self._build_model_from_mapping(model_mapping)
+                    if parsed is None:
                         continue
-
-                    name = model_mapping.get("name") or model_id.replace("_", " ").title()
-
-                    metadata: dict[str, Any] = {}
-                    capabilities = model_mapping.get("capabilities")
-                    if isinstance(capabilities, list) and capabilities:
-                        metadata["capabilities"] = capabilities
-                    else:
-                        metadata["capabilities"] = ["image_generation"]
-
-                    for key in ("supported_formats", "quality_levels", "size_options"):
-                        value = model_mapping.get(key)
-                        if value:
-                            metadata[key] = value
-
-                    for key in ("created", "owned_by", "provider"):
-                        value = model_mapping.get(key)
-                        if value not in (None, ""):
-                            metadata[key] = value
-
-                    models.append(
-                        ProviderModel(
-                            provider=self.provider,
-                            id=model_id,
-                            name=name,
-                            description=model_mapping.get(
-                                "description", f"Image generation model: {name}"
-                            ),
-                            context_window=None,
-                            max_output_tokens=None,
-                            pricing=model_mapping.get("pricing"),
-                            is_active=True,
-                            metadata=metadata or None,
-                        )
-                    )
+                    models.append(parsed)
 
                 except Exception as exc:
                     self._logger.warning(
@@ -203,6 +175,122 @@ class ImageRouterProviderClient(ProviderClient):
                 )
 
         return models
+
+    def _parse_models_from_mapping(self, payload: Mapping[str, Any]) -> list[ProviderModel]:
+        """Extract models when ImageRouter returns a mapping keyed by model slug."""
+
+        catalogue_candidates: deque[Mapping[str, Any]] = deque([payload])
+        seen: set[int] = set()
+        results: list[ProviderModel] = []
+
+        while catalogue_candidates:
+            current = catalogue_candidates.popleft()
+            current_id = id(current)
+            if current_id in seen:
+                continue
+            seen.add(current_id)
+
+            model_entries = self._normalise_catalogue_mapping(current)
+            if model_entries:
+                results.extend(model_entries)
+                continue
+
+            for value in current.values():
+                if isinstance(value, Mapping):
+                    catalogue_candidates.append(value)
+
+        return results
+
+    def _normalise_catalogue_mapping(
+        self, mapping: Mapping[str, Any]
+    ) -> list[ProviderModel]:
+        """Convert a mapping of ImageRouter models into ProviderModel entries."""
+
+        models: list[ProviderModel] = []
+        for slug, data in mapping.items():
+            if not isinstance(slug, str) or not isinstance(data, Mapping):
+                continue
+
+            providers = data.get("providers")
+            if not isinstance(providers, list) or not providers:
+                continue
+
+            base_metadata = self._build_common_metadata(slug, data)
+            base_name = data.get("name") or self._format_model_name(slug)
+            description = data.get(
+                "description",
+                f"ImageRouter model '{slug}'",
+            )
+
+            for provider_entry in providers:
+                if not isinstance(provider_entry, Mapping):
+                    continue
+
+                provider_id = str(provider_entry.get("id", "")).strip()
+                provider_model_name = provider_entry.get("model_name")
+                pricing = provider_entry.get("pricing")
+
+                model_id = self._compose_model_id(slug, provider_id, provider_model_name)
+                metadata = self._attach_provider_metadata(
+                    base_metadata,
+                    provider_id,
+                    provider_model_name,
+                    pricing,
+                )
+
+                models.append(
+                    ProviderModel(
+                        provider=self.provider,
+                        id=model_id,
+                        name=self._format_provider_name(base_name, provider_id),
+                        description=description,
+                        context_window=None,
+                        max_output_tokens=None,
+                        pricing=pricing,
+                        is_active=True,
+                        metadata=metadata,
+                    )
+                )
+
+        return models
+
+    def _build_model_from_mapping(self, model_mapping: Mapping[str, Any]) -> ProviderModel | None:
+        model_id = str(model_mapping.get("id", "")).strip()
+        if not model_id:
+            return None
+
+        name = model_mapping.get("name") or model_id.replace("_", " ").title()
+
+        metadata: dict[str, Any] = {}
+        capabilities = model_mapping.get("capabilities")
+        if isinstance(capabilities, list) and capabilities:
+            metadata["capabilities"] = capabilities
+        else:
+            metadata["capabilities"] = ["image_generation"]
+
+        for key in ("supported_formats", "quality_levels", "size_options"):
+            value = model_mapping.get(key)
+            if value:
+                metadata[key] = value
+
+        for key in ("created", "owned_by", "provider"):
+            value = model_mapping.get(key)
+            if value not in (None, ""):
+                metadata[key] = value
+
+        return ProviderModel(
+            provider=self.provider,
+            id=model_id,
+            name=name,
+            description=model_mapping.get(
+                "description", f"Image generation model: {name}"
+            ),
+            context_window=None,
+            max_output_tokens=None,
+            pricing=model_mapping.get("pricing"),
+            is_active=True,
+            metadata=metadata or None,
+        )
 
     def _extract_model_list(self, payload: Any) -> list[Any] | None:
         """Normalise the ImageRouter response payload into a list of model entries."""
@@ -302,6 +390,107 @@ class ImageRouterProviderClient(ProviderClient):
             return repr(payload)
         except Exception as exc:  # pragma: no cover - defensive logging
             return f"{type(payload).__name__} (summary unavailable: {exc})"
+
+    def _build_common_metadata(self, slug: str, data: Mapping[str, Any]) -> dict[str, Any]:
+        metadata: dict[str, Any] = {}
+
+        capabilities = self._derive_capabilities(data)
+        metadata["capabilities"] = capabilities
+
+        imagerouter_meta: dict[str, Any] = {
+            "slug": slug,
+        }
+
+        for key in (
+            "arena_score",
+            "release_date",
+            "output",
+            "sizes",
+        ):
+            value = data.get(key)
+            if value not in (None, "", [], {}):
+                imagerouter_meta[key] = value
+
+        supported_params = data.get("supported_params")
+        if supported_params:
+            imagerouter_meta["supported_params"] = supported_params
+
+        examples = data.get("examples")
+        if isinstance(examples, list) and examples:
+            imagerouter_meta["examples"] = examples
+
+        metadata["imagerouter"] = imagerouter_meta
+        return metadata
+
+    def _derive_capabilities(self, data: Mapping[str, Any]) -> list[str]:
+        capabilities = data.get("capabilities")
+        if isinstance(capabilities, list) and capabilities:
+            return capabilities
+
+        outputs = data.get("output")
+        inferred: set[str] = set()
+        if isinstance(outputs, list):
+            for output in outputs:
+                if isinstance(output, str):
+                    output_key = output.lower()
+                    if "image" in output_key:
+                        inferred.add("image_generation")
+                    if "video" in output_key:
+                        inferred.add("video_generation")
+
+        if not inferred:
+            inferred.add("image_generation")
+
+        return sorted(inferred)
+
+    def _format_model_name(self, slug: str) -> str:
+        candidate = slug.rsplit("/", 1)[-1]
+        candidate = candidate.replace("_", " ").replace("-", " ")
+        if not candidate:
+            return slug
+        return " ".join(part.capitalize() for part in candidate.split())
+
+    def _format_provider_name(self, base_name: str, provider_id: str | None) -> str:
+        if provider_id:
+            provider_label = provider_id.replace("_", " ").title()
+            return f"{base_name} ({provider_label})"
+        return base_name
+
+    def _compose_model_id(
+        self,
+        slug: str,
+        provider_id: str | None,
+        provider_model_name: Any,
+    ) -> str:
+        parts = [slug]
+        if provider_id:
+            parts.append(provider_id)
+        elif provider_model_name:
+            parts.append(str(provider_model_name))
+        return ":".join(parts)
+
+    def _attach_provider_metadata(
+        self,
+        base_metadata: Mapping[str, Any],
+        provider_id: str | None,
+        provider_model_name: Any,
+        pricing: Any,
+    ) -> dict[str, Any]:
+        metadata = dict(base_metadata)
+        metadata["capabilities"] = list(metadata.get("capabilities", [])) or [
+            "image_generation"
+        ]
+        imagerouter_meta = dict(metadata.get("imagerouter", {}))
+
+        if provider_id:
+            imagerouter_meta["provider_id"] = provider_id
+        if provider_model_name not in (None, ""):
+            imagerouter_meta["provider_model_name"] = provider_model_name
+        if pricing not in (None, {}):
+            imagerouter_meta.setdefault("pricing", pricing)
+
+        metadata["imagerouter"] = imagerouter_meta
+        return metadata
 
     async def generate_image(self, prompt: str, model: str, **kwargs: Any) -> dict[str, Any]:
         """Generate an image using ImageRouter API."""

@@ -1066,6 +1066,53 @@ async def test_imagerouter_provider_client_logs_unexpected_payload_summary(caplo
 
 
 @pytest.mark.asyncio
+async def test_imagerouter_provider_client_parses_catalogue_mapping():
+    payload = {
+        "black-forest-labs/FLUX-1.1-pro": {
+            "providers": [
+                {
+                    "id": "runware",
+                    "model_name": "bfl:2@1",
+                    "pricing": {"type": "post_generation", "value": 0.04},
+                },
+                {
+                    "id": "deepinfra",
+                    "model_name": "black-forest-labs/FLUX-1.1-pro",
+                    "pricing": {"type": "post_generation", "value": 0.04},
+                },
+            ],
+            "arena_score": 1083,
+            "release_date": "2024-11-02",
+            "output": ["image"],
+            "supported_params": {"quality": False, "edit": False},
+        }
+    }
+
+    transport = httpx.MockTransport(lambda _: httpx.Response(200, json=payload))
+    settings = make_settings()
+    client = ImageRouterProviderClient(settings, transport=transport)
+
+    models = await client.list_models()
+
+    assert {model.id for model in models} == {
+        "black-forest-labs/FLUX-1.1-pro:runware",
+        "black-forest-labs/FLUX-1.1-pro:deepinfra",
+    }
+
+    runware = next(model for model in models if model.id.endswith(":runware"))
+    assert runware.name == "Flux 1.1 Pro (Runware)"
+    assert runware.pricing == {"type": "post_generation", "value": 0.04}
+    assert runware.metadata is not None
+    assert runware.metadata["capabilities"] == ["image_generation"]
+    imagerouter_meta = runware.metadata["imagerouter"]
+    assert imagerouter_meta["slug"] == "black-forest-labs/FLUX-1.1-pro"
+    assert imagerouter_meta["provider_id"] == "runware"
+    assert imagerouter_meta["provider_model_name"] == "bfl:2@1"
+    assert imagerouter_meta["pricing"] == {"type": "post_generation", "value": 0.04}
+    assert imagerouter_meta["supported_params"] == {"quality": False, "edit": False}
+
+
+@pytest.mark.asyncio
 async def test_providers_service_filters_models_by_attributes():
     models = [
         ProviderModel(
