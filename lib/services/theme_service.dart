@@ -188,7 +188,7 @@ class ThemeService extends ChangeNotifier {
       ),
       
       // Cards
-      cardTheme: CardTheme(
+      cardTheme: CardThemeData(
         color: colorScheme.cardBackground,
         shadowColor: colorScheme.shadow,
         elevation: 2,
@@ -273,7 +273,7 @@ class ThemeService extends ChangeNotifier {
       ),
       
       // Dialog
-      dialogTheme: DialogTheme(
+      dialogTheme: DialogThemeData(
         backgroundColor: colorScheme.surface,
         surfaceTintColor: colorScheme.primary,
         elevation: 8,
