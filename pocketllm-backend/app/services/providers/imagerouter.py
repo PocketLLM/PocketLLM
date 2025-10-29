@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from collections import deque
 from typing import Any, Mapping
 
 import httpx
@@ -19,6 +20,7 @@ class ImageRouterProviderClient(ProviderClient):
     provider = "imagerouter"
     default_base_url = "https://api.imagerouter.io"
     models_endpoint = "/v1/models"
+    requires_api_key = False
 
     def __init__(
         self,
@@ -42,7 +44,20 @@ class ImageRouterProviderClient(ProviderClient):
     def base_url(self) -> str:
         if self._base_url_override:
             return self._base_url_override
+        api_base = getattr(self._settings, "imagerouter_api_base", None)
+        if isinstance(api_base, str) and api_base.strip():
+            return api_base.strip()
         return self.default_base_url
+
+    def _get_api_key(self) -> str | None:
+        if self._api_key_override:
+            return self._api_key_override
+        api_key = getattr(self._settings, "imagerouter_api_key", None)
+        if isinstance(api_key, str):
+            api_key = api_key.strip()
+            if api_key:
+                return api_key
+        return None
 
     async def list_models(self) -> list[ProviderModel]:
         """Fetch available image generation models from ImageRouter."""
@@ -64,7 +79,13 @@ class ImageRouterProviderClient(ProviderClient):
             ) as client:
                 response = await client.get(self.models_endpoint)
                 response.raise_for_status()
-                return self._parse_models(response.json())
+                payload = response.json()
+                models = self._parse_models(payload)
+                if models:
+                    self._logger.debug(
+                        "Fetched %d models from %s", len(models), self.provider
+                    )
+                return models
 
         except httpx.HTTPStatusError as exc:
             self._logger.error(
@@ -77,7 +98,9 @@ class ImageRouterProviderClient(ProviderClient):
             self._logger.error("ImageRouter HTTP request failed: %s", exc)
             return []
         except Exception:
-            self._logger.exception("Unexpected error while fetching models from %s", self.provider)
+            self._logger.exception(
+                "Unexpected error while fetching models from %s", self.provider
+            )
             return []
 
     def _build_headers(self, api_key: str | None) -> dict[str, str]:
@@ -105,10 +128,12 @@ class ImageRouterProviderClient(ProviderClient):
             model_list = self._extract_model_list(payload)
             if model_list is None:
                 self._logger.warning(
-                    "Unexpected ImageRouter models response format: %s", type(payload)
+                    "Unexpected ImageRouter models response format: %s",
+                    self._summarise_payload(payload),
                 )
                 return models
 
+            raw_entries = len(model_list)
             for model_data in model_list:
                 try:
                     if hasattr(model_data, "model_dump"):
@@ -169,29 +194,114 @@ class ImageRouterProviderClient(ProviderClient):
 
         except Exception as exc:
             self._logger.error("Failed to parse ImageRouter models response: %s", exc)
+        else:
+            if not models:
+                self._logger.warning(
+                    "ImageRouter response contained %d entries but none were usable; payload summary=%s",
+                    raw_entries,
+                    self._summarise_payload(payload),
+                )
 
         return models
 
     def _extract_model_list(self, payload: Any) -> list[Any] | None:
         """Normalise the ImageRouter response payload into a list of model entries."""
 
-        if isinstance(payload, Mapping):
-            for key in ("data", "models"):
-                candidate = payload.get(key)
-                if isinstance(candidate, list):
-                    return candidate
-            if "data" in payload and hasattr(payload["data"], "values"):
-                candidate = payload["data"]
-                if isinstance(candidate, list):
-                    return candidate
-        elif hasattr(payload, "data"):
-            data = getattr(payload, "data")
-            if isinstance(data, list):
-                return data
-        elif isinstance(payload, list):
+        for extractor in (
+            self._extract_from_mapping,
+            self._extract_from_attribute,
+        ):
+            models = extractor(payload)
+            if models is not None:
+                return models
+        if isinstance(payload, list) and any(self._is_model_entry(item) for item in payload):
             return payload
 
         return None
+
+    def _extract_from_mapping(self, payload: Any) -> list[Any] | None:
+        if not isinstance(payload, Mapping):
+            return None
+
+        search_queue: deque[Any] = deque([payload])
+        seen: set[int] = set()
+
+        while search_queue:
+            current = search_queue.popleft()
+            current_id = id(current)
+            if current_id in seen:
+                continue
+            seen.add(current_id)
+
+            if isinstance(current, list):
+                if any(self._is_model_entry(item) for item in current):
+                    return current
+                continue
+
+            if not isinstance(current, Mapping):
+                continue
+
+            for key in ("models", "data", "items", "results", "entries", "list"):
+                if key not in current:
+                    continue
+                candidate = current[key]
+                if isinstance(candidate, list) and any(
+                    self._is_model_entry(item) for item in candidate
+                ):
+                    return candidate
+                if isinstance(candidate, (Mapping, list)):
+                    search_queue.append(candidate)
+
+            for value in current.values():
+                if isinstance(value, list) and any(
+                    self._is_model_entry(item) for item in value
+                ):
+                    return value
+                if isinstance(value, (Mapping, list)):
+                    search_queue.append(value)
+
+        return None
+
+    def _extract_from_attribute(self, payload: Any) -> list[Any] | None:
+        for attr in ("data", "models", "items", "results"):
+            if hasattr(payload, attr):
+                value = getattr(payload, attr)
+                if isinstance(value, list) and any(
+                    self._is_model_entry(item) for item in value
+                ):
+                    return value
+                if isinstance(value, Mapping):
+                    nested = self._extract_from_mapping(value)
+                    if nested is not None:
+                        return nested
+        return None
+
+    def _is_model_entry(self, value: Any) -> bool:
+        return isinstance(value, Mapping) or hasattr(value, "model_dump")
+
+    def _summarise_payload(self, payload: Any) -> str:
+        try:
+            if isinstance(payload, Mapping):
+                keys = list(payload.keys())
+                sample_types = {
+                    key: type(payload[key]).__name__ for key in keys[:5]
+                }
+                nested_keys: dict[str, list[str]] = {}
+                for key in keys[:3]:
+                    nested_value = payload[key]
+                    if isinstance(nested_value, Mapping):
+                        nested_keys[key] = list(nested_value.keys())[:5]
+                parts = [f"keys={keys[:5]}", f"types={sample_types}"]
+                if nested_keys:
+                    parts.append(f"nested_keys={nested_keys}")
+                summary = ", ".join(parts)
+                return f"mapping({summary})"
+            if isinstance(payload, list):
+                item_types = [type(item).__name__ for item in payload[:5]]
+                return f"list(len={len(payload)}, item_types={item_types})"
+            return repr(payload)
+        except Exception as exc:  # pragma: no cover - defensive logging
+            return f"{type(payload).__name__} (summary unavailable: {exc})"
 
     async def generate_image(self, prompt: str, model: str, **kwargs: Any) -> dict[str, Any]:
         """Generate an image using ImageRouter API."""

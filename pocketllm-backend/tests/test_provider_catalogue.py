@@ -199,9 +199,17 @@ def make_provider_record(
     )
 
 class FakeCatalogue:
-    def __init__(self, models: list[ProviderModel]) -> None:
+    def __init__(
+        self,
+        models: list[ProviderModel],
+        *,
+        requires: Mapping[str, bool] | None = None,
+    ) -> None:
         self._models = list(models)
         self.calls: list[tuple[str, Any]] = []
+        self._requires = {
+            key.lower(): bool(value) for key, value in (requires or {}).items()
+        }
 
     async def list_all_models(self, providers: Any = None) -> list[ProviderModel]:
         self.calls.append(("all", providers))
@@ -211,6 +219,9 @@ class FakeCatalogue:
         self.calls.append((provider, providers))
         provider_key = provider.lower()
         return [model for model in self._models if model.provider.lower() == provider_key]
+
+    def provider_requires_api_key(self, provider: str) -> bool:
+        return self._requires.get(provider.lower(), True)
 
 
 def test_normalise_skips_environment_fallback_for_user_configured_provider() -> None:
@@ -405,6 +416,51 @@ async def test_catalogue_handles_provider_errors(caplog):
 
     assert models == []
     assert any("openrouter" in message for message in caplog.text.splitlines())
+
+
+@pytest.mark.asyncio
+async def test_catalogue_uses_imagerouter_fallback_without_api_key():
+    class TrackingImageRouterClient(ImageRouterProviderClient):
+        created: list[dict[str, Any]] = []
+
+        def __init__(
+            self,
+            settings: Settings,
+            *,
+            base_url: str | None = None,
+            api_key: str | None = None,
+            metadata: Mapping[str, Any] | None = None,
+            transport: Any | None = None,
+        ) -> None:
+            type(self).created.append(
+                {
+                    "base_url": base_url,
+                    "api_key": api_key,
+                    "metadata": dict(metadata or {}),
+                }
+            )
+            super().__init__(
+                settings,
+                base_url=base_url,
+                api_key=api_key,
+                metadata=metadata,
+                transport=transport,
+            )
+
+        async def list_models(self) -> list[ProviderModel]:  # pragma: no cover - not exercised
+            return []
+
+    settings = make_settings()
+    TrackingImageRouterClient.created.clear()
+    catalogue = ProviderModelCatalogue(
+        settings,
+        client_factories={"imagerouter": TrackingImageRouterClient},
+    )
+
+    clients = catalogue._get_clients(None)
+
+    assert [client.provider for client in clients] == ["imagerouter"]
+    assert TrackingImageRouterClient.created[-1]["api_key"] is None
 
 
 @pytest.mark.asyncio
@@ -912,6 +968,33 @@ async def test_imagerouter_provider_client_fetches_models_via_http():
 
 
 @pytest.mark.asyncio
+async def test_imagerouter_provider_client_lists_models_without_api_key():
+    payload = {
+        "data": [
+            {
+                "id": "imagerouter/image-public",
+                "name": "Image Public",
+            }
+        ]
+    }
+
+    captured: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        captured.append(request)
+        return httpx.Response(200, json=payload)
+
+    transport = httpx.MockTransport(handler)
+    settings = make_settings()
+    client = ImageRouterProviderClient(settings, transport=transport)
+
+    models = await client.list_models()
+
+    assert [model.id for model in models] == ["imagerouter/image-public"]
+    assert captured and "authorization" not in captured[0].headers
+
+
+@pytest.mark.asyncio
 async def test_imagerouter_provider_client_handles_models_key():
     payload = {
         "models": [
@@ -934,6 +1017,52 @@ async def test_imagerouter_provider_client_handles_models_key():
         "capabilities": ["image_generation"],
         "quality_levels": ["standard", "high"],
     }
+
+
+@pytest.mark.asyncio
+async def test_imagerouter_provider_client_handles_nested_models_payload(caplog):
+    payload = {
+        "data": {
+            "models": [
+                {
+                    "id": "imagerouter/image-nested",
+                    "name": "Image Nested",
+                    "size_options": ["512x512"],
+                }
+            ],
+            "meta": {"page": 1},
+        }
+    }
+
+    transport = httpx.MockTransport(lambda _: httpx.Response(200, json=payload))
+    settings = make_settings()
+    client = ImageRouterProviderClient(settings, transport=transport)
+
+    with caplog.at_level("WARNING"):
+        models = await client.list_models()
+
+    assert [model.id for model in models] == ["imagerouter/image-nested"]
+    assert models[0].metadata == {
+        "capabilities": ["image_generation"],
+        "size_options": ["512x512"],
+    }
+    assert "Unexpected ImageRouter models response format" not in caplog.text
+
+
+@pytest.mark.asyncio
+async def test_imagerouter_provider_client_logs_unexpected_payload_summary(caplog):
+    payload = {"data": {"unexpected": []}}
+    transport = httpx.MockTransport(lambda _: httpx.Response(200, json=payload))
+    settings = make_settings()
+    client = ImageRouterProviderClient(settings, transport=transport)
+
+    with caplog.at_level("WARNING"):
+        models = await client.list_models()
+
+    assert models == []
+    assert "Unexpected ImageRouter models response format" in caplog.text
+    assert "keys=['data']" in caplog.text
+    assert "nested_keys={'data': ['unexpected']}" in caplog.text
 
 
 @pytest.mark.asyncio
@@ -1003,6 +1132,64 @@ async def test_providers_service_respects_provider_parameter():
     assert [model.provider for model in groq_models.models] == ["groq"]
     assert catalogue.calls and catalogue.calls[0][0] == "groq"
 
+
+@pytest.mark.asyncio
+async def test_providers_service_exposes_public_imagerouter_catalogue_without_configuration():
+    models = [
+        ProviderModel(provider="imagerouter", id="imagerouter/public", name="Public"),
+    ]
+    catalogue = FakeCatalogue(models, requires={"imagerouter": False})
+    settings = make_settings()
+    service = ProvidersService(settings, database=FakeDatabase(), catalogue=catalogue)
+    user_id = uuid4()
+
+    async def stub_fetch(_: UUID) -> list[ProviderRecord]:
+        return []
+
+    service._fetch_provider_records = stub_fetch  # type: ignore[assignment]
+
+    response = await service.get_provider_models(user_id, provider="imagerouter")
+
+    assert [model.id for model in response.models] == ["imagerouter/public"]
+    assert response.using_fallback is True
+    assert response.message and "public catalogue" in response.message.lower()
+    assert catalogue.calls and catalogue.calls[0][0] == "imagerouter"
+
+
+@pytest.mark.asyncio
+async def test_providers_service_accepts_optional_provider_without_api_key():
+    model = ProviderModel(provider="imagerouter", id="imagerouter/live", name="Live")
+    catalogue = FakeCatalogue([model], requires={"imagerouter": False})
+    settings = make_settings()
+    service = ProvidersService(settings, database=FakeDatabase(), catalogue=catalogue)
+    user_id = uuid4()
+    now = datetime.now(tz=UTC)
+
+    provider_record = ProviderRecord(
+        id=uuid4(),
+        user_id=user_id,
+        provider="imagerouter",
+        display_name=None,
+        base_url=None,
+        metadata=None,
+        api_key_hash=None,
+        api_key_preview=None,
+        api_key_encrypted=None,
+        is_active=True,
+        created_at=now,
+        updated_at=now,
+        api_key=None,
+    )
+
+    async def stub_fetch(_: UUID) -> list[ProviderRecord]:
+        return [provider_record]
+
+    service._fetch_provider_records = stub_fetch  # type: ignore[assignment]
+
+    response = await service.get_provider_models(user_id, provider="imagerouter")
+
+    assert [returned.id for returned in response.models] == ["imagerouter/live"]
+    assert catalogue.calls and catalogue.calls[0][1]
 
 
 @pytest.mark.asyncio

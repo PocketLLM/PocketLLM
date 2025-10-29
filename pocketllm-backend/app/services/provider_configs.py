@@ -301,6 +301,21 @@ class ProvidersService:
         )
 
         if not provider_records:
+            live_candidates = _apply_filters(
+                await self._catalogue.list_models_for_provider(provider_key)
+            )
+            if live_candidates:
+                return ProviderModelsResponse(
+                    models=live_candidates,
+                    message=(
+                        f"Provider '{provider}' is not yet configured for this workspace. "
+                        "Showing public catalogue results."
+                    ),
+                    configured_providers=configured_providers,
+                    missing_providers=fallback_missing,
+                    using_fallback=True,
+                )
+
             fallback_candidates = _apply_filters(
                 load_static_models_for_provider(provider_key)
             )
@@ -391,10 +406,14 @@ class ProvidersService:
 
         return [model for model in models if _matches(model)]
 
-    @staticmethod
-    def _record_is_usable(record: ProviderRecord) -> bool:
+    def _record_is_usable(self, record: ProviderRecord) -> bool:
         if not record.is_active:
             return False
+
+        provider_key = record.provider.lower()
+        if not self._catalogue.provider_requires_api_key(provider_key):
+            return True
+
         return bool(
             (record.api_key and record.api_key.strip())
             or record.api_key_encrypted
