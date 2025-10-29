@@ -1,14 +1,13 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
-import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../pages/auth/auth_flow_screen.dart';
 import 'widgets/demo_chat_input.dart';
 import 'widgets/model_selection.dart';
 import 'widgets/onboarding_step.dart';
-import 'widgets/provider_selection.dart';
+import 'widgets/provider_selection.dart' show ProviderOption;
 import 'widgets/theme_customization.dart';
 
 /// Centralized onboarding flow that guides the user through configuring the
@@ -23,7 +22,6 @@ class OnboardingScreen extends StatefulWidget {
 
 class _OnboardingScreenState extends State<OnboardingScreen> {
   static const _totalSteps = 6;
-  final FlutterSecureStorage _secureStorage = const FlutterSecureStorage();
   final TextEditingController _demoChatController = TextEditingController();
 
   final List<ProviderOption> _providers = const [
@@ -54,9 +52,6 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   ];
 
   late final List<ModelOption> _models;
-
-  final Set<String> _connectedProviders = <String>{};
-  final Map<String, String> _apiKeys = <String, String>{};
 
   int _currentStep = 0;
   String? _selectedModelId;
@@ -119,11 +114,22 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     return Scaffold(
       backgroundColor: Theme.of(context).colorScheme.surface,
       body: AnimatedSwitcher(
-        duration: const Duration(milliseconds: 400),
-        transitionBuilder: (child, animation) => FadeTransition(
-          opacity: CurvedAnimation(parent: animation, curve: Curves.easeInOut),
-          child: child,
-        ),
+        duration: const Duration(milliseconds: 450),
+        switchInCurve: Curves.easeOutCubic,
+        switchOutCurve: Curves.easeInCubic,
+        transitionBuilder: (child, animation) {
+          final curved = CurvedAnimation(parent: animation, curve: Curves.easeOutCubic, reverseCurve: Curves.easeInCubic);
+          return FadeTransition(
+            opacity: curved,
+            child: SlideTransition(
+              position: Tween<Offset>(
+                begin: const Offset(0.05, 0),
+                end: Offset.zero,
+              ).animate(curved),
+              child: child,
+            ),
+          );
+        },
         child: OnboardingStep(
           key: ValueKey(_currentStep),
           illustrationAsset: stepData.illustration,
@@ -163,18 +169,29 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
       case 1:
         return _OnboardingStepData(
           illustration: 'assets/illustrations/ob2.png',
-          title: 'Connect your AI providers',
-          subtitle:
-              'Securely add your API keys—PocketLLM never stores or shares your keys outside your device.',
-          body: ProviderSelection(
-            options: _providers,
-            connectedProviders: _connectedProviders,
-            apiKeys: _apiKeys,
-            onRequestApiKey: _showApiKeyDialog,
-            onRemoveProvider: _removeProvider,
+          title: 'Mix and match providers',
+          subtitle: 'PocketLLM plays nicely with multiple AI providers at once.',
+          body: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'Connect OpenAI, Anthropic, Azure OpenAI, Ollama, and more to build the perfect toolbox. '
+                'Setups are optional during onboarding—add what you need when you are ready.',
+              ),
+              const SizedBox(height: 20),
+              Wrap(
+                spacing: 12,
+                runSpacing: 12,
+                children: _providers
+                    .map(
+                      (option) => _ProviderHighlight(option: option),
+                    )
+                    .toList(),
+              ),
+            ],
           ),
           footer: Text(
-            'Tap a provider to connect or disconnect. Keys are encrypted locally using the system keystore.',
+            'Head to Settings → Providers anytime to securely add, edit, or remove API keys.',
             style: Theme.of(context).textTheme.bodySmall,
           ),
         );
@@ -241,14 +258,6 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
         );
       case 5:
       default:
-        final providerSummary = _connectedProviders.isEmpty
-            ? 'No providers connected yet'
-            : _connectedProviders
-                .map(
-                  (id) => _providers.firstWhere((option) => option.id == id).name,
-                )
-                .join(', ');
-
         final modelSummary = _selectedModelId == null
             ? 'Model selection pending'
             : _models.firstWhere((model) => model.id == _selectedModelId!).name;
@@ -266,16 +275,10 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
           illustration: 'assets/illustrations/ob6.gif',
           title: 'All set!',
           subtitle:
-              'Here’s what you’ve enabled: Provider X, Model Y, Theme Z. Explore chat history, model catalogue, or settings any time.',
+              'Here’s what you’ve personalized so far. Explore chat history, the model catalogue, or settings any time.',
           body: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              _SummaryTile(
-                icon: Icons.cloud_done,
-                title: 'Providers',
-                description: providerSummary,
-              ),
-              const SizedBox(height: 12),
               _SummaryTile(
                 icon: Icons.smart_toy_outlined,
                 title: 'Default model',
@@ -286,6 +289,12 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                 icon: Icons.palette_outlined,
                 title: 'Theme & layout',
                 description: '$themeSummary · $layoutSummary',
+              ),
+              const SizedBox(height: 12),
+              _SummaryTile(
+                icon: Icons.cloud_outlined,
+                title: 'Providers',
+                description: 'Add providers later from Settings → Providers when you\'re ready.',
               ),
               const SizedBox(height: 24),
               Wrap(
@@ -311,14 +320,6 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
 
   void _handleNext() {
     switch (_currentStep) {
-      case 1:
-        if (_connectedProviders.isEmpty) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Connect at least one provider to continue.')),
-          );
-          return;
-        }
-        break;
       case 2:
         if (_selectedModelId == null) {
           ScaffoldMessenger.of(context).showSnackBar(
@@ -345,107 +346,6 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
 
   Future<void> _skipOnboarding() async {
     await _completeOnboarding(skipped: true);
-  }
-
-  Future<void> _showApiKeyDialog(ProviderOption option) async {
-    final formKey = GlobalKey<FormState>();
-    final controller = TextEditingController(text: _apiKeys[option.id] ?? '');
-    final result = await showDialog<bool>(
-      context: context,
-      builder: (context) {
-        return AlertDialog(
-          title: Text('Add ${option.name} key'),
-          content: Form(
-            key: formKey,
-            child: TextFormField(
-              controller: controller,
-              decoration: const InputDecoration(
-                labelText: 'API Key',
-                hintText: 'sk-... or similar',
-              ),
-              obscureText: true,
-              validator: (value) {
-                final text = value?.trim() ?? '';
-                if (text.isEmpty) {
-                  return 'Enter your API key to continue.';
-                }
-                if (text.length < 8) {
-                  return 'That key looks too short.';
-                }
-                return null;
-              },
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(false),
-              child: const Text('Cancel'),
-            ),
-            FilledButton(
-              onPressed: () {
-                if (formKey.currentState?.validate() ?? false) {
-                  Navigator.of(context).pop(true);
-                }
-              },
-              child: const Text('Save'),
-            ),
-          ],
-        );
-      },
-    );
-
-    if (result != true) {
-      controller.dispose();
-      return;
-    }
-
-    final value = controller.text.trim();
-    controller.dispose();
-
-    await _secureStorage.write(
-      key: 'provider_api_key_${option.id}',
-      value: value,
-      aOptions: const AndroidOptions(encryptedSharedPreferences: true),
-      iOptions: IOSOptions(
-        accessibility: _firstUnlockThisDeviceOnlyAccessibility,
-      ),
-    );
-
-    setState(() {
-      _apiKeys[option.id] = value;
-      _connectedProviders.add(option.id);
-    });
-
-    if (_selectedModelId == null) {
-      final firstModel = _models.firstWhere(
-        (model) => model.providerId == option.id,
-        orElse: () => _models.first,
-      );
-      setState(() => _selectedModelId = firstModel.id);
-    }
-  }
-
-  Future<void> _removeProvider(ProviderOption option) async {
-    await _secureStorage.delete(
-      key: 'provider_api_key_${option.id}',
-      aOptions: const AndroidOptions(encryptedSharedPreferences: true),
-      iOptions: IOSOptions(
-        accessibility: _firstUnlockThisDeviceOnlyAccessibility,
-      ),
-    );
-    setState(() {
-      _apiKeys.remove(option.id);
-      _connectedProviders.remove(option.id);
-      if (_selectedModelId != null) {
-        final selectedModel = _models.firstWhere(
-          (model) => model.id == _selectedModelId!,
-          orElse: () => _models.first,
-        );
-        if (selectedModel.providerId == option.id) {
-          _selectedModelId = null;
-        }
-      }
-    });
   }
 
   Future<void> _showModelPreview(ModelOption model) async {
@@ -514,7 +414,6 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
       final prefs = await SharedPreferences.getInstance();
       await prefs.setBool('showHome', true);
       await prefs.remove('authSkipped');
-      await prefs.setStringList('onboarding.providers', _connectedProviders.toList());
       if (_selectedModelId != null) {
         await prefs.setString('onboarding.defaultModel', _selectedModelId!);
       }
@@ -560,6 +459,58 @@ class _OnboardingStepData {
   final String subtitle;
   final Widget? body;
   final Widget? footer;
+}
+
+class _ProviderHighlight extends StatelessWidget {
+  const _ProviderHighlight({required this.option});
+
+  final ProviderOption option;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 300),
+      curve: Curves.easeInOut,
+      padding: const EdgeInsets.all(16),
+      constraints: const BoxConstraints(minWidth: 160),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surfaceVariant.withOpacity(0.6),
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          CircleAvatar(
+            radius: 20,
+            backgroundColor: theme.colorScheme.primary.withOpacity(0.12),
+            child: Icon(option.icon, color: theme.colorScheme.primary),
+          ),
+          const SizedBox(width: 12),
+          Flexible(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  option.name,
+                  style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700),
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  option.description,
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: theme.colorScheme.onSurface.withOpacity(0.7),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 }
 
 class _SummaryTile extends StatelessWidget {
@@ -628,27 +579,3 @@ class _QuickLink extends StatelessWidget {
     );
   }
 }
-final KeychainAccessibility _firstUnlockThisDeviceOnlyAccessibility =
-    _resolveFirstUnlockThisDeviceOnly();
-
-KeychainAccessibility _resolveFirstUnlockThisDeviceOnly() {
-  KeychainAccessibility? matched;
-  for (final option in KeychainAccessibility.values) {
-    switch (option.name) {
-      case 'first_unlock_this_device_only':
-      case 'first_unlockThisDeviceOnly':
-      case 'firstUnlockThisDeviceOnly':
-      case 'afterFirstUnlockThisDeviceOnly':
-        return option;
-      case 'first_unlock':
-      case 'firstUnlock':
-      case 'afterFirstUnlock':
-        matched ??= option;
-        break;
-      default:
-        break;
-    }
-  }
-  return matched ?? KeychainAccessibility.values.first;
-}
-
