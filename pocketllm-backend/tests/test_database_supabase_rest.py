@@ -3,6 +3,8 @@ import os
 import sys
 import types
 
+import pytest
+
 if "supabase" not in sys.modules:
     supabase_stub = types.ModuleType("supabase")
 
@@ -157,3 +159,44 @@ def test_test_connection_respects_skip_environment(monkeypatch, caplog) -> None:
         assert "skipping supabase test_connection" in caplog.text.lower()
     finally:
         monkeypatch.delenv("SUPABASE_SKIP_CONNECTION_TEST", raising=False)
+
+
+def test_startup_allows_unverified_connection_when_not_strict(monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    def _failing_test(self):  # type: ignore[no-untyped-def]
+        self._connection_verified = False
+        self._last_connection_error = {"message": "DNS lookup failed"}
+        return False
+
+    monkeypatch.setattr(SupabaseDatabase, "_test_connection", _failing_test)
+    monkeypatch.setattr(SupabaseDatabase, "_instance", None, raising=False)
+    monkeypatch.setattr(SupabaseDatabase, "_client", None, raising=False)
+
+    monkeypatch.delenv("SUPABASE_STRICT_STARTUP", raising=False)
+
+    supabase = SupabaseDatabase()
+
+    assert supabase._allow_unverified_connection is True  # type: ignore[attr-defined]
+    assert supabase._connection_verified is False  # type: ignore[attr-defined]
+
+    SupabaseDatabase._instance = None
+    SupabaseDatabase._client = None
+
+
+def test_startup_raises_when_strict_and_connection_fails(monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    def _failing_test(self):  # type: ignore[no-untyped-def]
+        self._connection_verified = False
+        self._last_connection_error = {"message": "DNS lookup failed"}
+        return False
+
+    monkeypatch.setattr(SupabaseDatabase, "_test_connection", _failing_test)
+    monkeypatch.setattr(SupabaseDatabase, "_instance", None, raising=False)
+    monkeypatch.setattr(SupabaseDatabase, "_client", None, raising=False)
+
+    monkeypatch.setenv("SUPABASE_STRICT_STARTUP", "1")
+
+    with pytest.raises(ConnectionError):
+        SupabaseDatabase()
+
+    monkeypatch.delenv("SUPABASE_STRICT_STARTUP", raising=False)
+    SupabaseDatabase._instance = None
+    SupabaseDatabase._client = None

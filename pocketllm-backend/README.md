@@ -38,6 +38,8 @@ ENCRYPTION_KEY=<fernet-key-or-32-char-secret>
 LOG_LEVEL=INFO
 # Optional: bypass the Supabase connectivity check when running offline/local tests
 SUPABASE_SKIP_CONNECTION_TEST=false
+# Optional: continue booting when Supabase is unreachable (defaults to false)
+SUPABASE_STRICT_STARTUP=false
 ```
 
 Refer to [`API_DOCUMENTATION.md`](API_DOCUMENTATION.md) for the full list of optional settings.
@@ -52,7 +54,12 @@ If a raw 32-character string is supplied, the backend will automatically derive 
 When developing locally without network access to Supabase you can set
 `SUPABASE_SKIP_CONNECTION_TEST=true`. This allows the API server to boot
 without performing the startup connectivity probe while keeping runtime
-behaviour unchanged for production deployments.
+behaviour unchanged for production deployments. If the connectivity check
+fails, the backend now logs detailed diagnostics (including DNS resolution
+results) and continues to start unless `SUPABASE_STRICT_STARTUP` is set to a
+truthy value, in which case the application exits immediately. This makes it
+easy to run the API offline while still enforcing strict guarantees in staging
+or production.
 
 ### 3. Initialise the database schema
 
