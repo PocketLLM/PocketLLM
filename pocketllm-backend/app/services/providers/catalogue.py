@@ -250,13 +250,18 @@ class ProviderModelCatalogue:
             )
 
         imagerouter_key = getattr(self._settings, "imagerouter_api_key", None)
-        if isinstance(imagerouter_key, str) and imagerouter_key:
-            fallbacks["imagerouter"] = _ProviderConfig(
-                provider="imagerouter",
-                base_url=getattr(self._settings, "imagerouter_api_base", None),
-                api_key=imagerouter_key,
-                metadata=None,
-            )
+        cleaned_imagerouter_key: str | None = None
+        if isinstance(imagerouter_key, str):
+            stripped = imagerouter_key.strip()
+            if stripped:
+                cleaned_imagerouter_key = stripped
+
+        fallbacks["imagerouter"] = _ProviderConfig(
+            provider="imagerouter",
+            base_url=getattr(self._settings, "imagerouter_api_base", None),
+            api_key=cleaned_imagerouter_key,
+            metadata=None,
+        )
 
         return fallbacks
 
