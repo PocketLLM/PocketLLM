@@ -39,8 +39,23 @@ class Database:
 
     def _ensure_client_ready(self) -> None:
         self._supabase.client
+        if getattr(self._supabase, "_connection_verified", False):
+            return
+
+        if getattr(self._supabase, "_allow_unverified_connection", False):
+            logger.debug(
+                "Supabase connectivity was not verified during startup but strict startup is disabled; skipping additional validation."
+            )
+            return
+
         if not self._supabase.test_connection():
-            raise RuntimeError("Supabase connection validation failed")
+            diagnostics = getattr(self._supabase, "_last_connection_error", None)
+            message = (
+                diagnostics.get("message")
+                if isinstance(diagnostics, dict) and diagnostics.get("message")
+                else "Supabase connection validation failed"
+            )
+            raise RuntimeError(message)
 
     # ------------------------------------------------------------------
     # Context helpers

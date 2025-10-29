@@ -8,8 +8,11 @@ from __future__ import annotations
 import json
 import logging
 import os
+import socket
+import traceback
 from datetime import datetime
 from typing import Any, Dict, List, Optional, Sequence, Union
+from urllib.parse import urlparse
 
 from dotenv import load_dotenv
 from postgrest.exceptions import APIError
@@ -49,6 +52,10 @@ class SupabaseDatabase:
         if getattr(self, "_initialised", False):
             return
         self._initialised = True
+        self._connection_meta: Dict[str, Any] = {}
+        self._connection_verified = False
+        self._allow_unverified_connection = False
+        self._last_connection_error: Optional[Dict[str, Any]] = None
         self._setup_connection()
 
     # ------------------------------------------------------------------
@@ -63,6 +70,7 @@ class SupabaseDatabase:
             public_key = os.getenv("SUPABASE_PUBLIC_KEY") or os.getenv("SUPABASE_ANON_KEY")
             key = service_key or public_key
             skip_connection_test = _env_flag_enabled("SUPABASE_SKIP_CONNECTION_TEST")
+            strict_startup = _env_flag_enabled("SUPABASE_STRICT_STARTUP")
 
             if not url or not key:
                 logger.critical("❌ FATAL: Missing Supabase credentials - APPLICATION CANNOT START")
@@ -73,6 +81,9 @@ class SupabaseDatabase:
                     "NO fallback options available."
                 )
 
+            self._connection_meta = _summarise_connection_target(url, bool(service_key))
+            logger.debug("🔧 Supabase client target: %s", json.dumps(self._connection_meta))
+
             self._client = create_client(url, key)
 
             if service_key:
@@ -82,11 +93,25 @@ class SupabaseDatabase:
                 logger.warning(
                     "⚠️ Skipping Supabase connectivity test because SUPABASE_SKIP_CONNECTION_TEST is enabled."
                 )
+                self._connection_verified = True
             elif not self._test_connection():
-                logger.critical("❌ FATAL: Supabase connection test failed - APPLICATION CANNOT START")
-                raise ConnectionError("Supabase connection test failed - NO fallback available")
+                message = _build_connection_failure_message(self._connection_meta, self._last_connection_error)
+                if strict_startup:
+                    logger.critical("❌ FATAL: %s", message)
+                    raise ConnectionError(message)
 
-            logger.info("✅ VERIFIED: Official Supabase SDK connection established")
+                logger.warning(
+                    "⚠️ Supabase connection test failed but continuing because SUPABASE_STRICT_STARTUP is disabled."
+                )
+                self._allow_unverified_connection = True
+            
+            if self._connection_verified:
+                logger.info("✅ VERIFIED: Official Supabase SDK connection established")
+                logger.debug("✅ Supabase connectivity verified at startup")
+            else:
+                logger.info(
+                    "⚠️ Supabase SDK client initialised without a verified connection; operations may fail until connectivity is restored."
+                )
         except Exception as exc:  # pragma: no cover - critical path
             logger.critical("❌ FATAL: Supabase connection failed: %s", exc)
             logger.critical("🚨 NO FALLBACK OPTIONS - APPLICATION MUST NOT START")
@@ -98,9 +123,15 @@ class SupabaseDatabase:
         try:
             assert self._client is not None
             self._client.table("profiles").select("id").limit(1).execute()
+            self._connection_verified = True
+            self._last_connection_error = None
             return True
         except Exception as exc:  # pragma: no cover - diagnostic helper
-            logger.error("❌ Connection test failed: %s", exc)
+            diagnostics = _diagnose_connection_issue(self._connection_meta, exc)
+            self._connection_verified = False
+            self._last_connection_error = diagnostics
+            logger.error("❌ Connection test failed: %s", diagnostics["message"])
+            logger.debug("📋 Supabase diagnostics: %s", json.dumps(diagnostics))
             return False
 
     @property
@@ -413,6 +444,60 @@ class SupabaseDatabase:
         if value is None:
             return None
         return serialize_dates_for_json(value)
+
+
+def _summarise_connection_target(url: str, using_service_role: bool) -> Dict[str, Any]:
+    parsed = urlparse(url)
+    host = parsed.hostname or parsed.netloc
+    summary: Dict[str, Any] = {
+        "scheme": parsed.scheme or "https",
+        "host": host,
+        "path": parsed.path or "/",
+        "uses_service_role": using_service_role,
+    }
+    if parsed.port:
+        summary["port"] = parsed.port
+    return summary
+
+
+def _diagnose_connection_issue(meta: Dict[str, Any], exc: Exception) -> Dict[str, Any]:
+    diagnostics: Dict[str, Any] = {
+        "status": "failed",
+        "message": f"Supabase connectivity test failed: {exc}",
+        "error_type": exc.__class__.__name__,
+        "trace": "".join(traceback.format_exception_only(exc.__class__, exc)).strip(),
+        "timestamp": datetime.utcnow().isoformat(),
+    }
+    if meta:
+        diagnostics["target"] = meta
+
+    host = meta.get("host") if meta else None
+    if host:
+        dns_info: Dict[str, Any] = {"host": host}
+        try:
+            socket.getaddrinfo(host, None)
+            dns_info["resolution"] = "ok"
+        except socket.gaierror as dns_exc:  # pragma: no cover - environment dependent
+            dns_info["resolution"] = "failed"
+            dns_info["error"] = str(dns_exc)
+        diagnostics["dns"] = dns_info
+
+    return diagnostics
+
+
+def _build_connection_failure_message(
+    meta: Dict[str, Any], diagnostics: Optional[Dict[str, Any]]
+) -> str:
+    base_message = "Supabase connection test failed"
+    host = meta.get("host") if meta else None
+    if host:
+        base_message += f" for host {host}"
+    if diagnostics and diagnostics.get("message"):
+        base_message += f": {diagnostics['message']}"
+    else:
+        base_message += "."
+    base_message += " Set SUPABASE_STRICT_STARTUP=1 to enforce a hard failure during startup."
+    return base_message
 
 
 db = SupabaseDatabase()
