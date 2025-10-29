@@ -406,7 +406,8 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
       key: 'provider_api_key_${option.id}',
       value: value,
       aOptions: const AndroidOptions(encryptedSharedPreferences: true),
-      iOptions: const IOSOptions(accessibility: IOSAccessibility.first_unlock_this_device_only),
+      iOptions:
+          IOSOptions(accessibility: IOSAccessibility.first_unlock_this_device_only),
     );
 
     setState(() {
@@ -427,7 +428,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     await _secureStorage.delete(
       key: 'provider_api_key_${option.id}',
       aOptions: const AndroidOptions(encryptedSharedPreferences: true),
-      iOptions: const IOSOptions(
+      iOptions: IOSOptions(
         accessibility: IOSAccessibility.first_unlock_this_device_only,
       ),
     );
