@@ -6,6 +6,8 @@ from datetime import UTC, datetime, timedelta
 from typing import Any
 from uuid import UUID
 
+import logging
+
 import httpx
 from fastapi import HTTPException, status
 
@@ -28,6 +30,9 @@ from app.utils.security import create_supabase_service_headers
 from app.services.users import UsersService
 
 
+logger = logging.getLogger(__name__)
+
+
 class AuthService:
     """Service responsible for user authentication workflow."""
 
@@ -46,14 +51,18 @@ class AuthService:
             "data": {"full_name": payload.full_name},
         }
 
-        async with httpx.AsyncClient(timeout=15.0) as client:
-            response = await client.post(
-                f"{self._settings.supabase_url}/auth/v1/signup",
-                headers=create_supabase_service_headers(self._settings),
-                json=request_body,
-            )
+        try:
+            async with httpx.AsyncClient(timeout=15.0) as client:
+                response = await client.post(
+                    f"{self._settings.supabase_url}/auth/v1/signup",
+                    headers=create_supabase_service_headers(self._settings),
+                    json=request_body,
+                )
+        except httpx.HTTPError as exc:  # pragma: no cover - network failure path
+            self._handle_supabase_http_error("sign_up", exc)
         if response.status_code >= 400:
-            detail = response.json().get("msg") if response.headers.get("content-type", "").startswith("application/json") else response.text
+            is_json = response.headers.get("content-type", "").startswith("application/json")
+            detail = response.json().get("msg") if is_json else response.text
             raise HTTPException(status_code=response.status_code, detail=detail or "Sign up failed")
 
         data = response.json()
@@ -76,15 +85,18 @@ class AuthService:
 
         self._require_supabase()
 
-        async with httpx.AsyncClient(timeout=15.0) as client:
-            response = await client.post(
-                f"{self._settings.supabase_url}/auth/v1/token?grant_type=password",
-                headers={
-                    "apikey": self._settings.supabase_anon_key,
-                    "Authorization": f"Bearer {self._settings.supabase_anon_key}",
-                },
-                json={"email": payload.email, "password": payload.password},
-            )
+        try:
+            async with httpx.AsyncClient(timeout=15.0) as client:
+                response = await client.post(
+                    f"{self._settings.supabase_url}/auth/v1/token?grant_type=password",
+                    headers={
+                        "apikey": self._settings.supabase_anon_key,
+                        "Authorization": f"Bearer {self._settings.supabase_anon_key}",
+                    },
+                    json={"email": payload.email, "password": payload.password},
+                )
+        except httpx.HTTPError as exc:  # pragma: no cover - network failure path
+            self._handle_supabase_http_error("sign_in", exc)
         if response.status_code >= 400:
             raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials")
 
@@ -101,14 +113,17 @@ class AuthService:
 
         self._require_supabase()
 
-        async with httpx.AsyncClient(timeout=10.0) as client:
-            response = await client.post(
-                f"{self._settings.supabase_url}/auth/v1/logout",
-                headers={
-                    "apikey": self._settings.supabase_anon_key,
-                    "Authorization": f"Bearer {access_token}",
-                },
-            )
+        try:
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                response = await client.post(
+                    f"{self._settings.supabase_url}/auth/v1/logout",
+                    headers={
+                        "apikey": self._settings.supabase_anon_key,
+                        "Authorization": f"Bearer {access_token}",
+                    },
+                )
+        except httpx.HTTPError as exc:  # pragma: no cover - network failure path
+            self._handle_supabase_http_error("sign_out", exc)
         if response.status_code >= 400:
             raise HTTPException(status_code=response.status_code, detail="Failed to sign out")
 
@@ -126,15 +141,18 @@ class AuthService:
                 detail="Refresh token is required",
             )
 
-        async with httpx.AsyncClient(timeout=10.0) as client:
-            response = await client.post(
-                f"{self._settings.supabase_url}/auth/v1/token?grant_type=refresh_token",
-                headers={
-                    "apikey": self._settings.supabase_anon_key,
-                    "Authorization": f"Bearer {self._settings.supabase_anon_key}",
-                },
-                json={"refresh_token": refresh_token},
-            )
+        try:
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                response = await client.post(
+                    f"{self._settings.supabase_url}/auth/v1/token?grant_type=refresh_token",
+                    headers={
+                        "apikey": self._settings.supabase_anon_key,
+                        "Authorization": f"Bearer {self._settings.supabase_anon_key}",
+                    },
+                    json={"refresh_token": refresh_token},
+                )
+        except httpx.HTTPError as exc:  # pragma: no cover - network failure path
+            self._handle_supabase_http_error("refresh_token", exc)
 
         if response.status_code >= 400:
             raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid refresh token")
@@ -262,6 +280,15 @@ class AuthService:
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
                 detail="Supabase configuration is required for authentication",
             )
+
+    def _handle_supabase_http_error(self, operation: str, exc: httpx.HTTPError) -> None:
+        """Convert low-level HTTPX errors into an API-friendly response."""
+
+        logger.exception("Supabase %s request failed: %s", operation, exc)
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Authentication service is temporarily unavailable. Please try again later.",
+        )
 
 
 __all__ = ["AuthService"]
