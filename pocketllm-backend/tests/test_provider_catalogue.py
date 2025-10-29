@@ -1020,6 +1020,52 @@ async def test_imagerouter_provider_client_handles_models_key():
 
 
 @pytest.mark.asyncio
+async def test_imagerouter_provider_client_handles_nested_models_payload(caplog):
+    payload = {
+        "data": {
+            "models": [
+                {
+                    "id": "imagerouter/image-nested",
+                    "name": "Image Nested",
+                    "size_options": ["512x512"],
+                }
+            ],
+            "meta": {"page": 1},
+        }
+    }
+
+    transport = httpx.MockTransport(lambda _: httpx.Response(200, json=payload))
+    settings = make_settings()
+    client = ImageRouterProviderClient(settings, transport=transport)
+
+    with caplog.at_level("WARNING"):
+        models = await client.list_models()
+
+    assert [model.id for model in models] == ["imagerouter/image-nested"]
+    assert models[0].metadata == {
+        "capabilities": ["image_generation"],
+        "size_options": ["512x512"],
+    }
+    assert "Unexpected ImageRouter models response format" not in caplog.text
+
+
+@pytest.mark.asyncio
+async def test_imagerouter_provider_client_logs_unexpected_payload_summary(caplog):
+    payload = {"data": {"unexpected": []}}
+    transport = httpx.MockTransport(lambda _: httpx.Response(200, json=payload))
+    settings = make_settings()
+    client = ImageRouterProviderClient(settings, transport=transport)
+
+    with caplog.at_level("WARNING"):
+        models = await client.list_models()
+
+    assert models == []
+    assert "Unexpected ImageRouter models response format" in caplog.text
+    assert "keys=['data']" in caplog.text
+    assert "nested_keys={'data': ['unexpected']}" in caplog.text
+
+
+@pytest.mark.asyncio
 async def test_providers_service_filters_models_by_attributes():
     models = [
         ProviderModel(
