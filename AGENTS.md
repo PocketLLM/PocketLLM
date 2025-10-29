@@ -127,5 +127,10 @@ echo "✅ Setup completed for $APP_NAME"
    - Follow authentication and authorization best practices
    - Keep dependencies updated
 
+8. **PUBSPEC DEPENDENCY STYLE**: When adding new dependencies to `pubspec.yaml`,
+   list only the package name followed by a colon (no explicit version
+   constraints). This keeps the project aligned with the team's dependency
+   management approach.
+
 **Remember**: The goal is to maintain a high-quality, production-ready codebase that is well-documented and thoroughly tested.
 ```
