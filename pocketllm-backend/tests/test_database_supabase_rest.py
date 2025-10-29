@@ -120,7 +120,7 @@ def test_upsert_falls_back_when_on_conflict_unavailable(caplog) -> None:  # type
     supabase._client = client  # type: ignore[attr-defined]
     supabase._initialised = True  # type: ignore[attr-defined]
 
-    caplog.set_level(logging.WARNING)
+    caplog.set_level(logging.WARNING, logger="app.database.connection")
     result = SupabaseDatabase.upsert(
         supabase,
         "providers",
@@ -134,3 +134,26 @@ def test_upsert_falls_back_when_on_conflict_unavailable(caplog) -> None:  # type
     assert client.on_conflict_calls == ["user_id,provider"]
     assert result == [{"id": "456", "provider": "anthropic"}]
     assert "retrying with chained on_conflict()" in caplog.text
+
+
+def test_test_connection_respects_skip_environment(monkeypatch, caplog) -> None:  # type: ignore[no-untyped-def]
+    supabase = _dummy_supabase()
+    supabase._initialised = True  # type: ignore[attr-defined]
+
+    called = False
+
+    def _fake_test_connection(self):  # type: ignore[no-untyped-def]
+        nonlocal called
+        called = True
+        return False
+
+    monkeypatch.setattr(SupabaseDatabase, "_test_connection", _fake_test_connection)
+    monkeypatch.setenv("SUPABASE_SKIP_CONNECTION_TEST", "true")
+
+    caplog.set_level(logging.DEBUG, logger="app.database.connection")
+    try:
+        assert supabase.test_connection() is True
+        assert called is False
+        assert "skipping supabase test_connection" in caplog.text.lower()
+    finally:
+        monkeypatch.delenv("SUPABASE_SKIP_CONNECTION_TEST", raising=False)

@@ -36,6 +36,8 @@ SUPABASE_DB_URL=postgresql+asyncpg://<user>:<password>@<host>:5432/postgres
 SUPABASE_JWT_SECRET=<jwt-secret>
 ENCRYPTION_KEY=<fernet-key-or-32-char-secret>
 LOG_LEVEL=INFO
+# Optional: bypass the Supabase connectivity check when running offline/local tests
+SUPABASE_SKIP_CONNECTION_TEST=false
 ```
 
 Refer to [`API_DOCUMENTATION.md`](API_DOCUMENTATION.md) for the full list of optional settings.
@@ -46,6 +48,11 @@ You can generate a compliant encryption key in two ways:
 - Provide any 32-character string (for example, `export ENCRYPTION_KEY=$(openssl rand -hex 16 | cut -c1-32)`).
 
 If a raw 32-character string is supplied, the backend will automatically derive a Fernet-compatible key internally.
+
+When developing locally without network access to Supabase you can set
+`SUPABASE_SKIP_CONNECTION_TEST=true`. This allows the API server to boot
+without performing the startup connectivity probe while keeping runtime
+behaviour unchanged for production deployments.
 
 ### 3. Initialise the database schema
 
