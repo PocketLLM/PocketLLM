@@ -199,9 +199,17 @@ def make_provider_record(
     )
 
 class FakeCatalogue:
-    def __init__(self, models: list[ProviderModel]) -> None:
+    def __init__(
+        self,
+        models: list[ProviderModel],
+        *,
+        requires: Mapping[str, bool] | None = None,
+    ) -> None:
         self._models = list(models)
         self.calls: list[tuple[str, Any]] = []
+        self._requires = {
+            key.lower(): bool(value) for key, value in (requires or {}).items()
+        }
 
     async def list_all_models(self, providers: Any = None) -> list[ProviderModel]:
         self.calls.append(("all", providers))
@@ -211,6 +219,9 @@ class FakeCatalogue:
         self.calls.append((provider, providers))
         provider_key = provider.lower()
         return [model for model in self._models if model.provider.lower() == provider_key]
+
+    def provider_requires_api_key(self, provider: str) -> bool:
+        return self._requires.get(provider.lower(), True)
 
 
 def test_normalise_skips_environment_fallback_for_user_configured_provider() -> None:
@@ -1075,6 +1086,64 @@ async def test_providers_service_respects_provider_parameter():
     assert [model.provider for model in groq_models.models] == ["groq"]
     assert catalogue.calls and catalogue.calls[0][0] == "groq"
 
+
+@pytest.mark.asyncio
+async def test_providers_service_exposes_public_imagerouter_catalogue_without_configuration():
+    models = [
+        ProviderModel(provider="imagerouter", id="imagerouter/public", name="Public"),
+    ]
+    catalogue = FakeCatalogue(models, requires={"imagerouter": False})
+    settings = make_settings()
+    service = ProvidersService(settings, database=FakeDatabase(), catalogue=catalogue)
+    user_id = uuid4()
+
+    async def stub_fetch(_: UUID) -> list[ProviderRecord]:
+        return []
+
+    service._fetch_provider_records = stub_fetch  # type: ignore[assignment]
+
+    response = await service.get_provider_models(user_id, provider="imagerouter")
+
+    assert [model.id for model in response.models] == ["imagerouter/public"]
+    assert response.using_fallback is True
+    assert response.message and "public catalogue" in response.message.lower()
+    assert catalogue.calls and catalogue.calls[0][0] == "imagerouter"
+
+
+@pytest.mark.asyncio
+async def test_providers_service_accepts_optional_provider_without_api_key():
+    model = ProviderModel(provider="imagerouter", id="imagerouter/live", name="Live")
+    catalogue = FakeCatalogue([model], requires={"imagerouter": False})
+    settings = make_settings()
+    service = ProvidersService(settings, database=FakeDatabase(), catalogue=catalogue)
+    user_id = uuid4()
+    now = datetime.now(tz=UTC)
+
+    provider_record = ProviderRecord(
+        id=uuid4(),
+        user_id=user_id,
+        provider="imagerouter",
+        display_name=None,
+        base_url=None,
+        metadata=None,
+        api_key_hash=None,
+        api_key_preview=None,
+        api_key_encrypted=None,
+        is_active=True,
+        created_at=now,
+        updated_at=now,
+        api_key=None,
+    )
+
+    async def stub_fetch(_: UUID) -> list[ProviderRecord]:
+        return [provider_record]
+
+    service._fetch_provider_records = stub_fetch  # type: ignore[assignment]
+
+    response = await service.get_provider_models(user_id, provider="imagerouter")
+
+    assert [returned.id for returned in response.models] == ["imagerouter/live"]
+    assert catalogue.calls and catalogue.calls[0][1]
 
 
 @pytest.mark.asyncio
