@@ -35,6 +35,7 @@ dependencies:
   url_launcher: ^6.2.4
   permission_handler: ^11.0.1
   flutter_secure_storage: ^9.0.0
+  flutter_secure_storage_platform_interface: ^1.1.2
   timeago: ^3.6.0
   ollama_dart: ^0.0.2
   flutter_bloc: ^8.1.4
