@@ -19,32 +19,32 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
-  flutter_svg: ^2.0.7
-  image_picker: ^1.0.4
-  http: ^1.1.0
-  animated_text_kit: ^4.2.3
-  shared_preferences: ^2.2.2
-  flutter_markdown: ^0.6.18
-  clipboard: ^0.1.3
-  device_info_plus: ^9.0.2
-  system_info2: ^4.0.0
-  url_launcher: ^6.2.4
-  permission_handler: ^11.0.1
-  flutter_secure_storage: ^9.0.0
-  equatable: ^2.0.5
-  sign_in_with_apple: ^6.1.4
+  flutter_svg:
+  image_picker:
+  http:
+  animated_text_kit:
+  shared_preferences:
+  flutter_markdown:
+  clipboard:
+  device_info_plus:
+  system_info2:
+  url_launcher:
+  permission_handler:
+  flutter_secure_storage:
+  equatable:
+  sign_in_with_apple:
   # The following adds the Cupertino Icons font to your application.
   # Use with the CupertinoIcons class for iOS style icons.
-  cupertino_icons: ^1.0.2
-  flutter_launcher_icons: ^0.14.3
-  uuid: ^4.5.1
-  file_picker: ^9.0.2
-  path: ^1.8.3
-  provider: ^6.0.5
-  google_fonts: ^6.1.0
-  intl: ^0.18.1
-  connectivity_plus: ^6.0.5
-  crypto: ^3.0.3
+  cupertino_icons:
+  flutter_launcher_icons:
+  uuid:
+  file_picker:
+  path: 
+  provider: 
+  google_fonts: 
+  intl: 
+  connectivity_plus: 
+  crypto: 
 
 dev_dependencies:
   flutter_test:
