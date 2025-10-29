@@ -27,6 +27,13 @@ if _ENV_LOADED:
     logger.info("✅ Loaded environment variables from .env file")
 
 
+def _env_flag_enabled(name: str) -> bool:
+    """Return ``True`` when the environment flag ``name`` is enabled."""
+
+    raw_value = os.getenv(name, "")
+    return raw_value.strip().lower() in {"1", "true", "yes", "on"}
+
+
 class SupabaseDatabase:
     """ENFORCED: Official Supabase SDK ONLY implementation."""
 
@@ -55,6 +62,7 @@ class SupabaseDatabase:
             service_key = os.getenv("SUPABASE_SERVICE_ROLE_KEY") or os.getenv("SUPABASE_SERVICE_ROLE")
             public_key = os.getenv("SUPABASE_PUBLIC_KEY") or os.getenv("SUPABASE_ANON_KEY")
             key = service_key or public_key
+            skip_connection_test = _env_flag_enabled("SUPABASE_SKIP_CONNECTION_TEST")
 
             if not url or not key:
                 logger.critical("❌ FATAL: Missing Supabase credentials - APPLICATION CANNOT START")
@@ -70,7 +78,11 @@ class SupabaseDatabase:
             if service_key:
                 logger.info("✅ USING SERVICE-ROLE Supabase credentials for SDK client")
 
-            if not self._test_connection():
+            if skip_connection_test:
+                logger.warning(
+                    "⚠️ Skipping Supabase connectivity test because SUPABASE_SKIP_CONNECTION_TEST is enabled."
+                )
+            elif not self._test_connection():
                 logger.critical("❌ FATAL: Supabase connection test failed - APPLICATION CANNOT START")
                 raise ConnectionError("Supabase connection test failed - NO fallback available")
 
@@ -353,6 +365,9 @@ class SupabaseDatabase:
             raise
 
     def test_connection(self) -> bool:
+        if _env_flag_enabled("SUPABASE_SKIP_CONNECTION_TEST"):
+            logger.debug("Skipping Supabase test_connection() because SUPABASE_SKIP_CONNECTION_TEST is enabled")
+            return True
         return self._test_connection()
 
     # ------------------------------------------------------------------
