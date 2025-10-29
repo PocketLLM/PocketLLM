@@ -2,8 +2,6 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
-import 'package:flutter_secure_storage_platform_interface/flutter_secure_storage_platform_interface.dart'
-    show IOSAccessibility;
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../pages/auth/auth_flow_screen.dart';
@@ -630,12 +628,12 @@ class _QuickLink extends StatelessWidget {
     );
   }
 }
-final IOSAccessibility _firstUnlockThisDeviceOnlyAccessibility =
+final KeychainAccessibility _firstUnlockThisDeviceOnlyAccessibility =
     _resolveFirstUnlockThisDeviceOnly();
 
-IOSAccessibility _resolveFirstUnlockThisDeviceOnly() {
-  IOSAccessibility? matched;
-  for (final option in IOSAccessibility.values) {
+KeychainAccessibility _resolveFirstUnlockThisDeviceOnly() {
+  KeychainAccessibility? matched;
+  for (final option in KeychainAccessibility.values) {
     switch (option.name) {
       case 'first_unlock_this_device_only':
       case 'first_unlockThisDeviceOnly':
@@ -651,6 +649,6 @@ IOSAccessibility _resolveFirstUnlockThisDeviceOnly() {
         break;
     }
   }
-  return matched ?? IOSAccessibility.values.first;
+  return matched ?? KeychainAccessibility.values.first;
 }
 
