@@ -2,6 +2,8 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:flutter_secure_storage_platform_interface/flutter_secure_storage_platform_interface.dart'
+    show IOSAccessibility;
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../pages/auth/auth_flow_screen.dart';
@@ -406,7 +408,8 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
       key: 'provider_api_key_${option.id}',
       value: value,
       aOptions: const AndroidOptions(encryptedSharedPreferences: true),
-      iOptions: const IOSOptions(accessibility: IOSAccessibility.first_unlock_this_device_only),
+      iOptions:
+          IOSOptions(accessibility: IOSAccessibility.first_unlock_this_device_only),
     );
 
     setState(() {
@@ -427,7 +430,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     await _secureStorage.delete(
       key: 'provider_api_key_${option.id}',
       aOptions: const AndroidOptions(encryptedSharedPreferences: true),
-      iOptions: const IOSOptions(
+      iOptions: IOSOptions(
         accessibility: IOSAccessibility.first_unlock_this_device_only,
       ),
     );
