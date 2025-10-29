@@ -174,12 +174,21 @@ class ProviderModelCatalogue:
                 continue
 
             provider_key = str(provider).lower()
+            factory = self._client_factories.get(provider_key)
+            if factory is None and self._clients_override is None:
+                self._logger.debug(
+                    "Skipping unsupported provider configuration %s", provider_key
+                )
+                continue
+
             is_active = bool(getattr(item, "is_active", False))
             if not is_active:
                 self._logger.debug(
                     "Skipping provider %s because it is inactive", provider_key
                 )
                 continue
+
+            requires_api_key = self.provider_requires_api_key(provider_key)
 
             base_url = getattr(item, "base_url", None)
             metadata_obj = getattr(item, "metadata", None)
@@ -196,7 +205,7 @@ class ProviderModelCatalogue:
                 if isinstance(candidate, str) and candidate.strip():
                     api_key = candidate.strip()
 
-            if api_key is None:
+            if api_key is None and requires_api_key:
                 self._logger.warning(
                     "Provider %s has no configured API key; user configuration is required to fetch models",
                     provider_key,
@@ -250,13 +259,18 @@ class ProviderModelCatalogue:
             )
 
         imagerouter_key = getattr(self._settings, "imagerouter_api_key", None)
-        if isinstance(imagerouter_key, str) and imagerouter_key:
-            fallbacks["imagerouter"] = _ProviderConfig(
-                provider="imagerouter",
-                base_url=getattr(self._settings, "imagerouter_api_base", None),
-                api_key=imagerouter_key,
-                metadata=None,
-            )
+        cleaned_imagerouter_key: str | None = None
+        if isinstance(imagerouter_key, str):
+            stripped = imagerouter_key.strip()
+            if stripped:
+                cleaned_imagerouter_key = stripped
+
+        fallbacks["imagerouter"] = _ProviderConfig(
+            provider="imagerouter",
+            base_url=getattr(self._settings, "imagerouter_api_base", None),
+            api_key=cleaned_imagerouter_key,
+            metadata=None,
+        )
 
         return fallbacks
 
@@ -346,6 +360,22 @@ class ProviderModelCatalogue:
         if isinstance(timeout, (int, float)) and timeout > 0:
             return float(timeout)
         return self._provider_timeout
+
+    def provider_requires_api_key(self, provider: str) -> bool:
+        """Return True when the provider client mandates an API key."""
+
+        provider_key = str(provider).lower()
+
+        if self._clients_override is not None:
+            for client in self._clients_override:
+                if getattr(client, "provider", "").lower() == provider_key:
+                    return getattr(client, "requires_api_key", True)
+
+        factory = self._client_factories.get(provider_key)
+        if factory is None:
+            return True
+
+        return getattr(factory, "requires_api_key", True)
 
     @classmethod
     def clear_cache(cls) -> None:
