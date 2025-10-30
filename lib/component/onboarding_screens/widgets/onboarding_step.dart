@@ -107,7 +107,7 @@ class OnboardingStep extends StatelessWidget {
                                     switchInCurve: Curves.easeOut,
                                     switchOutCurve: Curves.easeIn,
                                     child: KeyedSubtree(
-                                      key: ValueKey('body-$currentStep'),
+                                      key: ValueKey('body-$title'),
                                       child: body!,
                                     ),
                                   ),
@@ -117,7 +117,7 @@ class OnboardingStep extends StatelessWidget {
                                   AnimatedSwitcher(
                                     duration: const Duration(milliseconds: 300),
                                     child: KeyedSubtree(
-                                      key: ValueKey('footer-$currentStep'),
+                                      key: ValueKey('footer-$title'),
                                       child: footer!,
                                     ),
                                   ),

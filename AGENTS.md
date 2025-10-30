@@ -137,6 +137,8 @@ echo "✅ Setup completed for $APP_NAME"
 - Render onboarding content directly on the page—avoid wrapping steps in card-like
   containers—and preserve smooth animations for screen transitions and progress
   indicators.
+- Do not require provider/API key setup during onboarding; clearly communicate
+  that configuration can happen later in Settings.
 
 **Remember**: The goal is to maintain a high-quality, production-ready codebase that is well-documented and thoroughly tested.
 ```

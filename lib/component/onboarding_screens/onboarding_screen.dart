@@ -22,7 +22,16 @@ class OnboardingScreen extends StatefulWidget {
 
 class _OnboardingScreenState extends State<OnboardingScreen> {
   static const _totalSteps = 6;
+  static const List<String> _illustrations = [
+    'assets/illustrations/ob1.png',
+    'assets/illustrations/ob2.png',
+    'assets/illustrations/ob3.gif',
+    'assets/illustrations/ob4.gif',
+    'assets/illustrations/ob5.gif',
+    'assets/illustrations/ob6.gif',
+  ];
   final TextEditingController _demoChatController = TextEditingController();
+  late final PageController _pageController;
 
   final List<ProviderOption> _providers = const [
     ProviderOption(
@@ -59,10 +68,12 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   Color _accentColor = const Color(0xFF6750A4);
   LayoutDensity _layoutDensity = LayoutDensity.comfortable;
   bool _isCompleting = false;
+  bool _isTransitioning = false;
 
   @override
   void initState() {
     super.initState();
+    _pageController = PageController();
     _models = [
       const ModelOption(
         id: 'gpt-4o-mini',
@@ -98,59 +109,57 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
       ),
     ];
 
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      for (final asset in _illustrations) {
+        precacheImage(AssetImage(asset), context);
+      }
+    });
   }
 
   @override
   void dispose() {
+    _pageController.dispose();
     _demoChatController.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    final stepData = _buildStep();
-    final isLastStep = _currentStep == _totalSteps - 1;
-
     return Scaffold(
       backgroundColor: Theme.of(context).colorScheme.surface,
-      body: AnimatedSwitcher(
-        duration: const Duration(milliseconds: 450),
-        switchInCurve: Curves.easeOutCubic,
-        switchOutCurve: Curves.easeInCubic,
-        transitionBuilder: (child, animation) {
-          final curved = CurvedAnimation(parent: animation, curve: Curves.easeOutCubic, reverseCurve: Curves.easeInCubic);
-          return FadeTransition(
-            opacity: curved,
-            child: SlideTransition(
-              position: Tween<Offset>(
-                begin: const Offset(0.05, 0),
-                end: Offset.zero,
-              ).animate(curved),
-              child: child,
-            ),
+      body: PageView.builder(
+        controller: _pageController,
+        physics: const NeverScrollableScrollPhysics(),
+        itemCount: _totalSteps,
+        itemBuilder: (context, index) {
+          final stepData = _buildStep(context, index);
+          final isLastStep = index == _totalSteps - 1;
+
+          return OnboardingStep(
+            key: ValueKey('step-$index'),
+            illustrationAsset: stepData.illustration,
+            title: stepData.title,
+            subtitle: stepData.subtitle,
+            body: stepData.body,
+            footer: stepData.footer,
+            currentStep: _currentStep,
+            totalSteps: _totalSteps,
+            showPrevious: index > 0,
+            isLastStep: isLastStep,
+            onSkip: _isCompleting || _isTransitioning ? null : _skipOnboarding,
+            onPrevious: index > 0 && !_isTransitioning ? () => _handlePreviousFrom(index) : null,
+            onNext: _isCompleting || _isTransitioning
+                ? null
+                : () => _handleNextFrom(index, isLastStep: isLastStep),
           );
         },
-        child: OnboardingStep(
-          key: ValueKey(_currentStep),
-          illustrationAsset: stepData.illustration,
-          title: stepData.title,
-          subtitle: stepData.subtitle,
-          body: stepData.body,
-          footer: stepData.footer,
-          currentStep: _currentStep,
-          totalSteps: _totalSteps,
-          showPrevious: _currentStep > 0,
-          isLastStep: isLastStep,
-          onSkip: _isCompleting ? null : _skipOnboarding,
-          onPrevious: _currentStep > 0 ? _handlePrevious : null,
-          onNext: _isCompleting ? null : _handleNext,
-        ),
       ),
     );
   }
 
-  _OnboardingStepData _buildStep() {
-    switch (_currentStep) {
+  _OnboardingStepData _buildStep(BuildContext context, int step) {
+    switch (step) {
       case 0:
         return _OnboardingStepData(
           illustration: 'assets/illustrations/ob1.png',
@@ -318,30 +327,56 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     }
   }
 
-  void _handleNext() {
-    switch (_currentStep) {
-      case 2:
-        if (_selectedModelId == null) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Choose a default model to continue.')),
-          );
-          return;
-        }
-        break;
-      case 5:
-        unawaited(_completeOnboarding());
-        return;
+  void _handleNextFrom(int index, {required bool isLastStep}) {
+    if (index == 2 && _selectedModelId == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Choose a default model to continue.')),
+      );
+      return;
+    }
+
+    if (isLastStep) {
+      unawaited(_completeOnboarding());
+      return;
+    }
+
+    unawaited(_animateToStep(index + 1));
+  }
+
+  void _handlePreviousFrom(int index) {
+    if (index <= 0) return;
+    unawaited(_animateToStep(index - 1));
+  }
+
+  Future<void> _animateToStep(int targetStep) async {
+    if (_isTransitioning || targetStep == _currentStep) {
+      return;
     }
 
     setState(() {
-      _currentStep = (_currentStep + 1).clamp(0, _totalSteps - 1);
+      _isTransitioning = true;
+      _currentStep = targetStep.clamp(0, _totalSteps - 1);
     });
-  }
 
-  void _handlePrevious() {
-    setState(() {
-      _currentStep = (_currentStep - 1).clamp(0, _totalSteps - 1);
-    });
+    if (!_pageController.hasClients) {
+      _pageController.jumpToPage(_currentStep);
+      if (mounted) {
+        setState(() => _isTransitioning = false);
+      }
+      return;
+    }
+
+    try {
+      await _pageController.animateToPage(
+        _currentStep,
+        duration: const Duration(milliseconds: 320),
+        curve: Curves.easeOutCubic,
+      );
+    } finally {
+      if (mounted) {
+        setState(() => _isTransitioning = false);
+      }
+    }
   }
 
   Future<void> _skipOnboarding() async {
