@@ -95,6 +95,7 @@ class _ModelTile extends StatelessWidget {
             : null,
       ),
       child: Column(
+        mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           CircleAvatar(
@@ -114,7 +115,7 @@ class _ModelTile extends StatelessWidget {
             option.description,
             style: theme.textTheme.bodySmall,
           ),
-          const Spacer(),
+          const SizedBox(height: 16),
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
