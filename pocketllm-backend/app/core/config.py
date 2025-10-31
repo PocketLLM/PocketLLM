@@ -87,10 +87,10 @@ class Settings(BaseSettings):
         default=300, alias="PROVIDER_CATALOGUE_CACHE_TTL"
     )
     provider_catalogue_provider_timeout: float = Field(
-        default=4.0, alias="PROVIDER_CATALOGUE_PROVIDER_TIMEOUT"
+        default=12.0, alias="PROVIDER_CATALOGUE_PROVIDER_TIMEOUT"
     )
     provider_catalogue_total_timeout: float = Field(
-        default=8.0, alias="PROVIDER_CATALOGUE_TOTAL_TIMEOUT"
+        default=30.0, alias="PROVIDER_CATALOGUE_TOTAL_TIMEOUT"
     )
 
 

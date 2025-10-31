@@ -38,8 +38,8 @@ class _CacheEntry:
 class ProviderModelCatalogue:
     """Aggregate models across multiple provider clients with concurrency safeguards."""
 
-    PROVIDER_TIMEOUT = 4.0
-    TOTAL_TIMEOUT = 8.0
+    PROVIDER_TIMEOUT = 12.0
+    TOTAL_TIMEOUT = 30.0
 
     def __init__(
         self,

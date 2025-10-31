@@ -180,47 +180,40 @@ async def test_activate_provider_populates_openrouter_defaults(monkeypatch) -> N
 
 
 @pytest.mark.anyio("asyncio")
-async def test_get_provider_models_uses_static_catalogue_when_live_data_empty(monkeypatch) -> None:
+async def test_get_provider_models_uses_public_catalogue_when_no_user_providers(monkeypatch) -> None:
     user_id = uuid4()
     settings = SimpleNamespace()
     database = _EmptyDatabase()
     catalogue = Mock()
-    catalogue.list_all_models = AsyncMock(return_value=[])
+    public_model = ProviderModel(provider="imagerouter", id="public", name="Public Model")
+    catalogue.list_all_models = AsyncMock(return_value=[public_model])
 
     service = ProvidersService(settings, database, catalogue=catalogue)
 
-    fallback_model = ProviderModel(provider="openrouter", id="fallback", name="Fallback Model")
-
-    monkeypatch.setattr(
-        "app.services.provider_configs.load_static_models",
-        lambda: (fallback_model,),
-    )
-
     response = await service.get_provider_models(user_id)
 
+    catalogue.list_all_models.assert_awaited_once()
     assert response.using_fallback is True
     assert len(response.models) == 1
-    assert response.models[0].id == fallback_model.id
-    assert response.message is not None and "curated" in response.message.lower()
+    assert response.models[0].id == public_model.id
+    assert response.message is not None and "public" in response.message.lower()
 
 
 @pytest.mark.anyio("asyncio")
-async def test_get_provider_models_for_specific_provider_uses_static_catalogue(monkeypatch) -> None:
+async def test_get_provider_models_for_specific_provider_returns_public_results(monkeypatch) -> None:
     user_id = uuid4()
     settings = SimpleNamespace()
     database = _EmptyDatabase()
-    service = ProvidersService(settings, database, catalogue=Mock())
+    catalogue = Mock()
+    live_model = ProviderModel(provider="openrouter", id="alt", name="Alt Model")
+    catalogue.list_models_for_provider = AsyncMock(return_value=[live_model])
 
-    fallback_model = ProviderModel(provider="openrouter", id="alt", name="Alt Model")
-
-    monkeypatch.setattr(
-        "app.services.provider_configs.load_static_models_for_provider",
-        lambda provider: (fallback_model,) if provider == "openrouter" else tuple(),
-    )
+    service = ProvidersService(settings, database, catalogue=catalogue)
 
     response = await service.get_provider_models(user_id, provider="openrouter")
 
+    catalogue.list_models_for_provider.assert_awaited_once()
     assert response.using_fallback is True
     assert len(response.models) == 1
     assert response.models[0].id == "alt"
-    assert response.message is not None and "curated" in response.message.lower()
+    assert response.message is not None and "public" in response.message.lower()
