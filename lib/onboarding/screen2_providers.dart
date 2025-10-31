@@ -102,7 +102,7 @@ class Screen2Providers extends HookConsumerWidget {
                 ),
                 const SizedBox(height: 24),
                 OnboardingIllustration(
-                  asset: 'assets/illustrations/ob2.png',
+                  asset: 'assets/illustration/ob2.png',
                   reduceMotion: reduceMotion,
                   height: MediaQuery.of(context).size.height * 0.24,
                 ).onboardingIllustration(

@@ -70,7 +70,7 @@ class Screen6Done extends HookConsumerWidget {
               alignment: Alignment.center,
               children: [
                 OnboardingIllustration(
-                  asset: 'assets/illustrations/ob6.gif',
+                  asset: 'assets/illustration/ob6.gif',
                   reduceMotion: reduceMotion,
                   height: MediaQuery.of(context).size.height * 0.32,
                 ).onboardingIllustration(
@@ -82,7 +82,7 @@ class Screen6Done extends HookConsumerWidget {
                     opacity: overlayVisible.value ? 1 : 0,
                     duration: MotionDurations.medium,
                     child: OnboardingIllustration(
-                      asset: 'assets/illustrations/ob6.gif',
+                      asset: 'assets/illustration/ob6.gif',
                       reduceMotion: true,
                       height: MediaQuery.of(context).size.height * 0.32,
                     ),

@@ -21,9 +21,9 @@ class OnboardingPager extends HookConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final reduceMotion = MediaQuery.of(context).accessibilityFeatures.reduceMotion;
+    final reduceMotion = _shouldReduceMotion(context);
     final controller = usePageController();
-    final pageValue = useState<double>(0);
+    final pageValue = useState<double>(0.0);
     final animationComplete = useState(false);
 
     useEffect(() {
@@ -37,12 +37,12 @@ class OnboardingPager extends HookConsumerWidget {
 
     final assets = useMemoized(() {
       return const [
-        'assets/illustrations/ob1.png',
-        'assets/illustrations/ob2.png',
-        'assets/illustrations/ob3.gif',
-        'assets/illustrations/ob4.gif',
-        'assets/illustrations/ob5.gif',
-        'assets/illustrations/ob6.gif',
+        'assets/illustration/ob1.png',
+        'assets/illustration/ob2.png',
+        'assets/illustration/ob3.gif',
+        'assets/illustration/ob4.gif',
+        'assets/illustration/ob5.gif',
+        'assets/illustration/ob6.gif',
       ];
     });
 
@@ -147,4 +147,14 @@ class OnboardingPager extends HookConsumerWidget {
           duration: MotionDurations.medium,
         );
   }
+}
+
+bool _shouldReduceMotion(BuildContext context) {
+  final mediaQuery = MediaQuery.maybeOf(context);
+  if (mediaQuery != null) {
+    if (mediaQuery.disableAnimations || mediaQuery.accessibleNavigation) {
+      return true;
+    }
+  }
+  return WidgetsBinding.instance.platformDispatcher.accessibilityFeatures.reduceMotion;
 }

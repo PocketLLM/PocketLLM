@@ -73,7 +73,7 @@ class Screen5Permissions extends HookConsumerWidget {
             child: Column(
               children: [
                 OnboardingIllustration(
-                  asset: 'assets/illustrations/ob5.gif',
+                  asset: 'assets/illustration/ob5.gif',
                   reduceMotion: reduceMotion,
                   height: MediaQuery.of(context).size.height * 0.3,
                 ).onboardingIllustration(
@@ -84,21 +84,26 @@ class Screen5Permissions extends HookConsumerWidget {
                 AnimatedSwitcher(
                   duration: MotionDurations.medium,
                   child: shimmer.value
-                      ? Container(
+                      ? Animate(
                           key: const ValueKey('progress'),
-                          height: 6,
-                          decoration: BoxDecoration(
-                            borderRadius: BorderRadius.circular(999),
-                            gradient: LinearGradient(
-                              colors: [
-                                AppColors.primary.withOpacity(0.2),
-                                AppColors.primary,
-                                AppColors.primary.withOpacity(0.2),
-                              ],
+                          onPlay: (controller) => controller.repeat(),
+                          effects: const [
+                            ShimmerEffect(duration: Duration(milliseconds: 900)),
+                          ],
+                          child: Container(
+                            height: 6,
+                            decoration: BoxDecoration(
+                              borderRadius: BorderRadius.circular(999),
+                              gradient: LinearGradient(
+                                colors: [
+                                  AppColors.primary.withOpacity(0.2),
+                                  AppColors.primary,
+                                  AppColors.primary.withOpacity(0.2),
+                                ],
+                              ),
                             ),
-                          ).animate(onPlay: (controller) => controller.repeat()).shimmer(
-                            duration: const Duration(milliseconds: 900),
-                          )
+                          ),
+                        )
                       : const SizedBox(height: 6),
                 ),
               ],

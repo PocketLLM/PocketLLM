@@ -25,7 +25,7 @@ class Screen1Welcome extends HookConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final parallax = useState<double>(0);
+    final parallax = useState<double>(0.0);
 
     useEffect(() {
       void listener() {
@@ -75,7 +75,7 @@ class Screen1Welcome extends HookConsumerWidget {
                     Transform.translate(
                       offset: Offset(imageDelta, 0),
                       child: OnboardingIllustration(
-                        asset: 'assets/illustrations/ob1.png',
+                        asset: 'assets/illustration/ob1.png',
                         reduceMotion: reduceMotion,
                         height: MediaQuery.of(context).size.height * 0.32,
                       ).onboardingIllustration(

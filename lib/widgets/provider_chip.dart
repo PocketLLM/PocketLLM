@@ -67,8 +67,8 @@ class ProviderChip extends StatelessWidget {
           ),
         ).animate(target: selected ? 1 : 0).scale(
               duration: MotionDurations.short,
-              begin: 1,
-              end: 1.02,
+              begin: const Offset(1, 1),
+              end: const Offset(1.02, 1.02),
               curve: MotionCurves.easeOutCubic,
             ),
       ),

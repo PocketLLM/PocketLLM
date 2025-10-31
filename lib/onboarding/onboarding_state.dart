@@ -6,7 +6,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 final onboardingControllerProvider =
     StateNotifierProvider<OnboardingController, OnboardingModel>((ref) {
-  return OnboardingController(ref.read);
+  return OnboardingController();
 });
 
 final onboardingFutureProvider = FutureProvider<OnboardingModel>((ref) async {
@@ -98,10 +98,9 @@ class OnboardingModel {
 }
 
 class OnboardingController extends StateNotifier<OnboardingModel> {
-  OnboardingController(this._read) : super(OnboardingModel.initial());
+  OnboardingController() : super(OnboardingModel.initial());
 
   static const _prefsKey = 'onboarding_state_v1';
-  final Reader _read;
   Timer? _debounce;
   bool _hydrated = false;
 

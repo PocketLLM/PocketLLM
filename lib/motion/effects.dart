@@ -29,7 +29,11 @@ extension AnimateEntrance on Widget {
     }
     return animate()
         .fadeIn(duration: MotionDurations.long, delay: delay)
-        .scale(begin: 0.96, end: 1.0, curve: MotionCurves.easeOutCubic);
+        .scale(
+          begin: const Offset(0.96, 0.96),
+          end: const Offset(1.0, 1.0),
+          curve: MotionCurves.easeOutCubic,
+        );
   }
 
   Widget onboardingCta({required bool reduceMotion, Duration? delay}) {
@@ -47,17 +51,15 @@ extension DotAnimate on Widget {
     return animate()
         .scale(
           duration: MotionDurations.pager,
-          begin: 1,
-          end: 1 + 0.6 * progress,
+          begin: Offset(1, 1),
+          end: Offset(1 + 0.6 * progress, 1 + 0.6 * progress),
           curve: MotionCurves.pager,
         )
         .tint(
           duration: MotionDurations.pager,
           curve: MotionCurves.pager,
-          color: ColorTween(
-            begin: AppColors.textSecondary,
-            end: AppColors.primary,
-          ),
+          begin: AppColors.textSecondary,
+          color: AppColors.primary,
         );
   }
 }

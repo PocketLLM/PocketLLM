@@ -71,7 +71,7 @@ class Screen3RoutingTools extends ConsumerWidget {
                 ).animate(delay: MotionStaggers.short * 3).fadeIn(duration: MotionDurations.medium),
                 const Spacer(),
                 OnboardingIllustration(
-                  asset: 'assets/illustrations/ob3.gif',
+                  asset: 'assets/illustration/ob3.gif',
                   reduceMotion: reduceMotion,
                   height: MediaQuery.of(context).size.height * 0.28,
                 ).onboardingIllustration(

@@ -57,8 +57,8 @@ class Screen4Privacy extends ConsumerWidget {
                   value: state.localHistoryOnly,
                   onChanged: notifier.toggleLocalHistory,
                 ).animate(delay: MotionStaggers.short).scale(
-                      begin: 0.96,
-                      end: 1.05,
+                      begin: const Offset(0.96, 0.96),
+                      end: const Offset(1.05, 1.05),
                       duration: MotionDurations.medium,
                       curve: MotionCurves.emphasized,
                     ),
@@ -68,8 +68,8 @@ class Screen4Privacy extends ConsumerWidget {
                   value: state.analytics,
                   onChanged: notifier.toggleAnalytics,
                 ).animate(delay: MotionStaggers.short * 2).scale(
-                      begin: 0.96,
-                      end: 1.05,
+                      begin: const Offset(0.96, 0.96),
+                      end: const Offset(1.05, 1.05),
                       duration: MotionDurations.medium,
                       curve: MotionCurves.emphasized,
                     ),
@@ -79,14 +79,14 @@ class Screen4Privacy extends ConsumerWidget {
                   value: state.localVectorCache,
                   onChanged: notifier.toggleLocalVector,
                 ).animate(delay: MotionStaggers.short * 3).scale(
-                      begin: 0.96,
-                      end: 1.05,
+                      begin: const Offset(0.96, 0.96),
+                      end: const Offset(1.05, 1.05),
                       duration: MotionDurations.medium,
                       curve: MotionCurves.emphasized,
                     ),
                 const Spacer(),
                 OnboardingIllustration(
-                  asset: 'assets/illustrations/ob4.gif',
+                  asset: 'assets/illustration/ob4.gif',
                   reduceMotion: reduceMotion,
                   height: MediaQuery.of(context).size.height * 0.28,
                 ).onboardingIllustration(
