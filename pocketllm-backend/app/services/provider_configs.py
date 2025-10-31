@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import replace
-from typing import Any, Iterable
+from typing import Any, Iterable, Sequence
 from uuid import UUID
 
 from fastapi import HTTPException, status
@@ -20,7 +20,6 @@ from app.schemas.providers import (
     ProviderStatus,
     ProviderUpdateRequest,
 )
-from app.data.static_models import load_static_models, load_static_models_for_provider
 from app.services.api_keys import APIKeyValidationService
 from app.services.providers import (
     GroqProviderClient,
@@ -241,35 +240,28 @@ class ProvidersService:
         filters_applied = any([name, model_id, query])
 
         if provider is None:
-            models: list[ProviderModel] = []
-            if active_records:
-                models = await self._catalogue.list_all_models(active_records)
+            providers_arg: Sequence[object] | None = active_records if active_records else None
+            models = await self._catalogue.list_all_models(providers_arg)
 
             filtered = _apply_filters(models)
-            fallback_used = False
+            using_public_catalogue = not active_records
+            fallback_used = using_public_catalogue and bool(filtered)
             message: str | None = None
-
-            if not filtered:
-                fallback_candidates = _apply_filters(load_static_models())
-                if fallback_candidates:
-                    filtered = fallback_candidates
-                    fallback_used = True
-                    message = (
-                        "Showing PocketLLM's curated model catalogue until you connect your own providers."
-                        if not active_records
-                        else "Live provider catalogue is temporarily unavailable; showing curated results instead."
-                    )
 
             if not filtered:
                 if filters_applied:
                     message = "No models matched the provided filters."
-                elif not active_records:
+                elif using_public_catalogue:
                     message = (
                         "No providers are configured for this workspace. "
                         "Add a provider to browse available models."
                     )
                 else:
                     message = "No models are currently available from the configured providers."
+            elif using_public_catalogue:
+                message = (
+                    "Showing public provider catalogue results until you connect your own providers."
+                )
 
             missing = [
                 provider_name
@@ -316,21 +308,6 @@ class ProvidersService:
                     using_fallback=True,
                 )
 
-            fallback_candidates = _apply_filters(
-                load_static_models_for_provider(provider_key)
-            )
-            if fallback_candidates:
-                return ProviderModelsResponse(
-                    models=fallback_candidates,
-                    message=(
-                        f"Provider '{provider}' is not yet configured for this workspace. "
-                        "Showing curated catalogue results."
-                    ),
-                    configured_providers=configured_providers,
-                    missing_providers=fallback_missing,
-                    using_fallback=True,
-                )
-
             return ProviderModelsResponse(
                 models=[],
                 message=(
@@ -344,17 +321,6 @@ class ProvidersService:
         filtered = _apply_filters(models)
         fallback_used = False
         message: str | None = None
-
-        if not filtered:
-            fallback_candidates = _apply_filters(
-                load_static_models_for_provider(provider_key)
-            )
-            if fallback_candidates:
-                filtered = fallback_candidates
-                fallback_used = True
-                message = (
-                    f"Live catalogue for provider '{provider}' is unavailable; showing curated results instead."
-                )
 
         if not filtered:
             if filters_applied:
