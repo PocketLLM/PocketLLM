@@ -55,11 +55,11 @@ extension DotAnimate on Widget {
           end: Offset(1 + 0.6 * progress, 1 + 0.6 * progress),
           curve: MotionCurves.pager,
         )
-        .tint(
+        .color(
           duration: MotionDurations.pager,
           curve: MotionCurves.pager,
           begin: AppColors.textSecondary,
-          color: AppColors.primary,
+          end: AppColors.primary,
         );
   }
 }

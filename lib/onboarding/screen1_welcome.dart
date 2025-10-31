@@ -29,7 +29,8 @@ class Screen1Welcome extends HookConsumerWidget {
 
     useEffect(() {
       void listener() {
-        final page = pageController.hasClients ? (pageController.page ?? 0) : 0;
+        final page =
+            pageController.hasClients ? (pageController.page ?? 0.0) : 0.0;
         parallax.value = page;
       }
 
