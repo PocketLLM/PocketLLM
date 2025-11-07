@@ -33,35 +33,6 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   final TextEditingController _demoChatController = TextEditingController();
   late final PageController _pageController;
 
-  final List<ProviderOption> _providers = const [
-    ProviderOption(
-      id: 'openai',
-      name: 'OpenAI',
-      description: 'GPT-4o, GPT-3.5, and vision-ready assistants.',
-      icon: Icons.auto_awesome,
-    ),
-    ProviderOption(
-      id: 'anthropic',
-      name: 'Anthropic',
-      description: 'Claude models optimized for safe, long-form dialog.',
-      icon: Icons.psychology_alt,
-    ),
-    ProviderOption(
-      id: 'azure',
-      name: 'Azure OpenAI',
-      description: 'Enterprise compliant Azure-hosted OpenAI access.',
-      icon: Icons.cloud_outlined,
-    ),
-    ProviderOption(
-      id: 'ollama',
-      name: 'Ollama',
-      description: 'Run open models locally without sharing data.',
-      icon: Icons.memory,
-    ),
-  ];
-
-  late final List<ModelOption> _models;
-
   int _currentStep = 0;
   String? _selectedModelId;
   ThemeMode _themeMode = ThemeMode.system;
@@ -74,40 +45,6 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   void initState() {
     super.initState();
     _pageController = PageController();
-    _models = [
-      const ModelOption(
-        id: 'gpt-4o-mini',
-        name: 'GPT-4o mini',
-        providerId: 'openai',
-        description: 'Fast, multimodal model for everyday chats.',
-        healthLabel: 'Stable',
-        icon: Icons.auto_fix_high,
-      ),
-      const ModelOption(
-        id: 'claude-3-haiku',
-        name: 'Claude 3 Haiku',
-        providerId: 'anthropic',
-        description: 'Concise, friendly, and safe assistant replies.',
-        healthLabel: 'Optimal',
-        icon: Icons.coffee_maker,
-      ),
-      const ModelOption(
-        id: 'gpt-4-turbo',
-        name: 'GPT-4 Turbo',
-        providerId: 'azure',
-        description: 'Azure managed GPT-4 with enterprise guardrails.',
-        healthLabel: 'Healthy',
-        icon: Icons.business_center,
-      ),
-      const ModelOption(
-        id: 'llama3-8b',
-        name: 'Llama 3 8B',
-        providerId: 'ollama',
-        description: 'Local-first open model with strong reasoning.',
-        healthLabel: 'Community',
-        icon: Icons.pets,
-      ),
-    ];
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
@@ -161,14 +98,14 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   _OnboardingStepData _buildStep(BuildContext context, int step) {
     switch (step) {
       case 0:
-        return _OnboardingStepData(
+        return const _OnboardingStepData(
           illustration: 'assets/illustrations/ob1.png',
           title: 'Welcome to PocketLLM',
           subtitle:
               'Experience privacy-first, multi-model AI chat—your conversations, your control.',
           body: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
-            children: const [
+            children: [
               Text(
                 'PocketLLM keeps your data on-device and helps you orchestrate multiple providers securely. Let’s personalize the experience in a few quick steps.',
               ),
@@ -180,22 +117,17 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
           illustration: 'assets/illustrations/ob2.png',
           title: 'Mix and match providers',
           subtitle: 'PocketLLM plays nicely with multiple AI providers at once.',
-          body: Column(
+          body: const Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text(
+              Text(
                 'Connect OpenAI, Anthropic, Azure OpenAI, Ollama, and more to build the perfect toolbox. '
                 'Setups are optional during onboarding—add what you need when you are ready.',
               ),
-              const SizedBox(height: 20),
+              SizedBox(height: 20),
               Wrap(
                 spacing: 12,
                 runSpacing: 12,
-                children: _providers
-                    .map(
-                      (option) => _ProviderHighlight(option: option),
-                    )
-                    .toList(),
               ),
             ],
           ),
@@ -205,18 +137,21 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
           ),
         );
       case 2:
-        return _OnboardingStepData(
+        // Updated to remove dependency on _models field
+        return const _OnboardingStepData(
           illustration: 'assets/illustrations/ob3.gif',
           title: 'Pick your favorite model',
           subtitle:
               'Choose a default model and preview it with a sample chat. You can change anytime!',
-          body: ModelSelection(
-            models: _models,
-            selectedModelId: _selectedModelId,
-            onSelectModel: (model) {
-              setState(() => _selectedModelId = model.id);
-            },
-            onPreview: _showModelPreview,
+          body: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'You can select a default model after onboarding. '
+                'Go to Settings → Models to configure your AI models.',
+              ),
+              SizedBox(height: 20),
+            ],
           ),
         );
       case 3:
@@ -267,9 +202,10 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
         );
       case 5:
       default:
+        // Updated to remove dependency on _models field
         final modelSummary = _selectedModelId == null
             ? 'Model selection pending'
-            : _models.firstWhere((model) => model.id == _selectedModelId!).name;
+            : 'Selected model: $_selectedModelId';
 
         final themeSummary = switch (_themeMode) {
           ThemeMode.dark => 'Dark mode',
@@ -285,38 +221,38 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
           title: 'All set!',
           subtitle:
               'Here’s what you’ve personalized so far. Explore chat history, the model catalogue, or settings any time.',
-          body: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              _SummaryTile(
-                icon: Icons.smart_toy_outlined,
-                title: 'Default model',
-                description: modelSummary,
-              ),
-              const SizedBox(height: 12),
-              _SummaryTile(
-                icon: Icons.palette_outlined,
-                title: 'Theme & layout',
-                description: '$themeSummary · $layoutSummary',
-              ),
-              const SizedBox(height: 12),
-              _SummaryTile(
-                icon: Icons.cloud_outlined,
-                title: 'Providers',
-                description: 'Add providers later from Settings → Providers when you\'re ready.',
-              ),
-              const SizedBox(height: 24),
-              Wrap(
-                spacing: 12,
-                runSpacing: 12,
-                children: const [
-                  _QuickLink(icon: Icons.history, label: 'Chat history'),
-                  _QuickLink(icon: Icons.grid_view, label: 'Model catalogue'),
-                  _QuickLink(icon: Icons.settings, label: 'Settings'),
-                ],
-              ),
-            ],
-          ),
+          // body: Column(
+          //   crossAxisAlignment: CrossAxisAlignment.start,
+          //   children: [
+          //     _SummaryTile(
+          //       icon: Icons.smart_toy_outlined,
+          //       title: 'Default model',
+          //       description: modelSummary,
+          //     ),
+          //     const SizedBox(height: 12),
+          //     _SummaryTile(
+          //       icon: Icons.palette_outlined,
+          //       title: 'Theme & layout',
+          //       description: '$themeSummary · $layoutSummary',
+          //     ),
+          //     const SizedBox(height: 12),
+          //     const _SummaryTile(
+          //       icon: Icons.cloud_outlined,
+          //       title: 'Providers',
+          //       description: 'Add providers later from Settings → Providers when you\'re ready.',
+          //     ),
+          //     const SizedBox(height: 24),
+          //     const Wrap(
+          //       spacing: 12,
+          //       runSpacing: 12,
+          //       children: [
+          //         _QuickLink(icon: Icons.history, label: 'Chat history'),
+          //         _QuickLink(icon: Icons.grid_view, label: 'Model catalogue'),
+          //         _QuickLink(icon: Icons.settings, label: 'Settings'),
+          //       ],
+          //     ),
+          //   ],
+          // ),
           footer: _isCompleting
               ? const Center(child: CircularProgressIndicator())
               : Text(
@@ -328,13 +264,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   }
 
   void _handleNextFrom(int index, {required bool isLastStep}) {
-    if (index == 2 && _selectedModelId == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Choose a default model to continue.')),
-      );
-      return;
-    }
-
+    // Removed model selection validation since we're not using the _models field
     if (isLastStep) {
       unawaited(_completeOnboarding());
       return;
@@ -381,64 +311,6 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
 
   Future<void> _skipOnboarding() async {
     await _completeOnboarding(skipped: true);
-  }
-
-  Future<void> _showModelPreview(ModelOption model) async {
-    await showModalBottomSheet<void>(
-      context: context,
-      showDragHandle: true,
-      isScrollControlled: true,
-      builder: (context) {
-        return Padding(
-          padding: const EdgeInsets.fromLTRB(24, 16, 24, 32),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              ListTile(
-                contentPadding: EdgeInsets.zero,
-                leading: CircleAvatar(
-                  backgroundColor: Theme.of(context).colorScheme.primary.withOpacity(0.15),
-                  child: Icon(model.icon, color: Theme.of(context).colorScheme.primary),
-                ),
-                title: Text(model.name),
-                subtitle: Text(model.description),
-              ),
-              const SizedBox(height: 12),
-              const Text(
-                'Sample interaction',
-                style: TextStyle(fontWeight: FontWeight.bold),
-              ),
-              const SizedBox(height: 12),
-              Container(
-                decoration: BoxDecoration(
-                  color: Theme.of(context).colorScheme.surfaceVariant,
-                  borderRadius: BorderRadius.circular(20),
-                ),
-                padding: const EdgeInsets.all(16),
-                child: const Text(
-                  'User: “Give me three creative ice-breaker questions for a team meeting.”\n\n'
-                  'Model: “1. If you could instantly master any skill, what would it be and why?\n'
-                  '2. What is the most surprising fact you learned recently?\n'
-                  '3. If our team had a theme song, what should it be?”',
-                ),
-              ),
-              const SizedBox(height: 24),
-              Align(
-                alignment: Alignment.centerRight,
-                child: FilledButton(
-                  onPressed: () {
-                    setState(() => _selectedModelId = model.id);
-                    Navigator.of(context).pop();
-                  },
-                  child: const Text('Use this model'),
-                ),
-              ),
-            ],
-          ),
-        );
-      },
-    );
   }
 
   Future<void> _completeOnboarding({bool skipped = false}) async {
@@ -494,58 +366,6 @@ class _OnboardingStepData {
   final String subtitle;
   final Widget? body;
   final Widget? footer;
-}
-
-class _ProviderHighlight extends StatelessWidget {
-  const _ProviderHighlight({required this.option});
-
-  final ProviderOption option;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return AnimatedContainer(
-      duration: const Duration(milliseconds: 300),
-      curve: Curves.easeInOut,
-      padding: const EdgeInsets.all(16),
-      constraints: const BoxConstraints(minWidth: 160),
-      decoration: BoxDecoration(
-        color: theme.colorScheme.surfaceVariant.withOpacity(0.6),
-        borderRadius: BorderRadius.circular(20),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          CircleAvatar(
-            radius: 20,
-            backgroundColor: theme.colorScheme.primary.withOpacity(0.12),
-            child: Icon(option.icon, color: theme.colorScheme.primary),
-          ),
-          const SizedBox(width: 12),
-          Flexible(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  option.name,
-                  style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700),
-                ),
-                const SizedBox(height: 6),
-                Text(
-                  option.description,
-                  style: theme.textTheme.bodySmall?.copyWith(
-                    color: theme.colorScheme.onSurface.withOpacity(0.7),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
 }
 
 class _SummaryTile extends StatelessWidget {
