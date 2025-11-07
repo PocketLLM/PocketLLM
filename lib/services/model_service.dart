@@ -117,6 +117,28 @@ class ModelService {
     await _refreshCache();
   }
 
+  Future<ModelConfig> getModelDetails(String modelId) async {
+    try {
+      final model = await _remoteModelService.getModelDetails(modelId);
+      final updated = List<ModelConfig>.from(_cachedModels);
+      final existingIndex = updated.indexWhere((item) => item.id == model.id);
+      if (existingIndex >= 0) {
+        updated[existingIndex] = model;
+      } else {
+        updated.add(model);
+      }
+      _cachedModels = updated;
+      _cacheInitialized = true;
+      if (model.isDefault) {
+        _defaultModelId = model.id;
+      }
+      return model;
+    } catch (e) {
+      debugPrint('Remote getModelDetails failed: $e');
+      rethrow;
+    }
+  }
+
   Future<List<ProviderConnection>> getProviders() async {
     try {
       final configurations = await _remoteModelService.getProviderConfigurations();

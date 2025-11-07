@@ -5,11 +5,8 @@
 ///   removing any direct client-side persistence.
 import 'package:flutter/material.dart';
 import '../component/models.dart';
-import '../component/model_config_dialog.dart';
-import '../component/model_list_item.dart';
-import '../services/backend_api_service.dart';
 import '../services/model_service.dart';
-import 'auth/auth_page.dart';
+import 'library_page.dart';
 
 class ModelSettingsPage extends StatefulWidget {
   const ModelSettingsPage({Key? key}) : super(key: key);
@@ -98,7 +95,7 @@ class _ModelSettingsPageState extends State<ModelSettingsPage> {
     ]);
   }
 
-  void _showAddModelSheet() {
+  Future<void> _openModelLibrary() async {
     final activeProviders = _providers.where((p) => p.isActive).toList();
     if (activeProviders.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -107,50 +104,12 @@ class _ModelSettingsPageState extends State<ModelSettingsPage> {
       return;
     }
 
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      builder: (context) => _AddModelSheet(
-        providers: activeProviders,
-        onImport: (provider, selections) async {
-          Navigator.of(context).pop();
-          await _importModels(provider, selections);
-        },
-      ),
+    await Navigator.of(context).push(
+      MaterialPageRoute(builder: (context) => const LibraryPage()),
     );
-  }
 
-  Future<void> _importModels(
-    ProviderConnection provider,
-    List<AvailableModelOption> selections,
-  ) async {
-    setState(() {
-      _isLoadingModels = true;
-    });
-
-    try {
-      await _modelService.importModelsFromProvider(
-        provider: provider.provider,
-        providerId: provider.id,
-        selections: selections,
-      );
-      await _loadModels();
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Imported ${selections.length} model(s) from ${provider.displayName}.')),
-      );
-    } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Failed to import models: $e')),
-      );
-    } finally {
-      if (mounted) {
-        setState(() {
-          _isLoadingModels = false;
-        });
-      }
-    }
+    if (!mounted) return;
+    await _refreshAll();
   }
 
   void _showModelDetails(ModelConfig model) {
@@ -285,7 +244,7 @@ class _ModelSettingsPageState extends State<ModelSettingsPage> {
             ),
             const SizedBox(height: 8),
             Text(
-              'Activate a provider and add models to get started.',
+              'Activate a provider and import models from the library to get started.',
               style: TextStyle(color: Colors.grey[600]),
             ),
           ],
@@ -396,10 +355,10 @@ class _ModelSettingsPageState extends State<ModelSettingsPage> {
       appBar: AppBar(
         title: const Text('Model Settings'),
       ),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: _showAddModelSheet,
-        icon: const Icon(Icons.add),
-        label: const Text('Add Model'),
+      floatingActionButton: FloatingActionButton(
+        onPressed: _openModelLibrary,
+        tooltip: 'Open Model Library',
+        child: const Icon(Icons.add),
       ),
       body: RefreshIndicator(
         onRefresh: _refreshAll,
@@ -424,199 +383,6 @@ class _ModelSettingsPageState extends State<ModelSettingsPage> {
             ),
           ],
         ),
-      ),
-    );
-  }
-}
-
-class _AddModelSheet extends StatefulWidget {
-  final List<ProviderConnection> providers;
-  final Future<void> Function(ProviderConnection provider, List<AvailableModelOption> selections) onImport;
-
-  const _AddModelSheet({required this.providers, required this.onImport});
-
-  @override
-  State<_AddModelSheet> createState() => _AddModelSheetState();
-}
-
-class _AddModelSheetState extends State<_AddModelSheet> {
-  final ModelService _modelService = ModelService();
-  ProviderConnection? _selectedProvider;
-  List<AvailableModelOption> _availableModels = [];
-  final Set<String> _selectedModelIds = {};
-  bool _isLoading = false;
-  String _searchQuery = '';
-
-  @override
-  void initState() {
-    super.initState();
-    if (widget.providers.isNotEmpty) {
-      _selectedProvider = widget.providers.first;
-      _loadModels();
-    }
-  }
-
-  Future<void> _loadModels() async {
-    final provider = _selectedProvider;
-    if (provider == null) return;
-
-    setState(() {
-      _isLoading = true;
-      _availableModels = [];
-      _selectedModelIds.clear();
-    });
-
-    try {
-      final models = await _modelService.getProviderModels(
-        provider: provider.provider,
-        search: _searchQuery.isEmpty ? null : _searchQuery,
-      );
-      if (!mounted) return;
-      setState(() {
-        _availableModels = models;
-      });
-    } catch (e) {
-      if (!mounted) return;
-      final message = e is BackendApiException ? e.message : 'Failed to load models: $e';
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(message)),
-      );
-    } finally {
-      if (mounted) {
-        setState(() {
-          _isLoading = false;
-        });
-      }
-    }
-  }
-
-  void _toggleSelection(String modelId) {
-    setState(() {
-      if (_selectedModelIds.contains(modelId)) {
-        _selectedModelIds.remove(modelId);
-      } else {
-        _selectedModelIds.add(modelId);
-      }
-    });
-  }
-
-  Future<void> _submit() async {
-    final provider = _selectedProvider;
-    if (provider == null || _selectedModelIds.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Select at least one model to import.')),
-      );
-      return;
-    }
-
-    final selections = _availableModels
-        .where((model) => _selectedModelIds.contains(model.id))
-        .toList();
-    await widget.onImport(provider, selections);
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: EdgeInsets.only(
-        left: 16,
-        right: 16,
-        top: 24,
-        bottom: MediaQuery.of(context).viewInsets.bottom + 16,
-      ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Container(
-            height: 4,
-            width: 40,
-            margin: const EdgeInsets.only(bottom: 16),
-            decoration: BoxDecoration(
-              color: Colors.grey[300],
-              borderRadius: BorderRadius.circular(4),
-            ),
-          ),
-          Text(
-            'Add Models',
-            style: Theme.of(context).textTheme.titleLarge,
-          ),
-          const SizedBox(height: 16),
-          DropdownButtonFormField<ProviderConnection>(
-            value: _selectedProvider,
-            decoration: const InputDecoration(labelText: 'Provider'),
-            items: widget.providers
-                .map(
-                  (provider) => DropdownMenuItem(
-                    value: provider,
-                    child: Text(provider.displayName),
-                  ),
-                )
-                .toList(),
-            onChanged: (value) {
-              setState(() {
-                _selectedProvider = value;
-              });
-              _loadModels();
-            },
-          ),
-          const SizedBox(height: 12),
-          TextField(
-            decoration: const InputDecoration(
-              labelText: 'Search models',
-              prefixIcon: Icon(Icons.search),
-            ),
-            onChanged: (value) {
-              _searchQuery = value;
-              _loadModels();
-            },
-          ),
-          const SizedBox(height: 16),
-          if (_isLoading)
-            const Padding(
-              padding: EdgeInsets.all(24),
-              child: CircularProgressIndicator(),
-            )
-          else if (_availableModels.isEmpty)
-            Padding(
-              padding: const EdgeInsets.all(24),
-              child: Text(
-                'No models found for the selected provider.',
-                style: TextStyle(color: Colors.grey[600]),
-              ),
-            )
-          else
-            SizedBox(
-              height: MediaQuery.of(context).size.height * 0.4,
-              child: ListView.builder(
-                itemCount: _availableModels.length,
-                itemBuilder: (context, index) {
-                  final model = _availableModels[index];
-                  final selected = _selectedModelIds.contains(model.id);
-                  return CheckboxListTile(
-                    value: selected,
-                    title: Text(model.name),
-                    subtitle: model.description != null
-                        ? Text(
-                            model.description!,
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
-                          )
-                        : null,
-                    onChanged: (_) => _toggleSelection(model.id),
-                  );
-                },
-              ),
-            ),
-          const SizedBox(height: 16),
-          SizedBox(
-            width: double.infinity,
-            child: ElevatedButton.icon(
-              onPressed: _selectedModelIds.isEmpty ? null : _submit,
-              icon: const Icon(Icons.download),
-              label: Text('Import ${_selectedModelIds.length} model(s)'),
-            ),
-          ),
-        ],
       ),
     );
   }
