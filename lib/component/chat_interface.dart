@@ -20,6 +20,7 @@ import 'appbar/chat_history.dart';
 import '../services/error_service.dart';
 import '../services/search_service.dart';
 import '../pages/search_settings_page.dart';
+import '../theme/app_colors.dart';
 
 part 'chat_interface_input.dart';
 
@@ -32,9 +33,9 @@ class ChatInterface extends StatefulWidget {
 
 class ChatInterfaceState extends State<ChatInterface> {
   bool _showAttachmentOptions = false;
-  final double _inputHeight = 56.0;
   final double _maxInputHeight = 120.0;
   final TextEditingController _messageController = TextEditingController();
+  final FocusNode _composerFocusNode = FocusNode();
   List<Message> get _messages => _chatHistoryService.activeConversationNotifier.value?.messages ?? [];
   
   bool _isLoading = false;
@@ -83,6 +84,7 @@ class ChatInterfaceState extends State<ChatInterface> {
     _modelState.selectedModelId.removeListener(_onModelChanged);
     _modelState.removeListener(_onModelStateChanged);
     _messageController.dispose();
+    _composerFocusNode.dispose();
     super.dispose();
   }
   
