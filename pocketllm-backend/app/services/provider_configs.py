@@ -53,6 +53,50 @@ class ProvidersService:
         records = await self._fetch_provider_records(user_id)
         return [record.to_schema() for record in records]
 
+    async def list_provider_statuses(self, user_id: UUID) -> list[ProviderStatus]:
+        """Return status information for all supported providers."""
+        records = await self._fetch_provider_records(user_id)
+        provider_map = {record.provider.lower(): record for record in records}
+        
+        statuses = []
+        supported_providers = {
+            "openai": {"name": "OpenAI"},
+            "groq": {"name": "Groq"},
+            "openrouter": {"name": "OpenRouter"},
+            "imagerouter": {"name": "ImageRouter"},
+        }
+        
+        for provider_key, provider_info in supported_providers.items():
+            record = provider_map.get(provider_key)
+            if record:
+                # Provider is configured
+                statuses.append(ProviderStatus(
+                    provider=provider_key,
+                    display_name=record.display_name or provider_info["name"],
+                    configured=True,
+                    is_active=record.is_active,
+                    has_api_key=bool(
+                        record.api_key 
+                        or record.api_key_encrypted 
+                        or record.api_key_hash
+                    ),
+                    api_key_preview=record.api_key_preview,
+                    message="Provider is configured and ready to use." if record.is_active else "Provider is configured but inactive."
+                ))
+            else:
+                # Provider is not configured
+                statuses.append(ProviderStatus(
+                    provider=provider_key,
+                    display_name=provider_info["name"],
+                    configured=False,
+                    is_active=False,
+                    has_api_key=False,
+                    api_key_preview=None,
+                    message=f"{provider_info['name']} provider is not yet configured."
+                ))
+        
+        return statuses
+
     async def activate_provider(
         self,
         user_id: UUID,
