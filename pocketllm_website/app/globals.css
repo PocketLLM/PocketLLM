@@ -1,8 +1,76 @@
 @import "tailwindcss";
+@import "tw-animate-css";
+
+/* Custom Fonts */
+@font-face {
+  font-family: 'Silver Garden';
+  src: url('/asset/fonts/Silver-Garden-Font/Silver Garden.otf') format('opentype');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Silver Garden';
+  src: url('/asset/fonts/Silver-Garden-Font/Silver Garden Bold.otf') format('opentype');
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Silver Garden';
+  src: url('/asset/fonts/Silver-Garden-Font/Silver Garden Italic.otf') format('opentype');
+  font-weight: 400;
+  font-style: italic;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Silver Garden';
+  src: url('/asset/fonts/Silver-Garden-Font/Silver Garden Bold Italic.otf') format('opentype');
+  font-weight: 700;
+  font-style: italic;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Kollektif';
+  src: url('/asset/fonts/kollektif/Kollektif.ttf') format('truetype');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Kollektif';
+  src: url('/asset/fonts/kollektif/Kollektif-Bold.ttf') format('truetype');
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Kollektif';
+  src: url('/asset/fonts/kollektif/Kollektif-Italic.ttf') format('truetype');
+  font-weight: 400;
+  font-style: italic;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Kollektif';
+  src: url('/asset/fonts/kollektif/Kollektif-BoldItalic.ttf') format('truetype');
+  font-weight: 700;
+  font-style: italic;
+  font-display: swap;
+}
 
 :root {
   --background: #ffffff;
   --foreground: #171717;
+  --font-silver-garden: 'Silver Garden', serif;
+  --font-kollektif: 'Kollektif', sans-serif;
 }
 
 @theme inline {
@@ -10,6 +78,10 @@
   --color-foreground: var(--foreground);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
+  --font-silver-garden: var(--font-silver-garden);
+  --font-kollektif: var(--font-kollektif);
+  --animate-accordion-down: accordion-down 0.2s ease-out;
+  --animate-accordion-up: accordion-up 0.2s ease-out;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -19,8 +91,40 @@
   }
 }
 
+html,
 body {
-  background: var(--background);
+  background: #000000;
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
+  margin: 0;
+  padding: 0;
+  overflow-x: hidden;
+}
+
+/* Utility classes for custom fonts */
+.font-silver-garden {
+  font-family: var(--font-silver-garden);
+}
+
+.font-kollektif {
+  font-family: var(--font-kollektif);
+}
+
+/* Accordion animations */
+@keyframes accordion-down {
+  from {
+    height: 0;
+  }
+  to {
+    height: var(--radix-accordion-content-height);
+  }
+}
+
+@keyframes accordion-up {
+  from {
+    height: var(--radix-accordion-content-height);
+  }
+  to {
+    height: 0;
+  }
 }

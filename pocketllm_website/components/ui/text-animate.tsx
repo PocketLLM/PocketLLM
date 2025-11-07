@@ -22,15 +22,11 @@ interface TextAnimateProps extends MotionProps {
   /**
    * The text content to animate
    */
-  children?: string;
-  /**
-   * A dictionary of words to be styled with their corresponding class names
-   */
-  styledWords?: { [word: string]: string };
+  children: string
   /**
    * The class name to be applied to the component
    */
-  className?: string;
+  className?: string
   /**
    * The class name to be applied to each segment
    */
@@ -319,37 +315,25 @@ const TextAnimateBase = ({
   by = "word",
   animation = "fadeIn",
   accessible = true,
-  styledWords = {},
   ...props
 }: TextAnimateProps) => {
-  const MotionComponent = motion.create(Component);
+  const MotionComponent = motion.create(Component)
 
-  const fullText = children || Object.keys(styledWords).join(" ");
-
-  let segments: (string | JSX.Element)[] = [];
+  let segments: string[] = []
   switch (by) {
     case "word":
-      segments = fullText.split(/(\s+)/).map((segment, index) => {
-        if (styledWords[segment]) {
-          return (
-            <span key={index} className={styledWords[segment]}>
-              {segment}
-            </span>
-          );
-        }
-        return segment;
-      });
-      break;
+      segments = children.split(/(\s+)/)
+      break
     case "character":
-      segments = fullText.split("");
-      break;
+      segments = children.split("")
+      break
     case "line":
-      segments = fullText.split("\n");
-      break;
+      segments = children.split("\n")
+      break
     case "text":
     default:
-      segments = [fullText];
-      break;
+      segments = [children]
+      break
   }
 
   const finalVariants = variants
@@ -407,15 +391,13 @@ const TextAnimateBase = ({
         exit="exit"
         className={cn("whitespace-pre-wrap", className)}
         viewport={{ once }}
-        aria-label={accessible ? fullText : undefined}
+        aria-label={accessible ? children : undefined}
         {...props}
       >
-        {accessible && <span className="sr-only">{fullText}</span>}
+        {accessible && <span className="sr-only">{children}</span>}
         {segments.map((segment, i) => (
           <motion.span
-            key={`${by}-${
-              typeof segment === "string" ? segment : segment.props.children
-            }-${i}`}
+            key={`${by}-${segment}-${i}`}
             variants={finalVariants.item}
             custom={i * staggerTimings[by]}
             className={cn(
@@ -435,3 +417,4 @@ const TextAnimateBase = ({
 
 // Export the memoized version
 export const TextAnimate = memo(TextAnimateBase)
+
