@@ -458,20 +458,24 @@ class ProviderStatusInfo {
     String? _string(dynamic value) => value is String ? value : null;
 
     final providerId = _string(json['provider']) ?? '';
+    final provider = ModelProviderExtension.fromBackend(providerId);
+
+    String fallbackName() {
+      if (providerId.isEmpty) {
+        return provider.displayName;
+      }
+      final normalizedId = providerId.toLowerCase();
+      if (normalizedId == provider.backendId.toLowerCase()) {
+        return provider.displayName;
+      }
+      return providerId;
+    }
+
     return ProviderStatusInfo(
-      provider: ModelProviderExtension.fromBackend(providerId),
+      provider: provider,
       displayName: _string(json['displayName']) ??
           _string(json['display_name']) ??
-          (() {
-            if (providerId.isEmpty) {
-              return provider.displayName;
-            }
-            final normalizedId = providerId.toLowerCase();
-            if (normalizedId == provider.backendId.toLowerCase()) {
-              return provider.displayName;
-            }
-            return providerId;
-          })(),
+          fallbackName(),
       configured: json['configured'] == true || json['is_configured'] == true,
       isActive: json['isActive'] == true || json['is_active'] == true,
       hasApiKey: json['hasApiKey'] == true || json['has_api_key'] == true,

@@ -140,6 +140,15 @@ class RemoteModelService {
     return models.map((raw) => _mapModel(Map<String, dynamic>.from(raw as Map))).toList();
   }
 
+  Future<ModelConfig> getModelDetails(String modelId) async {
+    final data = await _api.get('models/$modelId');
+    final payload = _castMap(data);
+    if (payload == null) {
+      throw StateError('Unexpected response when fetching model details: $data');
+    }
+    return _mapModel(payload);
+  }
+
   Future<AvailableModelsResponse> getAvailableModels({
     ModelProvider? provider,
     String? query,
