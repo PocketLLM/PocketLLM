@@ -89,7 +89,7 @@ class _SettingsPageState extends State<SettingsPage> {
             iconColor: Colors.purple,
             title: 'Model Settings',
             subtitle: 'Configure AI models and parameters',
-            showActionButtons: true,
+            showActionButtons: false, // Removed the + button
             onTap: () {
               Navigator.push(
                 context,
@@ -98,25 +98,6 @@ class _SettingsPageState extends State<SettingsPage> {
                 // Refresh the state when returning from the model settings page
                 setState(() {});
               });
-            },
-            onAddPressed: () {
-              showDialog(
-                context: context,
-                builder: (context) => ModelConfigDialog(
-                  onSave: (config) async {
-                    await _modelService.saveModel(config);
-                    // If this is the first model, set it as selected
-                    final configs = await _modelService.getSavedModels();
-                    if (configs.length == 1) {
-                      await _modelService.setDefaultModel(config.id);
-                    }
-                    setState(() {});
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(content: Text('Model configuration saved')),
-                    );
-                  },
-                ),
-              );
             },
           ),
           _buildSettingsItem(
@@ -319,15 +300,7 @@ class _SettingsPageState extends State<SettingsPage> {
                 ),
               ),
               if (showActionButtons && isImplemented)
-                Row(
-                  children: [
-                    IconButton(
-                      icon: Icon(Icons.add, color: ThemeService().colorScheme.primary),
-                      onPressed: onAddPressed,
-                    ),
-                    Icon(Icons.arrow_forward_ios, color: colorScheme.onSurface.withOpacity(0.4), size: 16),
-                  ],
-                )
+                Icon(Icons.arrow_forward_ios, color: colorScheme.onSurface.withOpacity(0.4), size: 16)
               else if (isImplemented)
                 Icon(Icons.arrow_forward_ios, color: colorScheme.onSurface.withOpacity(0.4), size: 16)
               else

@@ -8,6 +8,7 @@ import '../component/models.dart';
 import '../services/model_service.dart';
 import 'library_page.dart';
 import 'settings/ollama/ollama_settings_page.dart';
+import '../services/ollama_service.dart';
 
 class ModelSettingsPage extends StatefulWidget {
   const ModelSettingsPage({Key? key}) : super(key: key);
@@ -18,6 +19,7 @@ class ModelSettingsPage extends StatefulWidget {
 
 class _ModelSettingsPageState extends State<ModelSettingsPage> {
   final ModelService _modelService = ModelService();
+  final OllamaService _ollamaService = OllamaService();
 
   List<ModelConfig> _modelConfigs = [];
   List<ProviderConnection> _providers = [];
@@ -111,6 +113,70 @@ class _ModelSettingsPageState extends State<ModelSettingsPage> {
 
     if (!mounted) return;
     await _refreshAll();
+  }
+
+  void _showAddModelOptions() {
+    showModalBottomSheet(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (context) {
+        return SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // Handle bar
+              Container(
+                margin: const EdgeInsets.symmetric(vertical: 8),
+                width: 40,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: Colors.grey[300],
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+              // Title
+              const Padding(
+                padding: EdgeInsets.all(16),
+                child: Text(
+                  'Add Model',
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                ),
+              ),
+              // Ollama option
+              ListTile(
+                leading: const Icon(Icons.terminal, color: Colors.green),
+                title: const Text('Import from Ollama'),
+                subtitle: const Text('Connect to your local Ollama server'),
+                onTap: () {
+                  Navigator.pop(context);
+                  Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (context) => const OllamaSettingsPage(),
+                    ),
+                  ).then((_) {
+                    // Refresh models after returning from Ollama settings
+                    _refreshAll();
+                  });
+                },
+              ),
+              // Model library option
+              ListTile(
+                leading: const Icon(Icons.library_books, color: Colors.blue),
+                title: const Text('Model Library'),
+                subtitle: const Text('Browse and import models from providers'),
+                onTap: () {
+                  Navigator.pop(context);
+                  _openModelLibrary();
+                },
+              ),
+              const SizedBox(height: 8),
+            ],
+          ),
+        );
+      },
+    );
   }
 
   void _showModelDetails(ModelConfig model) {
@@ -391,8 +457,8 @@ class _ModelSettingsPageState extends State<ModelSettingsPage> {
         title: const Text('Model Settings'),
       ),
       floatingActionButton: FloatingActionButton(
-        onPressed: _openModelLibrary,
-        tooltip: 'Open Model Library',
+        onPressed: _showAddModelOptions, // Changed to show options instead of going directly to library
+        tooltip: 'Add Model',
         child: const Icon(Icons.add),
       ),
       body: RefreshIndicator(

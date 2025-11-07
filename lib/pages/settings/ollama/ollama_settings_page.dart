@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../../services/ollama_service.dart';
 import '../../../services/model_service.dart';
+import '../../../component/models.dart';
 
 class OllamaSettingsPage extends StatefulWidget {
   const OllamaSettingsPage({Key? key}) : super(key: key);
@@ -52,18 +53,32 @@ class _OllamaSettingsPageState extends State<OllamaSettingsPage> {
             const SizedBox(height: 16),
             if (_isConnected)
               Expanded(
-                child: ListView.builder(
-                  itemCount: _models.length,
-                  itemBuilder: (context, index) {
-                    final model = _models[index];
-                    return ListTile(
-                      title: Text(model),
-                      trailing: IconButton(
-                        icon: const Icon(Icons.add),
-                        onPressed: () => _importModel(model),
+                child: Column(
+                  children: [
+                    const Text(
+                      'Available Models',
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
                       ),
-                    );
-                  },
+                    ),
+                    const SizedBox(height: 8),
+                    Expanded(
+                      child: ListView.builder(
+                        itemCount: _models.length,
+                        itemBuilder: (context, index) {
+                          final model = _models[index];
+                          return ListTile(
+                            title: Text(model),
+                            trailing: IconButton(
+                              icon: const Icon(Icons.add),
+                              onPressed: () => _importModel(model),
+                            ),
+                          );
+                        },
+                      ),
+                    ),
+                  ],
                 ),
               ),
           ],
@@ -106,9 +121,20 @@ class _OllamaSettingsPageState extends State<OllamaSettingsPage> {
       baseUrl: url,
       modelName: modelName,
     );
+    
+    // Save the model configuration
     await _modelService.saveModel(config);
+    
+    // Show success message
+    if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('Imported $modelName')),
+      SnackBar(content: Text('Imported $modelName successfully')),
     );
+    
+    // Optionally, set as default if it's the first model
+    final configs = await _modelService.getSavedModels();
+    if (configs.length == 1) {
+      await _modelService.setDefaultModel(config.id);
+    }
   }
 }
