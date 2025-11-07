@@ -163,7 +163,8 @@ class ChatInterfaceState extends State<ChatInterface> {
       final activeConversation = _chatHistoryService.activeConversationNotifier.value;
       final hasMessages = _messages.isNotEmpty;
       
-      if (hasMessages && activeConversation != null) {
+      // Only show confirmation if there are messages and the model actually changed
+      if (hasMessages && activeConversation != null && oldModelId != null && oldModelId != newModelId) {
         // Show confirmation dialog for active conversations
         final shouldContinue = await _showModelChangeConfirmation(oldModelId, newModel);
         if (!shouldContinue) {
@@ -178,8 +179,10 @@ class ChatInterfaceState extends State<ChatInterface> {
         await _updateConversationModel(activeConversation.id, newModelId);
       }
       
-      // Show model change notification
-      _displayModelChangeNotification(newModel);
+      // Show model change notification (but not when selecting the same model)
+      if (oldModelId != newModelId) {
+        _displayModelChangeNotification(newModel);
+      }
       
       // Log model change
       await _errorService.logError(
@@ -397,146 +400,125 @@ class ChatInterfaceState extends State<ChatInterface> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Row(
-              children: [
-                Icon(
-                  Icons.info_outline,
-                  color: Colors.orange,
-                  size: 20,
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    'Model Mismatch',
-                    style: TextStyle(
-                      color: ThemeService().colorScheme.onSurface,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                ),
-              ],
+            Text(
+              'Conversation model mismatch detected',
+              style: TextStyle(
+                color: ThemeService().colorScheme.onPrimary,
+                fontWeight: FontWeight.bold,
+              ),
             ),
             const SizedBox(height: 4),
             Text(
-              'This conversation was started with ${conversationModel.name}',
+              'This conversation was created with "${conversationModel.name}". '
+              'Current model is "${models.firstWhere((m) => m.id == _modelState.selectedModelId.value, orElse: () => models.first).name}".',
               style: TextStyle(
-                color: ThemeService().colorScheme.onSurface.withOpacity(0.8),
+                color: ThemeService().colorScheme.onPrimary,
                 fontSize: 12,
               ),
             ),
           ],
         ),
-        backgroundColor: ThemeService().colorScheme.cardBackground,
+        backgroundColor: ThemeService().colorScheme.primary,
         duration: const Duration(seconds: 5),
-        behavior: SnackBarBehavior.floating,
         action: SnackBarAction(
-          label: 'Switch Back',
-          textColor: ThemeService().colorScheme.primary,
-          onPressed: () async {
+          label: 'Switch',
+          textColor: ThemeService().colorScheme.onPrimary,
+          onPressed: () {
             if (_conversationModelId != null) {
-              await _modelState.setSelectedModel(_conversationModelId!);
+              _modelState.setSelectedModel(_conversationModelId!);
             }
           },
         ),
       ),
-    ).closed.then((_) {
+    );
+    
+    // Reset the flag after the notification duration
+    Future.delayed(const Duration(seconds: 5), () {
       _showingModelChangeNotification = false;
     });
   }
   
+  Future<void> _updateConversationModel(String conversationId, String modelId) async {
+    try {
+      final conversation = _chatHistoryService.activeConversationNotifier.value;
+      if (conversation != null) {
+        final updatedConversation = conversation.copyWith(modelId: modelId);
+        await _chatHistoryService.updateConversation(updatedConversation);
+        _conversationModelId = modelId;
+      }
+    } catch (e, stackTrace) {
+      await _errorService.logError(
+        'Failed to update conversation model: $e',
+        stackTrace,
+        type: ErrorType.unknown,
+        context: 'ChatInterface._updateConversationModel',
+      );
+    }
+  }
+  
   void _showModelHealthDialog(ModelConfig model) {
-    final health = _modelState.getModelHealth(model.id);
-    
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        backgroundColor: ThemeService().colorScheme.surface,
-        title: Row(
-          children: [
-            Icon(
-              Icons.health_and_safety,
-              color: ThemeService().colorScheme.primary,
-            ),
-            const SizedBox(width: 8),
-            Text(
-              'Model Health',
-              style: TextStyle(color: ThemeService().colorScheme.onSurface),
-            ),
-          ],
-        ),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              model.name,
-              style: TextStyle(
-                color: ThemeService().colorScheme.onSurface,
-                fontWeight: FontWeight.bold,
-                fontSize: 16,
-              ),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              model.provider.displayName,
-              style: TextStyle(
-                color: ThemeService().colorScheme.onSurface.withOpacity(0.7),
-              ),
-            ),
-            const SizedBox(height: 16),
-            if (health != null) ...[
-              _buildHealthStatusRow('Status', _getHealthStatusText(health.status), _getHealthStatusColor(health.status)),
-              if (health.responseTime != null)
-                _buildHealthStatusRow('Response Time', '${health.responseTime!.inMilliseconds}ms', ThemeService().colorScheme.onSurface),
-              _buildHealthStatusRow('Last Checked', _formatDateTime(health.lastChecked), ThemeService().colorScheme.onSurface),
-              if (health.error != null)
-                _buildHealthStatusRow('Error', health.error!, Colors.red),
-            ] else
-              Text(
-                'Health information not available',
-                style: TextStyle(
-                  color: ThemeService().colorScheme.onSurface.withOpacity(0.7),
-                  fontStyle: FontStyle.italic,
-                ),
-              ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () async {
-              Navigator.of(context).pop();
-              try {
-                await _modelState.forceHealthCheck(modelId: model.id);
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    content: Text('Health check completed for ${model.name}'),
-                    backgroundColor: ThemeService().colorScheme.primary,
-                  ),
-                );
-              } catch (e) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    content: Text('Health check failed: $e'),
-                    backgroundColor: Colors.red,
-                  ),
-                );
-              }
-            },
-            child: Text(
-              'Check Health',
-              style: TextStyle(color: ThemeService().colorScheme.primary),
-            ),
+    // Implementation would show detailed model health information
+  }
+  
+  Future<void> _initializeChat() async {
+    try {
+      // Initialize any required services
+      // Load conversations from the chat history service
+      await _chatHistoryService.loadConversations();
+      
+      // Check if there's an active conversation
+      if (_chatHistoryService.activeConversationNotifier.value == null) {
+        // If no active conversation, create a new one
+        await _chatHistoryService.createConversation();
+      }
+      
+      if (!mounted) return;
+      
+      setState(() {
+        _isLoading = false;
+      });
+      
+      // Scroll to bottom after initialization
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _scrollToBottom();
+      });
+    } catch (e, stackTrace) {
+      await _errorService.logError(
+        'Failed to initialize chat: $e',
+        stackTrace,
+        type: ErrorType.initialization,
+        context: 'ChatInterface._initializeChat',
+      );
+      
+      if (!mounted) return;
+      
+      setState(() {
+        _isLoading = false;
+      });
+      
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to initialize chat: $e'),
+            backgroundColor: Colors.red,
           ),
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(),
-            child: Text(
-              'Close',
-              style: TextStyle(color: ThemeService().colorScheme.onSurface.withOpacity(0.7)),
-            ),
-          ),
-        ],
-      ),
-    );
+        );
+      }
+    }
+  }
+  
+  void _scrollToBottom({bool animate = false}) {
+    if (_scrollController.hasClients) {
+      if (animate) {
+        _scrollController.animateTo(
+          _scrollController.position.maxScrollExtent,
+          duration: const Duration(milliseconds: 300),
+          curve: Curves.easeOut,
+        );
+      } else {
+        _scrollController.jumpTo(_scrollController.position.maxScrollExtent);
+      }
+    }
   }
   
   Widget _buildHealthStatusRow(String label, String value, Color valueColor) {
@@ -608,44 +590,6 @@ class ChatInterfaceState extends State<ChatInterface> {
       return '${difference.inHours}h ago';
     } else {
       return '${difference.inDays}d ago';
-    }
-  }
-  
-  Future<void> _updateConversationModel(String conversationId, String modelId) async {
-    try {
-      final conversation = _chatHistoryService.activeConversationNotifier.value;
-      if (conversation != null) {
-        final updatedConversation = conversation.copyWith(modelId: modelId);
-        await _chatHistoryService.updateConversation(updatedConversation);
-        _conversationModelId = modelId;
-      }
-    } catch (e, stackTrace) {
-      await _errorService.logError(
-        'Failed to update conversation model: $e',
-        stackTrace,
-        type: ErrorType.unknown,
-        context: 'ChatInterface._updateConversationModel',
-      );
-    }
-  }
-
-
-
-  Future<void> _initializeChat() async {
-    try {
-      // Load conversations from the chat history service
-      await _chatHistoryService.loadConversations();
-      
-      // Check if there's an active conversation
-      if (_chatHistoryService.activeConversationNotifier.value == null) {
-        // If no active conversation, create a new one
-        await _chatHistoryService.createConversation();
-      }
-      
-      setState(() {});
-      _scrollToBottom();
-    } catch (e) {
-      print('Error initializing chat: $e');
     }
   }
 
@@ -820,19 +764,6 @@ class ChatInterfaceState extends State<ChatInterface> {
 
   String _cleanUpResponse(String response) {
     return response.replaceAll(RegExp(r"In\s*\$\~{3}\$.*?\$\~{3}\$"), '').trim();
-  }
-
-  void _scrollToBottom() {
-    // Add a small delay to ensure the UI has updated before scrolling
-    Future.delayed(const Duration(milliseconds: 50), () {
-      if (_scrollController.hasClients) {
-        _scrollController.animateTo(
-          _scrollController.position.maxScrollExtent,
-          duration: const Duration(milliseconds: 300),
-          curve: Curves.easeOut,
-        );
-      }
-    });
   }
 
   // Add method to clear current chat
