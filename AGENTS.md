@@ -141,4 +141,10 @@ echo "✅ Setup completed for $APP_NAME"
   that configuration can happen later in Settings.
 
 **Remember**: The goal is to maintain a high-quality, production-ready codebase that is well-documented and thoroughly tested.
+
+### Chat Architecture Notes
+
+- `ChatHistoryService` now syncs directly with the backend `/v1/chats` APIs. Avoid writing new persistence code that touches `SharedPreferences` for conversation data.
+- `ChatInterface` composes its message list and composer through the helper parts in `chat_interface_input.dart`; prefer extending those modules instead of adding more inline UI to `chat_interface.dart`.
+- All chat messages must flow through the backend so they remain available across devices—use `RemoteChatService` for new frontend/chat features.
 ```

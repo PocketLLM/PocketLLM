@@ -6,7 +6,11 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends
 
-from app.api.deps import get_current_request_user, get_database_dependency
+from app.api.deps import (
+    get_current_request_user,
+    get_database_dependency,
+    get_settings_dependency,
+)
 from app.schemas.auth import TokenPayload
 from app.schemas.chats import ChatCreate, ChatSummary, ChatUpdate, ChatWithMessages, Message, MessageCreate
 from app.services.chats import ChatsService
@@ -18,8 +22,9 @@ router = APIRouter(prefix="/chats", tags=["chats"])
 async def list_chats(
     user: TokenPayload = Depends(get_current_request_user),
     database=Depends(get_database_dependency),
+    settings=Depends(get_settings_dependency),
 ) -> list[ChatSummary]:
-    service = ChatsService(database=database)
+    service = ChatsService(database=database, settings=settings)
     return await service.list_chats(user.sub)
 
 
@@ -28,8 +33,9 @@ async def create_chat(
     payload: ChatCreate,
     user: TokenPayload = Depends(get_current_request_user),
     database=Depends(get_database_dependency),
+    settings=Depends(get_settings_dependency),
 ) -> ChatSummary:
-    service = ChatsService(database=database)
+    service = ChatsService(database=database, settings=settings)
     return await service.create_chat(user.sub, payload)
 
 
@@ -38,8 +44,9 @@ async def get_chat(
     chat_id: UUID,
     user: TokenPayload = Depends(get_current_request_user),
     database=Depends(get_database_dependency),
+    settings=Depends(get_settings_dependency),
 ) -> ChatWithMessages:
-    service = ChatsService(database=database)
+    service = ChatsService(database=database, settings=settings)
     return await service.get_chat(chat_id, user.sub)
 
 
@@ -49,8 +56,9 @@ async def update_chat(
     payload: ChatUpdate,
     user: TokenPayload = Depends(get_current_request_user),
     database=Depends(get_database_dependency),
+    settings=Depends(get_settings_dependency),
 ) -> ChatSummary:
-    service = ChatsService(database=database)
+    service = ChatsService(database=database, settings=settings)
     return await service.update_chat(chat_id, user.sub, payload)
 
 
@@ -59,8 +67,9 @@ async def delete_chat(
     chat_id: UUID,
     user: TokenPayload = Depends(get_current_request_user),
     database=Depends(get_database_dependency),
+    settings=Depends(get_settings_dependency),
 ) -> None:
-    service = ChatsService(database=database)
+    service = ChatsService(database=database, settings=settings)
     await service.delete_chat(chat_id, user.sub)
 
 
@@ -70,8 +79,9 @@ async def create_message(
     payload: MessageCreate,
     user: TokenPayload = Depends(get_current_request_user),
     database=Depends(get_database_dependency),
+    settings=Depends(get_settings_dependency),
 ) -> Message:
-    service = ChatsService(database=database)
+    service = ChatsService(database=database, settings=settings)
     return await service.create_message(chat_id, user.sub, payload)
 
 
@@ -80,6 +90,7 @@ async def list_messages(
     chat_id: UUID,
     user: TokenPayload = Depends(get_current_request_user),
     database=Depends(get_database_dependency),
+    settings=Depends(get_settings_dependency),
 ) -> list[Message]:
-    service = ChatsService(database=database)
+    service = ChatsService(database=database, settings=settings)
     return await service.list_messages(chat_id, user.sub)

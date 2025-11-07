@@ -18,7 +18,7 @@ A modern, responsive marketing website for PocketLLM - Your Pocket AI. Built wit
 
 ### 📱 Interactive Components
 - **Newsletter Popup** - Auto-appears after 3 seconds on first visit
-- **Waitlist Popup** - Triggers when user scrolls 80% down the page
+- **Waitlist Popup** - Triggers when user scrolls 80% down the page and posts directly to the backend `/v1/waitlist` endpoint
 - **GitHub Star Button** - Live star count from GitHub API
 - **Navigation Menu** - Responsive navbar with dropdown menus and mobile sheet
 - **Animated Text** - Character-by-character blur-in animations
@@ -199,8 +199,8 @@ Create a `.env.local` file for environment-specific settings:
 # Optional: Analytics
 NEXT_PUBLIC_GA_ID=your-google-analytics-id
 
-# Optional: API endpoints
-NEXT_PUBLIC_API_URL=https://api.pocketllm.com
+# API base used by the waitlist popup (must point to the backend /v1 root)
+NEXT_PUBLIC_API_URL=https://pocket-llm-api.vercel.app/v1
 ```
 
 ### Metadata

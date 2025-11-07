@@ -10,6 +10,8 @@ management.
 - **Supabase Postgres** access through an asynchronous connection pool and secure GoTrue authentication flows.
 - **Domain-driven modules** for authentication, users, chats, jobs, providers, and model management.
 - **Background job orchestration** with async workers storing status updates in the `jobs` table.
+- **Provider-aware chat runtime** that stores chat sessions/messages and streams prompts through the user's configured OpenAI-compatible provider.
+- **Public waitlist endpoint** (`POST /v1/waitlist`) to collect marketing sign-ups from the marketing site.
 - **Structured logging** and request correlation via custom middleware.
 - **Extensible schema definitions** for future agents, tools, and async processes.
 

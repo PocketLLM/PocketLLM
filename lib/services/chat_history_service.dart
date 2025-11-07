@@ -1,231 +1,166 @@
-/// File Overview:
-/// - Purpose: Manages chat conversations locally using shared preferences and
-///   exposes notifiers for UI updates.
-/// - Backend Migration: Replace persistence with backend conversation APIs so
-///   history is synchronized across devices.
-import 'dart:convert';
-import 'package:flutter/material.dart';
-import 'package:shared_preferences/shared_preferences.dart';
+/// Chat history coordinator that keeps local notifiers in sync with the backend.
+import 'package:flutter/foundation.dart';
+
 import '../component/models.dart';
+import 'remote_chat_service.dart';
 
 class ChatHistoryService {
-  static const String _localChatHistoryKey = 'chat_conversations';
-  
-  // Cached conversations
+  ChatHistoryService._internal();
+  static final ChatHistoryService _instance = ChatHistoryService._internal();
+  factory ChatHistoryService() => _instance;
+
+  final RemoteChatService _remote = RemoteChatService();
+
   List<Conversation> _cachedConversations = [];
-  
-  // Stream controller for conversations
-  final ValueNotifier<List<Conversation>> conversationsNotifier = ValueNotifier<List<Conversation>>([]);
-  
-  // Current active conversation
-  final ValueNotifier<Conversation?> activeConversationNotifier = ValueNotifier<Conversation?>(null);
-  
-  // Load conversations from local storage
-  Future<List<Conversation>> loadConversations() async {
-    try {
-      // Load from local storage
-      await _loadFromLocalStorage();
-      
-      // Sort conversations by updatedAt
-      _cachedConversations.sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
-      conversationsNotifier.value = List.from(_cachedConversations);
-      
-      return _cachedConversations;
-    } catch (e) {
-      debugPrint('Error loading conversations: $e');
-      // If there's an error, return whatever we have in the cache
+  bool _initialised = false;
+
+  final ValueNotifier<List<Conversation>> conversationsNotifier =
+      ValueNotifier<List<Conversation>>([]);
+  final ValueNotifier<Conversation?> activeConversationNotifier =
+      ValueNotifier<Conversation?>(null);
+
+  Future<List<Conversation>> loadConversations({bool refresh = false}) async {
+    if (_initialised && !refresh && _cachedConversations.isNotEmpty) {
       return _cachedConversations;
     }
-  }
-  
-  // Load conversations from local storage
-  Future<void> _loadFromLocalStorage() async {
     try {
-      final prefs = await SharedPreferences.getInstance();
-      final savedData = prefs.getString(_localChatHistoryKey);
-      if (savedData != null) {
-        final List<dynamic> decodedData = jsonDecode(savedData);
-        _cachedConversations = decodedData
-            .map((json) => Conversation.fromJson(json))
-            .toList();
+      final conversations = await _remote.fetchChats();
+      _cachedConversations = List.from(conversations);
+      conversationsNotifier.value = List.unmodifiable(_cachedConversations);
+      _initialised = true;
+      if (activeConversationNotifier.value == null &&
+          _cachedConversations.isNotEmpty) {
+        await setActiveConversation(_cachedConversations.first.id);
       }
-    } catch (e) {
-      debugPrint('Error loading conversations from local storage: $e');
+    } catch (error, stackTrace) {
+      debugPrint('ChatHistoryService: Failed to load conversations: $error');
+      debugPrint(stackTrace.toString());
+      rethrow;
     }
+    return _cachedConversations;
   }
-  
-  // Save conversations to local storage
-  Future<void> _saveToLocalStorage() async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      final encodedData = jsonEncode(_cachedConversations.map((c) => c.toJson()).toList());
-      await prefs.setString(_localChatHistoryKey, encodedData);
-    } catch (e) {
-      debugPrint('Error saving conversations to local storage: $e');
-    }
-  }
-  
-  // Create a new conversation
+
   Future<Conversation> createConversation({String? title, String? modelId}) async {
-    final conversation = Conversation.create(title: title, modelId: modelId);
-    
+    final conversation = await _remote.createChat(
+      title: title,
+      modelConfigId: modelId,
+    );
     _cachedConversations.insert(0, conversation);
-    conversationsNotifier.value = List.from(_cachedConversations);
-    
-    await _saveToLocalStorage();
-    
-    // Set as active conversation
-    activeConversationNotifier.value = conversation;
-    
+    conversationsNotifier.value = List.unmodifiable(_cachedConversations);
+    await setActiveConversation(conversation.id);
     return conversation;
   }
-  
-  // Get a conversation by ID
+
   Conversation? getConversation(String id) {
     try {
       return _cachedConversations.firstWhere((c) => c.id == id);
-    } catch (e) {
-      debugPrint('Error finding conversation with ID $id: $e');
+    } catch (_) {
       return null;
     }
   }
-  
-  // Set active conversation
-  void setActiveConversation(String? conversationId) {
+
+  Future<void> setActiveConversation(String? conversationId) async {
     if (conversationId == null) {
       activeConversationNotifier.value = null;
       return;
     }
-    
-    final conversation = getConversation(conversationId);
-    if (conversation != null) {
-      debugPrint('Setting active conversation to: ${conversation.id} (${conversation.title})');
-      activeConversationNotifier.value = conversation;
-    } else {
-      debugPrint('Warning: Tried to set active conversation to non-existent ID: $conversationId');
-      // Attempt to load conversations in case it was not loaded yet
-      loadConversations().then((_) {
-        final reloadedConversation = getConversation(conversationId);
-        if (reloadedConversation != null) {
-          debugPrint('Found conversation after reload: ${reloadedConversation.id}');
-          activeConversationNotifier.value = reloadedConversation;
-        }
-      });
+
+    final existing = getConversation(conversationId);
+    if (existing != null && existing.messages.isNotEmpty) {
+      activeConversationNotifier.value = existing;
+      return;
+    }
+
+    try {
+      final fresh = await _remote.fetchChat(conversationId);
+      _upsertConversation(fresh);
+      activeConversationNotifier.value = fresh;
+    } catch (error) {
+      debugPrint('ChatHistoryService: Failed to set active conversation: $error');
     }
   }
-  
-  // Add a message to a conversation
+
   Future<void> addMessageToConversation(String conversationId, Message message) async {
-    try {
-      final index = _cachedConversations.indexWhere((c) => c.id == conversationId);
-      if (index == -1) return;
-      
-      final conversation = _cachedConversations[index];
-      final messages = List<Message>.from(conversation.messages)..add(message);
-      
-      // Update the conversation with the new message
-      final updatedConversation = conversation.copyWith(
-        messages: messages,
-        updatedAt: DateTime.now(),
-      );
-      
-      // Update title if this is the first user message and the title is still the default
-      if (message.isUser && conversation.title == 'New Chat' && messages.where((m) => m.isUser).length == 1) {
-        final newTitle = Conversation.generateTitle(messages);
-        _cachedConversations[index] = updatedConversation.copyWith(title: newTitle);
-      } else {
-        _cachedConversations[index] = updatedConversation;
-      }
-      
-      // Update notifiers
-      conversationsNotifier.value = List.from(_cachedConversations);
-      if (activeConversationNotifier.value?.id == conversationId) {
-        activeConversationNotifier.value = _cachedConversations[index];
-      }
-      
-      // Save changes
-      await _saveToLocalStorage();
-    } catch (e) {
-      debugPrint('Error adding message to conversation: $e');
+    final index = _cachedConversations.indexWhere((c) => c.id == conversationId);
+    if (index == -1) return;
+
+    final conversation = _cachedConversations[index];
+    final updated = conversation.copyWith(
+      messages: List<Message>.from(conversation.messages)..add(message),
+      updatedAt: DateTime.now(),
+    );
+    _cachedConversations[index] = updated;
+    conversationsNotifier.value = List.unmodifiable(_cachedConversations);
+    if (activeConversationNotifier.value?.id == conversationId) {
+      activeConversationNotifier.value = updated;
     }
   }
-  
-  // Update a conversation
+
   Future<void> updateConversation(Conversation updatedConversation) async {
-    try {
-      final index = _cachedConversations.indexWhere((c) => c.id == updatedConversation.id);
-      if (index == -1) return;
-      
-      _cachedConversations[index] = updatedConversation.copyWith(
-        updatedAt: DateTime.now(),
-      );
-      
-      // Update notifiers
-      conversationsNotifier.value = List.from(_cachedConversations);
-      if (activeConversationNotifier.value?.id == updatedConversation.id) {
-        activeConversationNotifier.value = _cachedConversations[index];
-      }
-      
-      // Save changes
-      await _saveToLocalStorage();
-    } catch (e) {
-      debugPrint('Error updating conversation: $e');
+    _upsertConversation(updatedConversation);
+    if (activeConversationNotifier.value?.id == updatedConversation.id) {
+      activeConversationNotifier.value = updatedConversation;
     }
   }
-  
-  // Update a conversation's title
+
   Future<void> updateConversationTitle(String conversationId, String newTitle) async {
-    try {
-      final index = _cachedConversations.indexWhere((c) => c.id == conversationId);
-      if (index == -1) return;
-      
-      _cachedConversations[index] = _cachedConversations[index].copyWith(
-        title: newTitle,
-        updatedAt: DateTime.now(),
-      );
-      
-      // Update notifiers
-      conversationsNotifier.value = List.from(_cachedConversations);
-      if (activeConversationNotifier.value?.id == conversationId) {
-        activeConversationNotifier.value = _cachedConversations[index];
-      }
-      
-      // Save changes
-      await _saveToLocalStorage();
-    } catch (e) {
-      debugPrint('Error updating conversation title: $e');
+    await _remote.updateChat(conversationId, title: newTitle);
+    final existing = getConversation(conversationId);
+    if (existing == null) return;
+    final updated = existing.copyWith(title: newTitle, updatedAt: DateTime.now());
+    _upsertConversation(updated);
+    if (activeConversationNotifier.value?.id == conversationId) {
+      activeConversationNotifier.value = updated;
     }
   }
-  
-  // Delete a conversation
+
+  Future<void> updateConversationModel(String conversationId, String modelConfigId) async {
+    await _remote.updateChat(conversationId, modelConfigId: modelConfigId);
+    final existing = getConversation(conversationId);
+    if (existing == null) return;
+    final updated = existing.copyWith(modelConfigId: modelConfigId);
+    _upsertConversation(updated);
+  }
+
   Future<void> deleteConversation(String conversationId) async {
-    try {
-      _cachedConversations.removeWhere((c) => c.id == conversationId);
-      conversationsNotifier.value = List.from(_cachedConversations);
-      
-      // If this was the active conversation, clear it
-      if (activeConversationNotifier.value?.id == conversationId) {
-        activeConversationNotifier.value = null;
-      }
-      
-      // Save changes
-      await _saveToLocalStorage();
-    } catch (e) {
-      debugPrint('Error deleting conversation: $e');
-    }
-  }
-  
-  // Clear all conversations
-  Future<void> clearAllConversations() async {
-    try {
-      _cachedConversations.clear();
-      conversationsNotifier.value = [];
+    await _remote.deleteChat(conversationId);
+    _cachedConversations.removeWhere((c) => c.id == conversationId);
+    conversationsNotifier.value = List.unmodifiable(_cachedConversations);
+    if (activeConversationNotifier.value?.id == conversationId) {
       activeConversationNotifier.value = null;
-      
-      // Save changes
-      await _saveToLocalStorage();
-    } catch (e) {
-      debugPrint('Error clearing conversations: $e');
     }
   }
-} 
+
+  Future<void> clearAllConversations() async {
+    final ids = _cachedConversations.map((c) => c.id).toList();
+    for (final id in ids) {
+      await deleteConversation(id);
+    }
+    activeConversationNotifier.value = null;
+  }
+
+  Future<Message> sendMessage(String conversationId, String content) async {
+    final response = await _remote.sendMessage(chatId: conversationId, content: content);
+    await refreshConversation(conversationId);
+    return response;
+  }
+
+  Future<List<Message>> refreshConversation(String conversationId) async {
+    final detail = await _remote.fetchChat(conversationId);
+    _upsertConversation(detail);
+    if (activeConversationNotifier.value?.id == conversationId) {
+      activeConversationNotifier.value = detail;
+    }
+    return detail.messages;
+  }
+
+  void _upsertConversation(Conversation conversation) {
+    final index = _cachedConversations.indexWhere((c) => c.id == conversation.id);
+    if (index >= 0) {
+      _cachedConversations[index] = conversation;
+    } else {
+      _cachedConversations.insert(0, conversation);
+    }
+    conversationsNotifier.value = List.unmodifiable(_cachedConversations);
+  }
+}

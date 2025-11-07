@@ -411,6 +411,34 @@ begin
 end;
 $$;
 
+-- -----------------------------------------------------------------------------
+-- Waitlist entries
+-- -----------------------------------------------------------------------------
+create table if not exists public.waitlist_entries (
+    id uuid primary key default gen_random_uuid(),
+    email text not null,
+    full_name text,
+    source text,
+    metadata jsonb not null default '{}'::jsonb,
+    created_at timestamptz not null default timezone('utc', now()),
+    updated_at timestamptz not null default timezone('utc', now())
+);
+
+create unique index if not exists waitlist_entries_email_key on public.waitlist_entries (email);
+create index if not exists waitlist_entries_created_idx on public.waitlist_entries (created_at desc);
+
+do $$
+begin
+    if not exists (
+        select 1 from pg_trigger where tgname = 'set_waitlist_entries_updated_at'
+    ) then
+        create trigger set_waitlist_entries_updated_at
+            before update on public.waitlist_entries
+            for each row execute function public.set_updated_at();
+    end if;
+end;
+$$;
+
 do $$
 begin
     if not exists (

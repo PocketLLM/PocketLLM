@@ -2,12 +2,14 @@
 import { useState, useEffect } from "react"
 import { motion, AnimatePresence } from "framer-motion"
 import { X, Rocket, User, Mail } from "lucide-react"
+import { joinWaitlist } from "@/lib/api"
 
 export default function WaitlistPopup() {
   const [isOpen, setIsOpen] = useState(false)
   const [formData, setFormData] = useState({ name: "", email: "" })
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [isSuccess, setIsSuccess] = useState(false)
+  const [errorMessage, setErrorMessage] = useState<string | null>(null)
 
   useEffect(() => {
     // Show popup when user scrolls near bottom
@@ -33,18 +35,26 @@ export default function WaitlistPopup() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+    setErrorMessage(null)
     setIsSubmitting(true)
 
-    // Simulate API call
-    await new Promise(resolve => setTimeout(resolve, 1500))
-
-    setIsSuccess(true)
-    setIsSubmitting(false)
-
-    // Close after success
-    setTimeout(() => {
-      handleClose()
-    }, 2500)
+    try {
+      await joinWaitlist({
+        name: formData.name.trim(),
+        email: formData.email.trim(),
+        source: "website_popup",
+      })
+      setIsSuccess(true)
+      setTimeout(() => handleClose(), 2500)
+    } catch (error) {
+      const message =
+        error instanceof Error
+          ? error.message
+          : "Unable to join waitlist. Please try again."
+      setErrorMessage(message)
+    } finally {
+      setIsSubmitting(false)
+    }
   }
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -133,6 +143,12 @@ export default function WaitlistPopup() {
                           className="w-full pl-11 pr-4 py-3 bg-white/5 border border-white/10 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500/50 transition-all font-kollektif"
                         />
                       </div>
+
+                      {errorMessage && (
+                        <div className="text-sm text-red-400 bg-red-500/10 border border-red-500/30 rounded-lg px-3 py-2">
+                          {errorMessage}
+                        </div>
+                      )}
 
                       <button
                         type="submit"
@@ -287,4 +303,3 @@ export default function WaitlistPopup() {
     </AnimatePresence>
   )
 }
-

@@ -79,39 +79,46 @@ class SearchResult {
 }
 
 class Message {
+  final String? id;
   String content;
   final bool isUser;
   final DateTime timestamp;
   bool isThinking;
   final bool isStreaming;
   final bool isError;
+  final Map<String, dynamic>? metadata;
   final List<SearchResult>? sources;
 
   Message({
+    this.id,
     required this.content,
     required this.isUser,
     required this.timestamp,
     this.isThinking = false,
     this.isStreaming = false,
     this.isError = false,
+    this.metadata,
     this.sources,
   });
 
   // Add fromJson and toJson methods for serialization
   Map<String, dynamic> toJson() {
     return {
+      'id': id,
       'content': content,
       'isUser': isUser,
       'timestamp': timestamp.toIso8601String(),
       'isThinking': isThinking,
       'isStreaming': isStreaming,
       'isError': isError,
+      'metadata': metadata,
       'sources': sources?.map((s) => s.toJson()).toList(),
     };
   }
 
   factory Message.fromJson(Map<String, dynamic> json) {
     return Message(
+      id: json['id']?.toString(),
       content: json['content'] ?? '',
       isUser: json['isUser'] ?? false,
       timestamp: json['timestamp'] != null 
@@ -120,6 +127,9 @@ class Message {
       isThinking: json['isThinking'] ?? false,
       isStreaming: json['isStreaming'] ?? false,
       isError: json['isError'] ?? false,
+      metadata: json['metadata'] is Map<String, dynamic>
+          ? Map<String, dynamic>.from(json['metadata'])
+          : null,
       sources: json['sources'] != null
           ? (json['sources'] as List).map((s) => SearchResult.fromJson(s as Map<String, dynamic>)).toList()
           : null,
@@ -128,21 +138,25 @@ class Message {
 
   // Create a copy of this message with updated properties
   Message copyWith({
+    String? id,
     String? content,
     bool? isUser,
     DateTime? timestamp,
     bool? isThinking,
     bool? isStreaming,
     bool? isError,
+    Map<String, dynamic>? metadata,
     List<SearchResult>? sources,
   }) {
     return Message(
+      id: id ?? this.id,
       content: content ?? this.content,
       isUser: isUser ?? this.isUser,
       timestamp: timestamp ?? this.timestamp,
       isThinking: isThinking ?? this.isThinking,
       isStreaming: isStreaming ?? this.isStreaming,
       isError: isError ?? this.isError,
+      metadata: metadata ?? this.metadata,
       sources: sources ?? this.sources,
     );
   }
@@ -804,7 +818,9 @@ class Conversation {
   final DateTime createdAt;
   final DateTime updatedAt;
   final List<Message> messages;
-  final String? modelId;
+  final String? modelConfigId;
+  
+  String? get modelId => modelConfigId;
   
   Conversation({
     required this.id,
@@ -812,7 +828,7 @@ class Conversation {
     required this.createdAt,
     required this.updatedAt,
     required this.messages,
-    this.modelId,
+    this.modelConfigId,
   });
   
   // Create a copy of this conversation with updated properties
@@ -822,6 +838,7 @@ class Conversation {
     DateTime? createdAt,
     DateTime? updatedAt,
     List<Message>? messages,
+    String? modelConfigId,
     String? modelId,
   }) {
     return Conversation(
@@ -830,7 +847,7 @@ class Conversation {
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
       messages: messages ?? this.messages,
-      modelId: modelId ?? this.modelId,
+      modelConfigId: modelConfigId ?? modelId ?? this.modelConfigId,
     );
   }
   
@@ -867,7 +884,8 @@ class Conversation {
       'createdAt': createdAt.toIso8601String(),
       'updatedAt': updatedAt.toIso8601String(),
       'messages': messages.map((m) => m.toJson()).toList(),
-      'modelId': modelId,
+      'modelId': modelConfigId,
+      'modelConfigId': modelConfigId,
     };
   }
   
@@ -886,12 +904,12 @@ class Conversation {
               .map((m) => Message.fromJson(m as Map<String, dynamic>))
               .toList()
           : <Message>[],
-      modelId: json['modelId'],
+      modelConfigId: json['modelConfigId'] ?? json['modelId'],
     );
   }
   
   // Create a new conversation with a generated ID
-  factory Conversation.create({String? title, String? modelId}) {
+  factory Conversation.create({String? title, String? modelConfigId, String? modelId}) {
     final now = DateTime.now();
     return Conversation(
       id: DateTime.now().millisecondsSinceEpoch.toString(),
@@ -899,7 +917,7 @@ class Conversation {
       createdAt: now,
       updatedAt: now,
       messages: [],
-      modelId: modelId,
+      modelConfigId: modelConfigId ?? modelId,
     );
   }
 }
