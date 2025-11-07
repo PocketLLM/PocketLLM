@@ -14,6 +14,51 @@ class RemoteModelService {
 
   final BackendApiService _api = BackendApiService();
 
+  Map<String, dynamic>? _castMap(dynamic value) {
+    if (value is Map<String, dynamic>) {
+      return value;
+    }
+    if (value is Map) {
+      return value.map(
+        (key, dynamic v) => MapEntry(key.toString(), v),
+      );
+    }
+    return null;
+  }
+
+  Map<String, dynamic>? _convertSettings(Map<String, dynamic>? settings) {
+    if (settings == null || settings.isEmpty) {
+      return null;
+    }
+
+    final map = _castMap(settings) ?? settings;
+    if (map == null || map.isEmpty) {
+      return null;
+    }
+
+    final normalized = <String, dynamic>{};
+
+    void assign(String key, dynamic value) {
+      if (value != null) {
+        normalized[key] = value;
+      }
+    }
+
+    assign('temperature', map['temperature']);
+    assign('max_tokens', map['maxTokens'] ?? map['max_tokens']);
+    assign('top_p', map['topP'] ?? map['top_p']);
+    assign('frequency_penalty', map['frequencyPenalty'] ?? map['frequency_penalty']);
+    assign('presence_penalty', map['presencePenalty'] ?? map['presence_penalty']);
+    assign('system_prompt', map['systemPrompt'] ?? map['system_prompt']);
+
+    final metadata = map['metadata'];
+    if (metadata != null) {
+      normalized['metadata'] = metadata;
+    }
+
+    return normalized.isEmpty ? null : normalized;
+  }
+
   Future<List<ProviderConnection>> getProviderConfigurations() async {
     try {
       final data = await _api.get('providers');
@@ -45,13 +90,13 @@ class RemoteModelService {
     final trimmedBaseUrl = baseUrl?.trim();
     final body = {
       'provider': provider.backendId,
-      if (trimmedApiKey != null && trimmedApiKey.isNotEmpty) 'apiKey': trimmedApiKey,
-      if (trimmedBaseUrl != null && trimmedBaseUrl.isNotEmpty) 'baseUrl': trimmedBaseUrl,
+      if (trimmedApiKey != null && trimmedApiKey.isNotEmpty) 'api_key': trimmedApiKey,
+      if (trimmedBaseUrl != null && trimmedBaseUrl.isNotEmpty) 'base_url': trimmedBaseUrl,
       if (metadata != null) 'metadata': metadata,
     };
 
     final data = await _api.post('providers/activate', body: body);
-    return ProviderConnection.fromJson(Map<String, dynamic>.from(data as Map));
+    return _parseProviderConnection(data);
   }
 
   Future<ProviderConnection> updateProvider({
@@ -67,22 +112,22 @@ class RemoteModelService {
     final trimmedBaseUrl = baseUrl?.trim();
 
     if (removeApiKey) {
-      body['apiKey'] = null;
+      body['api_key'] = null;
     } else if (trimmedApiKey != null && trimmedApiKey.isNotEmpty) {
-      body['apiKey'] = trimmedApiKey;
+      body['api_key'] = trimmedApiKey;
     }
     if (trimmedBaseUrl != null && trimmedBaseUrl.isNotEmpty) {
-      body['baseUrl'] = trimmedBaseUrl;
+      body['base_url'] = trimmedBaseUrl;
     }
     if (metadata != null) {
       body['metadata'] = metadata;
     }
     if (isActive != null) {
-      body['isActive'] = isActive;
+      body['is_active'] = isActive;
     }
 
     final data = await _api.patch('providers/${provider.backendId}', body: body);
-    return ProviderConnection.fromJson(Map<String, dynamic>.from(data as Map));
+    return _parseProviderConnection(data);
   }
 
   Future<void> deactivateProvider(ModelProvider provider) async {
@@ -93,6 +138,15 @@ class RemoteModelService {
     final data = await _api.get('models/saved');
     final models = (data as List?) ?? [];
     return models.map((raw) => _mapModel(Map<String, dynamic>.from(raw as Map))).toList();
+  }
+
+  Future<ModelConfig> getModelDetails(String modelId) async {
+    final data = await _api.get('models/$modelId');
+    final payload = _castMap(data);
+    if (payload == null) {
+      throw StateError('Unexpected response when fetching model details: $data');
+    }
+    return _mapModel(payload);
   }
 
   Future<AvailableModelsResponse> getAvailableModels({
@@ -170,18 +224,13 @@ class RemoteModelService {
     String? providerId,
     Map<String, dynamic>? sharedSettings,
   }) async {
+    final normalizedSettings = _convertSettings(sharedSettings);
     final body = {
       'provider': provider.backendId,
-      if (providerId != null) 'providerId': providerId,
-      'models': selections
-          .map((model) => {
-                'id': model.id,
-                'name': model.name,
-                'description': model.description,
-                'metadata': model.metadata,
-              })
-          .toList(),
-      if (sharedSettings != null) 'sharedSettings': sharedSettings,
+      if (providerId != null && providerId.isNotEmpty) 'provider_id': providerId,
+      'models': selections.map((model) => model.id).toList(),
+      'sync': true,
+      if (normalizedSettings != null) 'settings': normalizedSettings,
     };
 
     final data = await _api.post('models/import', body: body);
@@ -205,12 +254,18 @@ class RemoteModelService {
     required ModelProvider provider,
     String? search,
   }) async {
+    final query = <String, String>{};
+    if (search != null && search.trim().isNotEmpty) {
+      query['query'] = search.trim();
+    }
+
     final data = await _api.get(
       'providers/${provider.backendId}/models',
-      query: search != null && search.isNotEmpty ? {'search': search} : null,
+      query: query.isEmpty ? null : query,
     );
 
-    final models = (data as List?) ?? [];
+    final payloadMap = _normalizeCataloguePayload(data);
+    final models = (payloadMap['models'] as List?) ?? const <dynamic>[];
     return models
         .map((entry) => AvailableModelOption.fromJson(
               Map<String, dynamic>.from(entry as Map),
@@ -220,46 +275,20 @@ class RemoteModelService {
   }
 
   ModelConfig _mapModel(Map<String, dynamic> json) {
-    final providerDetails = json['providerDetails'] as Map<String, dynamic>?;
-    final baseUrl = json['baseUrl'] as String? ??
-        providerDetails?['baseUrl'] as String? ??
-        ModelProviderExtension.fromBackend(json['provider']).defaultBaseUrl;
+    return ModelConfig.fromJson(json);
+  }
 
-    DateTime parseDate(dynamic value) {
-      if (value is int) {
-        return DateTime.fromMillisecondsSinceEpoch(value);
-      }
-      if (value is String) {
-        return DateTime.tryParse(value) ?? DateTime.now();
-      }
-      return DateTime.now();
+  ProviderConnection _parseProviderConnection(dynamic payload) {
+    final normalized = _castMap(payload);
+    if (normalized == null) {
+      throw StateError('Unexpected provider response: $payload');
     }
 
-    return ModelConfig(
-      id: json['id'],
-      name: json['displayName'] ?? json['name'],
-      provider: ModelProviderExtension.fromBackend(json['provider']),
-      providerId: json['providerId'],
-      baseUrl: baseUrl,
-      model: json['model'],
-      systemPrompt: json['systemPrompt'],
-      temperature: json['temperature'] is num ? (json['temperature'] as num).toDouble() : 0.7,
-      maxTokens: json['maxTokens'] is num ? (json['maxTokens'] as num).toInt() : null,
-      topP: json['topP'] is num ? (json['topP'] as num).toDouble() : 1.0,
-      frequencyPenalty:
-          json['frequencyPenalty'] is num ? (json['frequencyPenalty'] as num).toDouble() : 0.0,
-      presencePenalty:
-          json['presencePenalty'] is num ? (json['presencePenalty'] as num).toDouble() : 0.0,
-      additionalParams: json['additionalParams'] != null
-          ? Map<String, dynamic>.from(json['additionalParams'] as Map)
-          : null,
-      metadata: json['metadata'] != null
-          ? Map<String, dynamic>.from(json['metadata'] as Map)
-          : null,
-      isDefault: json['isDefault'] == true,
-      isActive: json['isActive'] ?? true,
-      createdAt: parseDate(json['createdAt']),
-      updatedAt: parseDate(json['updatedAt']),
-    );
+    final providerPayload = _castMap(normalized['provider']);
+    if (providerPayload != null) {
+      return ProviderConnection.fromJson(providerPayload);
+    }
+
+    return ProviderConnection.fromJson(normalized);
   }
 }

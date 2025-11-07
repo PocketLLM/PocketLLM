@@ -381,20 +381,56 @@ class ProviderConnection {
   });
 
   factory ProviderConnection.fromJson(Map<String, dynamic> json) {
+    Map<String, dynamic>? _asMap(dynamic value) {
+      if (value is Map<String, dynamic>) {
+        return value;
+      }
+      if (value is Map) {
+        return value.map(
+          (key, dynamic v) => MapEntry(key.toString(), v),
+        );
+      }
+      return null;
+    }
+
+    String? _string(dynamic value) => value is String ? value : null;
+
+    final providerId = _string(json['provider']) ?? '';
+    final provider = providerId.isNotEmpty
+        ? ModelProviderExtension.fromBackend(providerId)
+        : ModelProvider.pocketLLM;
+
+    String fallbackName() {
+      if (providerId.isEmpty) {
+        return provider.displayName;
+      }
+      final normalizedId = providerId.toLowerCase();
+      if (normalizedId == provider.backendId.toLowerCase()) {
+        return provider.displayName;
+      }
+      return providerId;
+    }
+
+    final displayName = _string(json['displayName']) ??
+        _string(json['display_name']) ??
+        fallbackName();
+
+    final baseUrl = _string(json['baseUrl']) ?? _string(json['base_url']);
+    final metadata = _asMap(json['metadata']);
+    final apiKeyPreview =
+        _string(json['apiKeyPreview']) ?? _string(json['api_key_preview']);
+    final statusMessage = _string(json['message']) ?? _string(json['status_message']);
+
     return ProviderConnection(
-      id: json['id'] ?? '',
-      provider: json['provider'] != null
-          ? ModelProviderExtension.fromBackend(json['provider'])
-          : ModelProvider.pocketLLM,
-      displayName: json['displayName'] ?? json['provider'] ?? '',
-      baseUrl: json['baseUrl'],
-      isActive: json['isActive'] ?? false,
-      hasApiKey: json['hasApiKey'] ?? false,
-      apiKeyPreview: json['apiKeyPreview'],
-      metadata: json['metadata'] != null
-          ? Map<String, dynamic>.from(json['metadata'])
-          : null,
-      statusMessage: json['message'] as String?,
+      id: _string(json['id']) ?? '',
+      provider: provider,
+      displayName: displayName,
+      baseUrl: baseUrl,
+      isActive: json['isActive'] == true || json['is_active'] == true,
+      hasApiKey: json['hasApiKey'] == true || json['has_api_key'] == true,
+      apiKeyPreview: apiKeyPreview,
+      metadata: metadata,
+      statusMessage: statusMessage,
     );
   }
 }
@@ -419,15 +455,33 @@ class ProviderStatusInfo {
   });
 
   factory ProviderStatusInfo.fromJson(Map<String, dynamic> json) {
-    final providerId = json['provider'] as String? ?? '';
+    String? _string(dynamic value) => value is String ? value : null;
+
+    final providerId = _string(json['provider']) ?? '';
+    final provider = ModelProviderExtension.fromBackend(providerId);
+
+    String fallbackName() {
+      if (providerId.isEmpty) {
+        return provider.displayName;
+      }
+      final normalizedId = providerId.toLowerCase();
+      if (normalizedId == provider.backendId.toLowerCase()) {
+        return provider.displayName;
+      }
+      return providerId;
+    }
+
     return ProviderStatusInfo(
-      provider: ModelProviderExtension.fromBackend(providerId),
-      displayName: json['displayName'] as String? ?? providerId,
-      configured: json['configured'] ?? false,
-      isActive: json['isActive'] ?? false,
-      hasApiKey: json['hasApiKey'] ?? false,
-      apiKeyPreview: json['apiKeyPreview'] as String?,
-      message: json['message'] as String? ?? '',
+      provider: provider,
+      displayName: _string(json['displayName']) ??
+          _string(json['display_name']) ??
+          fallbackName(),
+      configured: json['configured'] == true || json['is_configured'] == true,
+      isActive: json['isActive'] == true || json['is_active'] == true,
+      hasApiKey: json['hasApiKey'] == true || json['has_api_key'] == true,
+      apiKeyPreview: _string(json['apiKeyPreview']) ??
+          _string(json['api_key_preview']),
+      message: _string(json['message']) ?? _string(json['status_message']) ?? '',
     );
   }
 }
@@ -543,6 +597,53 @@ class ModelConfig {
   }
 
   factory ModelConfig.fromJson(Map<String, dynamic> json) {
+    Map<String, dynamic>? _asMap(dynamic value) {
+      if (value is Map<String, dynamic>) {
+        return value;
+      }
+      if (value is Map) {
+        return value.map(
+          (key, dynamic v) => MapEntry(key.toString(), v),
+        );
+      }
+      return null;
+    }
+
+    String? _string(dynamic value) => value is String ? value : null;
+
+    double? _double(dynamic value) {
+      if (value is num) {
+        return value.toDouble();
+      }
+      if (value is String) {
+        return double.tryParse(value);
+      }
+      return null;
+    }
+
+    int? _int(dynamic value) {
+      if (value is num) {
+        return value.toInt();
+      }
+      if (value is String) {
+        return int.tryParse(value);
+      }
+      return null;
+    }
+
+    DateTime _parseDate(dynamic value) {
+      if (value is int) {
+        return DateTime.fromMillisecondsSinceEpoch(value);
+      }
+      if (value is String) {
+        return DateTime.tryParse(value) ?? DateTime.now();
+      }
+      if (value is DateTime) {
+        return value;
+      }
+      return DateTime.now();
+    }
+
     final providerValue = json['provider'];
     final ModelProvider provider;
     if (providerValue is int) {
@@ -553,40 +654,90 @@ class ModelConfig {
       provider = ModelProvider.pocketLLM;
     }
 
-    DateTime parseDate(dynamic value) {
-      if (value is int) {
-        return DateTime.fromMillisecondsSinceEpoch(value);
-      }
-      if (value is String) {
-        return DateTime.tryParse(value) ?? DateTime.now();
-      }
-      return DateTime.now();
+    final providerDetails =
+        _asMap(json['providerDetails']) ?? _asMap(json['provider_details']);
+    final settings =
+        _asMap(json['settings']) ?? _asMap(json['modelSettings']);
+
+    final metadata = Map<String, dynamic>.from(
+      _asMap(json['metadata']) ?? const <String, dynamic>{},
+    );
+    final additionalParams = Map<String, dynamic>.from(
+      _asMap(json['additionalParams']) ?? const <String, dynamic>{},
+    );
+
+    final systemPrompt = _string(settings?['system_prompt']) ??
+        _string(json['systemPrompt']);
+    final temperature =
+        _double(settings?['temperature']) ?? _double(json['temperature']) ?? 0.7;
+    final maxTokens =
+        _int(settings?['max_tokens']) ?? _int(json['maxTokens']);
+    final topP =
+        _double(settings?['top_p']) ?? _double(json['topP']) ?? 1.0;
+    final frequencyPenalty =
+        _double(settings?['frequency_penalty']) ??
+        _double(json['frequencyPenalty']) ??
+        0.0;
+    final presencePenalty =
+        _double(settings?['presence_penalty']) ??
+        _double(json['presencePenalty']) ??
+        0.0;
+
+    final settingsMetadata = _asMap(settings?['metadata']);
+    if (settingsMetadata != null) {
+      metadata.addAll(settingsMetadata);
     }
+
+    if (settings != null) {
+      additionalParams.addAll(settings);
+      additionalParams.removeWhere((key, _) =>
+          {
+            'temperature',
+            'max_tokens',
+            'top_p',
+            'frequency_penalty',
+            'presence_penalty',
+            'system_prompt',
+            'metadata',
+          }.contains(key));
+    }
+
+    if (json['description'] != null && metadata['description'] == null) {
+      metadata['description'] = json['description'];
+    }
+
+    final baseUrl = _string(json['baseUrl']) ??
+        _string(json['base_url']) ??
+        _string(providerDetails?['baseUrl']) ??
+        _string(providerDetails?['base_url']) ??
+        provider.defaultBaseUrl;
+
+    final modelName = _string(json['display_name']) ??
+        _string(json['name']) ??
+        _string(json['model']) ??
+        'Model';
 
     return ModelConfig(
       id: json['id'],
-      name: json['name'],
+      name: modelName,
       provider: provider,
-      providerId: json['providerId'] ?? json['provider_id'],
-      baseUrl: json['baseUrl'],
-      apiKey: json['apiKey'],
-      model: json['model'],
-      systemPrompt: json['systemPrompt'],
-      temperature: json['temperature'] ?? 0.7,
-      maxTokens: json['maxTokens'] ?? 2048,
-      topP: json['topP'] ?? 1.0,
-      frequencyPenalty: json['frequencyPenalty'] ?? 0.0,
-      presencePenalty: json['presencePenalty'] ?? 0.0,
-      additionalParams: json['additionalParams'] != null
-          ? Map<String, dynamic>.from(json['additionalParams'])
-          : null,
-      metadata: json['metadata'] != null
-          ? Map<String, dynamic>.from(json['metadata'])
-          : null,
+      providerId: _string(json['providerId']) ?? _string(json['provider_id']),
+      baseUrl: baseUrl,
+      apiKey: _string(json['apiKey']) ?? _string(json['api_key']),
+      model: _string(json['model']) ?? modelName,
+      systemPrompt: systemPrompt,
+      temperature: temperature,
+      maxTokens: maxTokens,
+      topP: topP,
+      frequencyPenalty: frequencyPenalty,
+      presencePenalty: presencePenalty,
+      additionalParams:
+          additionalParams.isEmpty ? null : Map<String, dynamic>.from(additionalParams),
+      metadata: metadata.isEmpty ? null : Map<String, dynamic>.from(metadata),
       isDefault: json['isDefault'] == true || json['is_default'] == true,
-      isActive: json['isActive'] ?? true,
-      createdAt: parseDate(json['createdAt']),
-      updatedAt: parseDate(json['updatedAt']),
+      isActive: json['isActive'] != false && json['is_active'] != false,
+      createdAt: _parseDate(json['createdAt'] ?? json['created_at']),
+      updatedAt: _parseDate(json['updatedAt'] ?? json['updated_at']),
     );
   }
 
