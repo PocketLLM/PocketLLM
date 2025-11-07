@@ -7,6 +7,7 @@ import 'package:flutter/material.dart';
 import '../component/models.dart';
 import '../services/model_service.dart';
 import 'library_page.dart';
+import 'settings/ollama/ollama_settings_page.dart';
 
 class ModelSettingsPage extends StatefulWidget {
   const ModelSettingsPage({Key? key}) : super(key: key);
@@ -186,42 +187,76 @@ class _ModelSettingsPageState extends State<ModelSettingsPage> {
     return SingleChildScrollView(
       scrollDirection: Axis.horizontal,
       child: Row(
-        children: _providers.map((provider) {
-          final color = provider.isActive ? Colors.green : Colors.grey;
-          final icon = provider.provider.icon;
-          return Container(
-            margin: const EdgeInsets.only(right: 12),
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-            decoration: BoxDecoration(
-              color: color.withOpacity(0.1),
-              borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: color.withOpacity(0.3)),
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(icon, color: color),
-                const SizedBox(width: 8),
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      provider.displayName,
-                      style: TextStyle(
-                        fontWeight: FontWeight.w600,
-                        color: color,
+        children: [
+          ..._providers.map((provider) {
+            final color = provider.isActive ? Colors.green : Colors.grey;
+            final icon = provider.provider.icon;
+            return Container(
+              margin: const EdgeInsets.only(right: 12),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              decoration: BoxDecoration(
+                color: color.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: color.withOpacity(0.3)),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(icon, color: color),
+                  const SizedBox(width: 8),
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        provider.displayName,
+                        style: TextStyle(
+                          fontWeight: FontWeight.w600,
+                          color: color,
+                        ),
                       ),
-                    ),
-                    Text(
-                      provider.isActive ? 'Active' : 'Inactive',
-                      style: TextStyle(color: Colors.grey[600], fontSize: 12),
-                    ),
-                  ],
+                      Text(
+                        provider.isActive ? 'Active' : 'Inactive',
+                        style: TextStyle(color: Colors.grey[600], fontSize: 12),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            );
+          }).toList(),
+          GestureDetector(
+            onTap: () {
+              Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (context) => const OllamaSettingsPage(),
                 ),
-              ],
+              );
+            },
+            child: Container(
+              margin: const EdgeInsets.only(right: 12),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              decoration: BoxDecoration(
+                color: Colors.blue.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: Colors.blue.withOpacity(0.3)),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(Icons.add, color: Colors.blue),
+                  const SizedBox(width: 8),
+                  Text(
+                    'Add Ollama',
+                    style: TextStyle(
+                      fontWeight: FontWeight.w600,
+                      color: Colors.blue,
+                    ),
+                  ),
+                ],
+              ),
             ),
-          );
-        }).toList(),
+          ),
+        ],
       ),
     );
   }
