@@ -60,7 +60,7 @@ class _SettingsPageState extends State<SettingsPage> {
             icon: Icons.palette_outlined,
             iconColor: ThemeService().colorScheme.primary,
             title: 'Theme Settings',
-            subtitle: 'Configure app appearance and dark mode',
+            // subtitle: 'Configure app appearance and dark mode',
             onTap: () => _showThemeSettings(context),
           ),
           
@@ -70,7 +70,7 @@ class _SettingsPageState extends State<SettingsPage> {
             icon: Icons.person_outline,
             iconColor: Colors.blue,
             title: 'Profile Settings',
-            subtitle: 'Manage your account and preferences',
+            // subtitle: 'Manage your account and preferences',
             onTap: () {
               Navigator.push(
                 context,
@@ -82,7 +82,7 @@ class _SettingsPageState extends State<SettingsPage> {
             icon: Icons.card_giftcard,
             iconColor: Colors.pinkAccent,
             title: 'Referral Center',
-            subtitle: 'Share invites and track rewards',
+            // subtitle: 'Share invites and track rewards',
             onTap: () {
               Navigator.push(
                 context,
@@ -94,7 +94,7 @@ class _SettingsPageState extends State<SettingsPage> {
             icon: Icons.notifications_outlined,
             iconColor: Colors.orange,
             title: 'Notifications',
-            subtitle: 'Configure app notifications',
+            // subtitle: 'Configure app notifications',
           ),
           
           SizedBox(height: 32),
@@ -103,7 +103,7 @@ class _SettingsPageState extends State<SettingsPage> {
             icon: Icons.psychology,
             iconColor: Colors.purple,
             title: 'Model Settings',
-            subtitle: 'Configure AI models and parameters',
+            // subtitle: 'Configure AI models and parameters',
             showActionButtons: false, // Removed the + button
             onTap: () {
               Navigator.push(
@@ -119,7 +119,7 @@ class _SettingsPageState extends State<SettingsPage> {
             icon: Icons.search,
             iconColor: Colors.green,
             title: 'Search Configuration',
-            subtitle: 'Customize search behavior and sources',
+            // subtitle: 'Customize search behavior and sources',
             showActionButtons: true,
             onTap: () {
               Navigator.push(
@@ -135,13 +135,13 @@ class _SettingsPageState extends State<SettingsPage> {
             icon: Icons.schema,
             iconColor: Colors.indigo,
             title: 'Vector Databases',
-            subtitle: 'Manage embeddings and vector storage',
+            // subtitle: 'Manage embeddings and vector storage',
           ),
           _buildSettingsItem(
             icon: Icons.share,
             iconColor: Colors.blue,
             title: 'Graph Databases',
-            subtitle: 'Configure knowledge graph settings',
+            // subtitle: 'Configure knowledge graph settings',
           ),
           
           SizedBox(height: 32),
@@ -150,13 +150,13 @@ class _SettingsPageState extends State<SettingsPage> {
             icon: Icons.security,
             iconColor: Colors.green,
             title: 'Privacy',
-            subtitle: 'Manage data and privacy settings',
+            // subtitle: 'Manage data and privacy settings',
           ),
           _buildSettingsItem(
             icon: Icons.key,
             iconColor: Colors.orange,
             title: 'API Keys',
-            subtitle: 'Manage API keys and authentication',
+            // subtitle: 'Manage API keys and authentication',
             onTap: () {
               Navigator.push(
                 context,
@@ -171,19 +171,19 @@ class _SettingsPageState extends State<SettingsPage> {
             icon: Icons.memory,
             iconColor: Colors.deepPurple,
             title: 'Memory Management',
-            subtitle: 'Configure context and history settings',
+            // subtitle: 'Configure context and history settings',
           ),
           _buildSettingsItem(
             icon: Icons.terminal,
             iconColor: Colors.grey[800]!,
             title: 'Developer Options',
-            subtitle: 'Advanced configuration and debugging',
+            // subtitle: 'Advanced configuration and debugging',
           ),
           _buildSettingsItem(
             icon: Icons.backup,
             iconColor: Colors.teal,
             title: 'Backup & Sync',
-            subtitle: 'Manage data backup and synchronization',
+            // subtitle: 'Manage data backup and synchronization',
           ),
           
           SizedBox(height: 32),
@@ -192,7 +192,7 @@ class _SettingsPageState extends State<SettingsPage> {
             icon: Icons.info_outline,
             iconColor: Colors.blue,
             title: 'App Information',
-            subtitle: 'Version, licenses, and documentation',
+            // subtitle: 'Version, licenses, and documentation',
           ),
           
           SizedBox(height: 40),
@@ -222,7 +222,7 @@ class _SettingsPageState extends State<SettingsPage> {
     required IconData icon,
     required Color iconColor,
     required String title,
-    required String subtitle,
+    // required String subtitle,
     bool showActionButtons = false,
     VoidCallback? onTap,
     VoidCallback? onAddPressed,
@@ -304,13 +304,13 @@ class _SettingsPageState extends State<SettingsPage> {
                       ),
                     ),
                     SizedBox(height: 4),
-                    Text(
-                      subtitle,
-                      style: TextStyle(
-                        fontSize: 14,
-                        color: colorScheme.onSurface.withOpacity(0.7),
-                      ),
-                    ),
+                    // Text(
+                    //   subtitle,
+                    //   style: TextStyle(
+                    //     fontSize: 14,
+                    //     color: colorScheme.onSurface.withOpacity(0.7),
+                    //   ),
+                    // ),
                   ],
                 ),
               ),
