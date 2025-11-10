@@ -14,31 +14,31 @@ import 'package:flutter/material.dart';
 class AppColorTokens {
   AppColorTokens._();
 
-  // Brand colors
-  static const Color brandPrimary = Color(0xFF6750A4);
-  static const Color brandPrimaryVariant = Color(0xFF4F378B);
-  static const Color brandSecondary = Color(0xFF625B71);
-  static const Color brandSecondaryVariant = Color(0xFF4A4458);
+  // Brand colors (Lavender theme)
+  static const Color brandPrimary = Color(0xFF7C70F2);  // Lavender primary
+  static const Color brandPrimaryVariant = Color(0xFF4D43C6);  // Deep lavender
+  static const Color brandSecondary = Color(0xFFB4A7FF);  // Lavender secondary
+  static const Color brandSecondaryVariant = Color(0xFFE6E0FF);  // Tint lavender
 
   // Light surfaces
-  static const Color surfaceLight = Color(0xFFFFFBFE);
-  static const Color backgroundLight = Color(0xFFFFFBFE);
+  static const Color surfaceLight = Color(0xFFF7F6FB);  // Surface light
+  static const Color backgroundLight = Color(0xFFFFFFFF);  // Background light
 
   // Dark surfaces
-  static const Color surfaceDark = Color(0xFF1C1B1F);
-  static const Color backgroundDark = Color(0xFF141218);
+  static const Color surfaceDark = Color(0xFF1B1726);  // Surface dark
+  static const Color backgroundDark = Color(0xFF121017);  // Background dark
 
   // Error states
-  static const Color errorLight = Color(0xFFBA1A1A);
-  static const Color errorDark = Color(0xFFFFB4AB);
+  static const Color errorLight = Color(0xFFE5484D);  // Error light
+  static const Color errorDark = Color(0xFFFFB4AB);  // Error dark (keeping existing)
 
   // Foreground on light surfaces
-  static const Color textOnLight = Color(0xFF1C1B1F);
-  static const Color inverseTextOnLight = Color(0xFFFFFFFF);
+  static const Color textOnLight = Color(0xFF111111);  // Text on light
+  static const Color inverseTextOnLight = Color(0xFFFFFFFF);  // White text
 
   // Foreground on dark surfaces
-  static const Color textOnDark = Color(0xFFE6E1E5);
-  static const Color inverseTextOnDark = Color(0xFF371E73);
+  static const Color textOnDark = Color(0xFFF5F3FF);  // Text on dark
+  static const Color inverseTextOnDark = Color(0xFF371E73);  // Inverse text on dark
 
   // High contrast palettes
   static const Color highContrastSurfaceLight = Color(0xFFFFFFFF);
