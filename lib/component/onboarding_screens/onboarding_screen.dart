@@ -155,19 +155,11 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
           ),
         );
       case 3:
-        return _OnboardingStepData(
+        return const _OnboardingStepData(
           illustration: 'assets/illustrations/ob4.gif',
           title: 'Make it yours!',
           subtitle:
               'Choose a theme, chat layout, and accessibility options for your best experience.',
-          body: ThemeCustomization(
-            themeMode: _themeMode,
-            onThemeModeChanged: (mode) => setState(() => _themeMode = mode),
-            accentColor: _accentColor,
-            onAccentChanged: (color) => setState(() => _accentColor = color),
-            layoutDensity: _layoutDensity,
-            onLayoutChanged: (density) => setState(() => _layoutDensity = density),
-          ),
         );
       case 4:
         return _OnboardingStepData(

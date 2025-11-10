@@ -4,6 +4,7 @@
 ///   without local shortcuts or stored preferences for auth state.
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../models/user_profile.dart';
@@ -286,8 +287,7 @@ class _AuthPageState extends State<AuthPage> {
           textCapitalization: TextCapitalization.characters,
           decoration: const InputDecoration(
             labelText: 'Invite or referral code',
-            hintText: 'e.g. HELLO-1234',
-            helperText: 'May be required depending on waitlist status. Apply for access if you don\'t have a code.',
+            hintText: 'e.g. HELLO-1234'
           ),
         ),
         const SizedBox(height: 8),
@@ -952,22 +952,26 @@ class _AuthPageState extends State<AuthPage> {
   }
 
   Widget _buildComingSoonButtons() {
-    final options = <({String label, Widget icon})>[
+    final options = <({String label, Widget icon, VoidCallback? onPressed})>[
       (
         label: 'Google',
-        icon: Image.asset('assets/google.png', height: 28),
+        icon: SvgPicture.asset('assets/brand_icons/google.svg', height: 28),
+        onPressed: () => _showComingSoonMessage(context, 'Google Sign-In is coming soon. Please use email and password for now.'),
       ),
       (
         label: 'Facebook',
         icon: const Icon(Icons.facebook, color: Color(0xFF1877F2), size: 28),
+        onPressed: () => _showComingSoonMessage(context, 'Facebook Sign-In is coming soon. Please use email and password for now.'),
       ),
       (
         label: 'GitHub',
-        icon: const Icon(Icons.code, color: Color(0xFF24292F), size: 26),
+        icon: SvgPicture.asset('assets/brand_icons/github.svg', height: 28),
+        onPressed: () => _showComingSoonMessage(context, 'GitHub Sign-In is coming soon. Please use email and password for now.'),
       ),
       (
         label: 'Phone',
         icon: const Icon(Icons.phone, color: Color(0xFF6D28D9), size: 26),
+        onPressed: () => _showComingSoonMessage(context, 'Phone Sign-In is coming soon. Please use email and password for now.'),
       ),
     ];
 
@@ -987,38 +991,20 @@ class _AuthPageState extends State<AuthPage> {
             child: child,
           ),
         ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Tooltip(
-              message: '${option.label} coming soon',
-              child: SizedBox(
-                height: 48,
-                child: Center(child: option.icon),
+        child: GestureDetector(
+          onTap: option.onPressed,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Tooltip(
+                message: '${option.label} coming soon',
+                child: SizedBox(
+                  height: 48,
+                  child: Center(child: option.icon),
+                ),
               ),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              option.label,
-              style: const TextStyle(
-                fontSize: 14,
-                fontWeight: FontWeight.w600,
-                color: Color(0xFF1F2937),
-              ),
-            ),
-            const SizedBox(height: 4),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-              decoration: BoxDecoration(
-                color: const Color(0xFFFFF3CD),
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: const Text(
-                'Coming Soon',
-                style: TextStyle(color: Color(0xFF946200), fontSize: 11, fontWeight: FontWeight.w600),
-              ),
-            ),
-          ],
+            ],
+          ),
         ),
       );
     }
@@ -1212,6 +1198,18 @@ class _AuthPageState extends State<AuthPage> {
       SnackBar(
         content: Text(displayMessage),
         backgroundColor: success ? const Color(0xFF8B5CF6) : Colors.redAccent,
+      ),
+    );
+  }
+
+  void _showComingSoonMessage(BuildContext context, String message) {
+    final messenger = ScaffoldMessenger.of(context);
+    messenger.hideCurrentSnackBar();
+    
+    messenger.showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor: Colors.orange, // Yellow/orange for "coming soon" notifications
       ),
     );
   }
