@@ -136,6 +136,7 @@ class _ProfileSettingsPageState extends State<ProfileSettingsPage> {
   }
 
   Future<void> _changePassword(AuthState authState) async {
+    final currentPasswordController = TextEditingController();
     final newPasswordController = TextEditingController();
     final confirmPasswordController = TextEditingController();
     final result = await showDialog<bool>(
@@ -145,6 +146,15 @@ class _ProfileSettingsPageState extends State<ProfileSettingsPage> {
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
+            TextField(
+              controller: currentPasswordController,
+              obscureText: true,
+              decoration: InputDecoration(
+                hintText: 'Current Password',
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+              ),
+            ),
+            const SizedBox(height: 12),
             TextField(
               controller: newPasswordController,
               obscureText: true,
@@ -168,7 +178,14 @@ class _ProfileSettingsPageState extends State<ProfileSettingsPage> {
           TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
           ElevatedButton(
             onPressed: () {
+              final currentPassword = currentPasswordController.text.trim();
               final newPassword = newPasswordController.text.trim();
+              if (currentPassword.isEmpty) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Please enter your current password'), backgroundColor: Colors.redAccent),
+                );
+                return;
+              }
               if (newPassword.length < 8) {
                 ScaffoldMessenger.of(context).showSnackBar(
                   const SnackBar(content: Text('Password must be at least 8 characters'), backgroundColor: Colors.redAccent),
@@ -193,7 +210,10 @@ class _ProfileSettingsPageState extends State<ProfileSettingsPage> {
     if (result == true) {
       setState(() => _isProcessing = true);
       try {
-        await authState.updatePassword(newPasswordController.text.trim());
+        await authState.updatePassword(
+          currentPasswordController.text.trim(),
+          newPasswordController.text.trim(),
+        );
         if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Password updated'), backgroundColor: Color(0xFF8B5CF6)),
