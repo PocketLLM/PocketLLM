@@ -1,4 +1,4 @@
-"use client"
+  "use client"
 import { useState, useEffect } from "react"
 import { motion, AnimatePresence } from "framer-motion"
 import { X, Rocket, User, Mail } from "lucide-react"
@@ -39,10 +39,12 @@ export default function WaitlistPopup() {
     setIsSubmitting(true)
 
     try {
+      // Add metadata field to match the API specification
       await joinWaitlist({
         name: formData.name.trim(),
         email: formData.email.trim(),
         source: "website_popup",
+        metadata: {}
       })
       setIsSuccess(true)
       setTimeout(() => handleClose(), 2500)
@@ -90,8 +92,9 @@ export default function WaitlistPopup() {
               {/* Close Button */}
               <button
                 onClick={handleClose}
-                className="absolute top-4 right-4 p-2 hover:bg-white/10 rounded-full transition-colors z-10"
+                className="absolute top-4 right-4 p-3 hover:bg-white/10 rounded-full transition-colors z-10 flex items-center justify-center min-w-[44px] min-h-[44px]"
                 aria-label="Close"
+                type="button"
               >
                 <X className="w-5 h-5 text-gray-400 hover:text-white" />
               </button>
@@ -210,8 +213,9 @@ export default function WaitlistPopup() {
               {/* Close Button */}
               <button
                 onClick={handleClose}
-                className="absolute top-4 right-4 p-2 hover:bg-white/10 rounded-full transition-colors z-10"
+                className="absolute top-4 right-4 p-3 hover:bg-white/10 rounded-full transition-colors z-10 flex items-center justify-center min-w-[44px] min-h-[44px]"
                 aria-label="Close"
+                type="button"
               >
                 <X className="w-5 h-5 text-gray-400 hover:text-white" />
               </button>

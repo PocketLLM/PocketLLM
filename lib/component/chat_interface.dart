@@ -51,13 +51,6 @@ class ChatInterfaceState extends State<ChatInterface> {
   String? _conversationModelId;
   bool _showingModelChangeNotification = false;
   
-  // Restore missing variables
-  // Suggested messages (dynamic)
-  final List<String> _suggestedMessages = [
-    "🤔 What's the meaning of life?",
-    "🌍 How can we protect the environment?",
-    "🤖 What are the latest AI trends?"
-  ];
 
   @override
   void initState() {

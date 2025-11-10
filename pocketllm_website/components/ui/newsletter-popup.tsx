@@ -72,8 +72,9 @@ export default function NewsletterPopup() {
               {/* Close Button */}
               <button
                 onClick={handleClose}
-                className="absolute top-4 right-4 p-2 hover:bg-white/10 rounded-full transition-colors z-10"
+                className="absolute top-4 right-4 p-3 hover:bg-white/10 rounded-full transition-colors z-10 flex items-center justify-center min-w-[44px] min-h-[44px]"
                 aria-label="Close"
+                type="button"
               >
                 <X className="w-5 h-5 text-gray-400 hover:text-white" />
               </button>

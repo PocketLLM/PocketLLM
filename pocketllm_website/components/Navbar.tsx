@@ -22,6 +22,8 @@ import {
 	SheetClose,
 	SheetContent,
 	SheetTrigger,
+	SheetHeader,
+	SheetTitle,
 } from '@/components/ui/sheet';
 import { Button } from '@/components/ui/button';
 import {
@@ -236,12 +238,17 @@ function MobileNav() {
 			<SheetTrigger asChild>
 				<Button size="icon" variant="ghost" className="rounded-full lg:hidden text-white hover:bg-white/10">
 					<MenuIcon className="size-5" />
+					<span className="sr-only">Open menu</span>
 				</Button>
 			</SheetTrigger>
 			<SheetContent
 				className="bg-background/95 supports-[backdrop-filter]:bg-background/80 w-full gap-0 backdrop-blur-lg"
 				showClose={false}
 			>
+				{/* Add SheetHeader with SheetTitle for accessibility */}
+				<SheetHeader className="sr-only">
+					<SheetTitle>Navigation Menu</SheetTitle>
+				</SheetHeader>
 				<div className="flex h-14 items-center justify-end border-b px-4">
 					<SheetClose asChild>
 						<Button size="icon" variant="ghost" className="rounded-full">
@@ -255,7 +262,7 @@ function MobileNav() {
 						{sections.map((section) => (
 							<AccordionItem key={section.id} value={section.id}>
 								<AccordionTrigger className="capitalize hover:no-underline">
-									{section.id}
+									{section.name}
 								</AccordionTrigger>
 								<AccordionContent className="space-y-1">
 									<ul className="grid gap-1">
@@ -272,9 +279,11 @@ function MobileNav() {
 						))}
 					</Accordion>
 					<div className="mt-4">
-						<NavigationMenuLink href="#pricing" className="text-white hover:text-purple-400 transition-colors block py-2">
-							Pricing
-						</NavigationMenuLink>
+						<SheetClose asChild>
+							<a href="#pricing" className="text-white hover:text-purple-400 transition-colors block py-2">
+								Pricing
+							</a>
+						</SheetClose>
 					</div>
 				</div>
 			</SheetContent>
