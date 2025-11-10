@@ -5,18 +5,20 @@
 ///   features (e.g., direct model saves) as backend ownership grows.
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'dart:ui';
-import 'settings/profile_settings.dart';
-import '../component/model_config_dialog.dart';
-import 'model_settings_page.dart';
-import 'api_keys_page.dart';
-import 'auth/auth_flow_screen.dart';
+import '../component/appearance_settings_popup.dart';
+import '../models/user_profile.dart';
+import '../services/auth_state.dart';
 import '../services/model_service.dart';
 import '../services/theme_service.dart';
-import '../services/auth_state.dart';
+import 'auth/auth_flow_screen.dart';
+import 'settings/profile_settings.dart';
+import 'api_keys_page.dart';
+import 'config_page.dart';
+import 'docs_page.dart';
+import 'library_page.dart';
+import 'model_settings_page.dart';
 import 'referral_center_page.dart';
 import 'search_settings_page.dart';
-import '../component/models.dart';
 
 class SettingsPage extends StatefulWidget {
   const SettingsPage({Key? key}) : super(key: key);
@@ -340,86 +342,20 @@ class _SettingsPageState extends State<SettingsPage> {
   }
 
   void _showThemeSettings(BuildContext context) {
-    final themeService = ThemeService();
-    final colorScheme = themeService.colorScheme;
-    
-    showDialog(
+    showModalBottomSheet(
       context: context,
-      builder: (context) => StatefulBuilder(
-        builder: (context, setState) => AlertDialog(
-          backgroundColor: colorScheme.surface,
-          title: Text(
-            'Theme Settings',
-            style: TextStyle(color: ThemeService().colorScheme.onSurface),
-          ),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                'Theme Mode',
-                style: TextStyle(
-                  fontWeight: FontWeight.bold,
-                  color: ThemeService().colorScheme.onSurface,
-                ),
-              ),
-              const SizedBox(height: 8),
-              ...AppThemeMode.values.map((mode) => RadioListTile<AppThemeMode>(
-                title: Text(
-                  _getThemeModeLabel(mode),
-                  style: TextStyle(color: ThemeService().colorScheme.onSurface),
-                ),
-                value: mode,
-                groupValue: themeService.themeMode,
-                onChanged: (value) async {
-                  if (value != null) {
-                    await themeService.setThemeMode(value);
-                    setState(() {});
-                    // Update the parent widget
-                    this.setState(() {});
-                  }
-                },
-                activeColor: ThemeService().colorScheme.primary,
-              )),
-              const SizedBox(height: 16),
-              Text(
-                'Color Scheme',
-                style: TextStyle(
-                  fontWeight: FontWeight.bold,
-                  color: ThemeService().colorScheme.onSurface,
-                ),
-              ),
-              const SizedBox(height: 8),
-              ...ColorSchemeType.values.map((type) => RadioListTile<ColorSchemeType>(
-                title: Text(
-                  _getColorSchemeLabel(type),
-                  style: TextStyle(color: ThemeService().colorScheme.onSurface),
-                ),
-                value: type,
-                groupValue: themeService.colorSchemeType,
-                onChanged: (value) async {
-                  if (value != null) {
-                    await themeService.setColorSchemeType(value);
-                    setState(() {});
-                    // Update the parent widget
-                    this.setState(() {});
-                  }
-                },
-                activeColor: ThemeService().colorScheme.primary,
-              )),
-            ],
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: Text(
-                'Done',
-                style: TextStyle(color: ThemeService().colorScheme.primary),
-              ),
-            ),
-          ],
-        ),
-      ),
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (BuildContext buildContext) {
+        return DraggableScrollableSheet(
+          initialChildSize: 0.8,
+          minChildSize: 0.5,
+          maxChildSize: 0.9,
+          builder: (BuildContext buildContext, ScrollController scrollController) {
+            return AppearanceSettingsPopup();
+          },
+        );
+      },
     );
   }
   
