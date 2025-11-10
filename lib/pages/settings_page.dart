@@ -342,6 +342,7 @@ class _SettingsPageState extends State<SettingsPage> {
   }
 
   void _showThemeSettings(BuildContext context) {
+    final themeService = ThemeService();
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -351,8 +352,9 @@ class _SettingsPageState extends State<SettingsPage> {
           initialChildSize: 0.8,
           minChildSize: 0.5,
           maxChildSize: 0.9,
+          expand: false,
           builder: (BuildContext buildContext, ScrollController scrollController) {
-            return AppearanceSettingsPopup();
+            return AppearanceSettingsPopup(themeService: themeService);
           },
         );
       },

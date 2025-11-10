@@ -1,9 +1,13 @@
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
 import '../services/theme_service.dart';
 
 class AppearanceSettingsPopup extends StatefulWidget {
-  const AppearanceSettingsPopup({Key? key}) : super(key: key);
+  final ThemeService themeService;
+
+  const AppearanceSettingsPopup({
+    Key? key,
+    required this.themeService,
+  }) : super(key: key);
 
   @override
   _AppearanceSettingsPopupState createState() => _AppearanceSettingsPopupState();
@@ -56,19 +60,19 @@ class _AppearanceSettingsPopupState extends State<AppearanceSettingsPopup> {
   @override
   void initState() {
     super.initState();
-    // We'll initialize the values when the widget is built in the build method
+    // Initialize with the current theme mode
+    _selectedThemeMode = widget.themeService.themeMode;
+    _selectedRadius = mediumRadius;
   }
 
   @override
   Widget build(BuildContext context) {
-    // Get the theme service from the context
-    final themeService = Provider.of<ThemeService>(context);
-    _selectedThemeMode = themeService.themeMode;
+    _selectedThemeMode = widget.themeService.themeMode;
     
     return Container(
       width: 360,
       decoration: BoxDecoration(
-        color: themeService.isDarkMode ? const Color(0xFF1B1726) : Colors.white,
+        color: widget.themeService.isDarkMode ? const Color(0xFF1B1726) : Colors.white,
         borderRadius: const BorderRadius.only(
           topLeft: Radius.circular(20),
           topRight: Radius.circular(20),
@@ -81,65 +85,67 @@ class _AppearanceSettingsPopupState extends State<AppearanceSettingsPopup> {
           ),
         ],
       ),
-      child: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Header
-            const Text(
-              'Appearance',
-              style: TextStyle(
-                fontSize: 20,
-                fontWeight: FontWeight.w600,
+      child: SingleChildScrollView(
+        child: Padding(
+          padding: const EdgeInsets.all(16.0),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Header
+              const Text(
+                'Appearance',
+                style: TextStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.w600,
+                ),
               ),
-            ),
-            const SizedBox(height: 4),
-            Text(
-              'Lavender accent. Live preview below.',
-              style: TextStyle(
-                fontSize: 12,
-                color: (themeService.isDarkMode ? Colors.white : Colors.black).withOpacity(0.7),
+              const SizedBox(height: 4),
+              Text(
+                'Lavender accent. Live preview below.',
+                style: TextStyle(
+                  fontSize: 12,
+                  color: (widget.themeService.isDarkMode ? Colors.white : Colors.black).withOpacity(0.7),
+                ),
               ),
-            ),
-            const SizedBox(height: 12),
-            
-            // Theme Segmented Control
-            _buildThemeSegmentedControl(themeService.isDarkMode),
-            const SizedBox(height: 12),
-            
-            // Radius Slider
-            _buildRadiusSlider(),
-            const SizedBox(height: 12),
-            
-            // Primary Color Swatches
-            _buildColorSwatchSection(
-              title: 'Primary (outgoing) color',
-              colors: _primaryColors,
-              selectedColor: _selectedPrimaryColor,
-              onColorSelected: (color) => setState(() => _selectedPrimaryColor = color),
-              isDarkMode: themeService.isDarkMode,
-            ),
-            const SizedBox(height: 12),
-            
-            // Secondary Color Swatches
-            _buildColorSwatchSection(
-              title: 'Secondary (incoming) color',
-              colors: _secondaryColors,
-              selectedColor: _selectedSecondaryColor,
-              onColorSelected: (color) => setState(() => _selectedSecondaryColor = color),
-              isDarkMode: themeService.isDarkMode,
-            ),
-            const SizedBox(height: 12),
-            
-            // Live Preview Card
-            _buildLivePreviewCard(themeService.isDarkMode),
-            const SizedBox(height: 12),
-            
-            // Actions Row
-            _buildActionsRow(themeService),
-          ],
+              const SizedBox(height: 12),
+              
+              // Theme Segmented Control
+              _buildThemeSegmentedControl(widget.themeService.isDarkMode),
+              const SizedBox(height: 12),
+              
+              // Radius Slider
+              _buildRadiusSlider(),
+              const SizedBox(height: 12),
+              
+              // Primary Color Swatches
+              _buildColorSwatchSection(
+                title: 'Primary (outgoing) color',
+                colors: _primaryColors,
+                selectedColor: _selectedPrimaryColor,
+                onColorSelected: (color) => setState(() => _selectedPrimaryColor = color),
+                isDarkMode: widget.themeService.isDarkMode,
+              ),
+              const SizedBox(height: 12),
+              
+              // Secondary Color Swatches
+              _buildColorSwatchSection(
+                title: 'Secondary (incoming) color',
+                colors: _secondaryColors,
+                selectedColor: _selectedSecondaryColor,
+                onColorSelected: (color) => setState(() => _selectedSecondaryColor = color),
+                isDarkMode: widget.themeService.isDarkMode,
+              ),
+              const SizedBox(height: 12),
+              
+              // Live Preview Card
+              _buildLivePreviewCard(widget.themeService.isDarkMode),
+              const SizedBox(height: 12),
+              
+              // Actions Row
+              _buildActionsRow(widget.themeService),
+            ],
+          ),
         ),
       ),
     );
