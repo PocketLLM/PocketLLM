@@ -27,6 +27,7 @@ The backend exposes REST APIs that the Flutter client consumes. A Supabase insta
 | **Chat experience** | Streaming responses, Markdown rendering, inline code blocks, and token accounting. |
 | **Security** | Secrets encrypted using Fernet + project key, strict error messages when configuration is incomplete, and no environment fallback for user operations. |
 | **Observability** | Structured logging across services and catalogue caching with per-provider metrics. |
+| **Onboarding & referrals** | Invite-gated signup, `/v1/waitlist` applications, backend-validated invite codes, and a Flutter referral center for sharing codes and tracking rewards. |
 
 ## Architecture
 

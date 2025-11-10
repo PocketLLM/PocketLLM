@@ -1,6 +1,6 @@
 """Versioned endpoint modules."""
 
-from . import agents, auth, chats, default, jobs, models, prompt_enhancer, providers, users, waitlist
+from . import agents, auth, chats, default, jobs, models, prompt_enhancer, providers, referral, users, waitlist
 
 __all__ = [
     "agents",
@@ -11,6 +11,7 @@ __all__ = [
     "models",
     "prompt_enhancer",
     "providers",
+    "referral",
     "users",
     "waitlist",
 ]

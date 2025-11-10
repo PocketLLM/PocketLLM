@@ -243,17 +243,23 @@ class AuthStateNotifier extends ChangeNotifier {
   Future<SignUpResult> signUpWithEmail({
     required String email,
     required String password,
+    String? inviteCode,
   }) async {
     SignUpResult? result;
     await _runWithLoading(() async {
       try {
         debugPrint('Attempting to sign up user: $email');
+        final body = {
+          'email': email,
+          'password': password,
+        };
+        if (inviteCode != null && inviteCode.isNotEmpty) {
+          body['invite_code'] = inviteCode;
+          body['referral_code'] = inviteCode;
+        }
         final response = await _post(
           '/auth/signup',
-          body: {
-            'email': email,
-            'password': password,
-          },
+          body: body,
         );
         debugPrint('Signup response: $response');
 

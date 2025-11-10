@@ -3,19 +3,22 @@
 import React from 'react';
 import {
 	Sparkles,
-	Zap,
 	Shield,
 	Users,
-	Star,
-	FileText,
 	RotateCcw,
 	Handshake,
 	Leaf,
-	HelpCircle,
 	MessageSquare,
 	Smartphone,
 	MenuIcon,
 	XIcon,
+	Tag,
+	BookOpen,
+	LifeBuoy,
+	Route,
+	BriefcaseBusiness,
+	ScrollText,
+	PhoneCall,
 } from 'lucide-react';
 import {
 	Sheet,
@@ -46,86 +49,101 @@ import {
 	AccordionTrigger,
 } from '@/components/ui/accordion';
 import { cn } from '@/lib/utils';
+import Link from 'next/link';
 
 export const productLinks: NavItemType[] = [
 	{
-		title: 'AI Chat',
-		href: '#chat',
-		description: 'Connect with multiple AI models in one place',
-		icon: MessageSquare,
+		title: 'Pricing',
+		href: '/pricing',
+		description: 'Always-free app, pay providers directly',
+		icon: Tag,
 	},
 	{
-		title: 'Model Switching',
-		href: '#models',
-		description: 'Switch between OpenAI, Gemini, Groq instantly',
-		icon: Zap,
-	},
-	{
-		title: 'Mobile App',
-		href: '#mobile',
-		description: 'Built with Flutter for iOS and Android',
+		title: 'Download',
+		href: '/download',
+		description: 'iOS, Android, Desktop, Web',
 		icon: Smartphone,
 	},
 	{
-		title: 'Features',
-		href: '#features',
-		icon: Sparkles,
+		title: 'Documentation',
+		href: '/docs',
+		description: 'Guides, quick start, developer docs',
+		icon: BookOpen,
 	},
 	{
-		title: 'Security',
-		href: '#security',
-		icon: Shield,
+		title: 'API Reference',
+		href: '/api-reference',
+		description: 'Backend endpoints and authentication',
+		icon: ScrollText,
+	},
+	{
+		title: 'Support',
+		href: '/support',
+		description: 'FAQ, troubleshooting, contact',
+		icon: LifeBuoy,
 	},
 ];
 
 export const companyLinks: NavItemType[] = [
 	{
 		title: 'About Us',
-		href: '#about',
-		description: 'Learn more about PocketLLM',
+		href: '/about',
+		description: 'Mission, values, and team',
 		icon: Users,
 	},
 	{
-		title: 'User Stories',
-		href: '#stories',
-		description: 'See how users leverage PocketLLM',
-		icon: Star,
+		title: 'Roadmap',
+		href: '/roadmap',
+		description: 'See what we are building next',
+		icon: Route,
 	},
 	{
-		title: 'Terms of Service',
-		href: '#terms',
-		description: 'Understand how we operate',
-		icon: FileText,
+		title: 'Blog',
+		href: '/blog',
+		description: 'Updates & tutorials',
+		icon: Leaf,
+	},
+	{
+		title: 'Careers',
+		href: '/careers',
+		description: 'Help us build PocketLLM',
+		icon: BriefcaseBusiness,
 	},
 	{
 		title: 'Privacy Policy',
-		href: '#privacy',
+		href: '/privacy',
 		description: 'How we protect your information',
 		icon: Shield,
 	},
 	{
+		title: 'Terms of Service',
+		href: '/terms',
+		description: 'Our legal guidelines',
+		icon: ScrollText,
+	},
+	{
 		title: 'Refund Policy',
-		href: '#refund',
-		description: 'Details about refunds and cancellations',
+		href: '/refund',
+		description: 'PocketLLM is free — see details',
 		icon: RotateCcw,
 	},
 	{
+		title: 'Community',
+		href: '/community',
+		description: 'Join discussions & share tips',
+		icon: MessageSquare,
+	},
+	{
 		title: 'Partnerships',
-		href: '#partnerships',
-		icon: Handshake,
+		href: '/partnerships',
 		description: 'Collaborate with us for mutual growth',
+		icon: Handshake,
 	},
 	{
-		title: 'Blog',
-		href: '#blog',
-		icon: Leaf,
-		description: 'Insights, tutorials, and company news',
-	},
-	{
-		title: 'Help Center',
-		href: '#help',
-		icon: HelpCircle,
-		description: 'Find answers to your questions',
+		title: 'Contact',
+		href: '/contact',
+		description: 'Press, partnerships, and support',
+		icon: PhoneCall,
 	},
 ];
 
@@ -140,10 +158,10 @@ export default function Navbar() {
 					</div>
 					<DesktopMenu />
 
-					<div className="flex items-center gap-3">
-						<Button className="bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 text-white font-bold rounded-full">
-							Get Started
-						</Button>
+				<div className="flex items-center gap-3">
+					<Button className="bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 text-white font-bold rounded-full" asChild>
+						<Link href="/pricing">Get Started</Link>
+					</Button>
 						<MobileNav />
 					</div>
 				</div>
@@ -209,11 +227,11 @@ function DesktopMenu() {
 						</div>
 					</NavigationMenuContent>
 				</NavigationMenuItem>
-				<NavigationMenuItem>
-					<NavigationMenuLink className="cursor-pointer text-white hover:text-purple-400 transition-colors">
-						Pricing
-					</NavigationMenuLink>
-				</NavigationMenuItem>
+			<NavigationMenuItem>
+				<NavigationMenuLink className="cursor-pointer text-white hover:text-purple-400 transition-colors" href="/pricing">
+					Pricing
+				</NavigationMenuLink>
+			</NavigationMenuItem>
 			</NavigationMenuList>
 		</NavigationMenu>
 	);
@@ -290,4 +308,3 @@ function MobileNav() {
 		</Sheet>
 	);
 }
-

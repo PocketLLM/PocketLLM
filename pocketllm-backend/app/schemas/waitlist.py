@@ -14,6 +14,21 @@ class WaitlistEntryCreate(BaseModel):
 
     name: str = Field(min_length=1, max_length=120)
     email: EmailStr
+    occupation: Optional[str] = Field(default=None, max_length=120)
+    motivation: Optional[str] = Field(
+        default=None,
+        max_length=800,
+        description="Why the applicant wants access to PocketLLM.",
+    )
+    use_case: Optional[str] = Field(
+        default=None,
+        max_length=800,
+        description="How the applicant plans to use PocketLLM.",
+    )
+    links: Optional[list[str]] = Field(
+        default=None,
+        description="Portfolio, LinkedIn, or project links supplied by the applicant.",
+    )
     source: Optional[str] = Field(
         default=None,
         max_length=120,

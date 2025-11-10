@@ -8,6 +8,7 @@ import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../models/user_profile.dart';
 import '../../services/auth_state.dart';
+import '../../services/backend_api_service.dart';
 import '../../widgets/clear_text_field.dart';
 import 'user_survey_page.dart';
 
@@ -58,6 +59,15 @@ class _AuthPageState extends State<AuthPage> {
   final TextEditingController _emailController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
   final TextEditingController _confirmPasswordController = TextEditingController();
+  final TextEditingController _inviteCodeController = TextEditingController();
+  final TextEditingController _waitlistNameController = TextEditingController();
+  final TextEditingController _waitlistEmailController = TextEditingController();
+  final TextEditingController _waitlistOccupationController = TextEditingController();
+  final TextEditingController _waitlistMotivationController = TextEditingController();
+  final TextEditingController _waitlistUseCaseController = TextEditingController();
+  final TextEditingController _waitlistLinksController = TextEditingController();
+  final GlobalKey<FormState> _waitlistFormKey = GlobalKey<FormState>();
+  final BackendApiService _backendApi = BackendApiService();
   final FocusNode _emailFocus = FocusNode();
   final FocusNode _passwordFocus = FocusNode();
 
@@ -68,6 +78,8 @@ class _AuthPageState extends State<AuthPage> {
   bool _obscurePassword = true;
   bool _obscureConfirmPassword = true;
   bool _isSurveyActive = false;
+  bool _waitlistSuccess = false;
+  String? _waitlistStatusMessage;
 
   void _log(String message) {
     debugPrint('[AuthPage] $message');
@@ -78,6 +90,13 @@ class _AuthPageState extends State<AuthPage> {
     _emailController.dispose();
     _passwordController.dispose();
     _confirmPasswordController.dispose();
+    _inviteCodeController.dispose();
+    _waitlistNameController.dispose();
+    _waitlistEmailController.dispose();
+    _waitlistOccupationController.dispose();
+    _waitlistMotivationController.dispose();
+    _waitlistUseCaseController.dispose();
+    _waitlistLinksController.dispose();
     _emailFocus.dispose();
     _passwordFocus.dispose();
     super.dispose();
@@ -254,6 +273,275 @@ class _AuthPageState extends State<AuthPage> {
     return lighter.toColor();
   }
 
+  Widget _buildInviteCodeSection() {
+    if (_mode != _AuthMode.signUp) {
+      return const SizedBox.shrink();
+    }
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        TextFormField(
+          controller: _inviteCodeController,
+          textCapitalization: TextCapitalization.characters,
+          decoration: const InputDecoration(
+            labelText: 'Invite or referral code',
+            hintText: 'e.g. HELLO-1234',
+            helperText: 'Required unless your waitlist application has already been approved.',
+          ),
+        ),
+        const SizedBox(height: 8),
+        Wrap(
+          crossAxisAlignment: WrapCrossAlignment.center,
+          spacing: 4,
+          runSpacing: 8,
+          children: [
+            Text(
+              'Need an invite?',
+              style: TextStyle(color: Colors.grey[700]),
+            ),
+            TextButton(
+              onPressed: _openWaitlistSheet,
+              child: const Text('Apply for access'),
+            ),
+          ],
+        ),
+        if (_waitlistStatusMessage != null) ...[
+          const SizedBox(height: 4),
+          Text(
+            _waitlistStatusMessage!,
+            style: TextStyle(
+              fontSize: 13,
+              color: _waitlistSuccess ? Colors.green[700] : Colors.red[600],
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+
+  Future<void> _openWaitlistSheet() async {
+    _waitlistFormKey.currentState?.reset();
+    _waitlistNameController.text = _deriveSuggestedName();
+    _waitlistEmailController.text = _emailController.text.trim();
+    _waitlistOccupationController.clear();
+    _waitlistMotivationController.clear();
+    _waitlistUseCaseController.clear();
+    _waitlistLinksController.clear();
+
+    if (!mounted) return;
+    final result = await showModalBottomSheet<bool>(
+      context: context,
+      isScrollControlled: true,
+      builder: (modalContext) {
+        bool isSubmitting = false;
+
+        Future<void> submit(StateSetter setModalState) async {
+          final isValid = _waitlistFormKey.currentState?.validate() ?? false;
+          if (!isValid) {
+            return;
+          }
+          setModalState(() {
+            isSubmitting = true;
+          });
+          try {
+            final payload = _buildWaitlistPayload();
+            await _backendApi.post('/waitlist', body: payload);
+            if (!mounted) return;
+            Navigator.of(modalContext).pop(true);
+            _showSnackBar(context, 'Application received! We will be in touch soon.', success: true);
+          } on BackendApiException catch (error) {
+            setModalState(() {
+              isSubmitting = false;
+            });
+            _showSnackBar(context, error.message, success: false);
+          } catch (error) {
+            setModalState(() {
+              isSubmitting = false;
+            });
+            _showSnackBar(context, 'Failed to submit application: $error', success: false);
+          }
+        }
+
+        return StatefulBuilder(
+          builder: (innerContext, setModalState) {
+            return Padding(
+              padding: EdgeInsets.only(bottom: MediaQuery.of(modalContext).viewInsets.bottom),
+              child: SafeArea(
+                child: SingleChildScrollView(
+                  padding: const EdgeInsets.fromLTRB(24, 24, 24, 32),
+                  child: Form(
+                    key: _waitlistFormKey,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            const Expanded(
+                              child: Text(
+                                'Apply for PocketLLM access',
+                                style: TextStyle(fontSize: 20, fontWeight: FontWeight.w600),
+                              ),
+                            ),
+                            IconButton(
+                              icon: const Icon(Icons.close),
+                              onPressed: () => Navigator.of(modalContext).pop(false),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 16),
+                        TextFormField(
+                          controller: _waitlistNameController,
+                          decoration: const InputDecoration(labelText: 'Full name'),
+                          validator: (value) =>
+                              (value == null || value.trim().isEmpty) ? 'Please share your name' : null,
+                        ),
+                        const SizedBox(height: 12),
+                        TextFormField(
+                          controller: _waitlistEmailController,
+                          decoration: const InputDecoration(labelText: 'Email'),
+                          keyboardType: TextInputType.emailAddress,
+                          validator: (value) {
+                            if (value == null || value.trim().isEmpty) {
+                              return 'Email is required';
+                            }
+                            if (!_emailRegex.hasMatch(value.trim())) {
+                              return 'Enter a valid email';
+                            }
+                            return null;
+                          },
+                        ),
+                        const SizedBox(height: 12),
+                        TextFormField(
+                          controller: _waitlistOccupationController,
+                          decoration: const InputDecoration(labelText: 'Occupation'),
+                        ),
+                        const SizedBox(height: 12),
+                        TextFormField(
+                          controller: _waitlistMotivationController,
+                          decoration: const InputDecoration(
+                            labelText: 'Why do you want access?',
+                            hintText: 'Share what you are building or researching',
+                          ),
+                          maxLines: 3,
+                        ),
+                        const SizedBox(height: 12),
+                        TextFormField(
+                          controller: _waitlistUseCaseController,
+                          decoration: const InputDecoration(
+                            labelText: 'How will you use PocketLLM?',
+                          ),
+                          maxLines: 3,
+                        ),
+                        const SizedBox(height: 12),
+                        TextFormField(
+                          controller: _waitlistLinksController,
+                          decoration: const InputDecoration(
+                            labelText: 'Links (optional)',
+                            helperText: 'Comma separated portfolio, LinkedIn, or project links.',
+                          ),
+                          maxLines: 2,
+                        ),
+                        const SizedBox(height: 20),
+                        SizedBox(
+                          width: double.infinity,
+                          child: ElevatedButton(
+                            onPressed: isSubmitting ? null : () => submit(setModalState),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: const Color(0xFF8B5CF6),
+                              foregroundColor: Colors.white,
+                              padding: const EdgeInsets.symmetric(vertical: 14),
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                            ),
+                            child: isSubmitting
+                                ? const SizedBox(
+                                    width: 20,
+                                    height: 20,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                      color: Colors.white,
+                                    ),
+                                  )
+                                : const Text('Submit application'),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+
+    if (!mounted) return;
+    if (result == true) {
+      setState(() {
+        _waitlistSuccess = true;
+        _waitlistStatusMessage = 'Application received! We will notify you via email.';
+      });
+    }
+  }
+
+  Map<String, dynamic> _buildWaitlistPayload() {
+    final links = _parseLinksInput(_waitlistLinksController.text);
+    final payload = <String, dynamic>{
+      'name': _waitlistNameController.text.trim(),
+      'email': _waitlistEmailController.text.trim(),
+      'occupation': _trimOrNull(_waitlistOccupationController.text),
+      'motivation': _trimOrNull(_waitlistMotivationController.text),
+      'use_case': _trimOrNull(_waitlistUseCaseController.text),
+      'links': links.isEmpty ? null : links,
+      'source': 'app_auth',
+      'metadata': {
+        'platform': 'flutter_app',
+        'build': kReleaseMode ? 'release' : 'debug',
+      },
+    };
+    payload.removeWhere((key, value) {
+      if (value == null) return true;
+      if (value is String) {
+        return value.trim().isEmpty;
+      }
+      if (value is Iterable && value.isEmpty) {
+        return true;
+      }
+      return false;
+    });
+    return payload;
+  }
+
+  List<String> _parseLinksInput(String value) {
+    if (value.trim().isEmpty) {
+      return const [];
+    }
+    final segments = value.split(RegExp(r'[,\n]'));
+    return segments.map((segment) => segment.trim()).where((segment) => segment.isNotEmpty).toList();
+  }
+
+  String? _trimOrNull(String? value) {
+    if (value == null) return null;
+    final trimmed = value.trim();
+    return trimmed.isEmpty ? null : trimmed;
+  }
+
+  String _deriveSuggestedName() {
+    final existing = _waitlistNameController.text.trim();
+    if (existing.isNotEmpty) {
+      return existing;
+    }
+    final email = _emailController.text.trim();
+    if (email.contains('@')) {
+      final handle = email.split('@').first;
+      if (handle.isNotEmpty) {
+        return handle.replaceAll(RegExp(r'[\.\_\-]+'), ' ').trim();
+      }
+    }
+    return '';
+  }
+
   Widget _buildAuthForm(BuildContext context, AuthState authState) {
     if (authState.isAuthenticated) {
       if (authState.profile == null) {
@@ -341,9 +629,9 @@ class _AuthPageState extends State<AuthPage> {
                   ),
                   if (isSignUp) ...[
                     const SizedBox(height: 16),
-                    TextFormField(
-                      controller: _confirmPasswordController,
-                      obscureText: _obscureConfirmPassword,
+                  TextFormField(
+                    controller: _confirmPasswordController,
+                    obscureText: _obscureConfirmPassword,
                       decoration: InputDecoration(
                         labelText: 'Confirm Password',
                         suffixIcon: IconButton(
@@ -374,6 +662,10 @@ class _AuthPageState extends State<AuthPage> {
             ),
           ),
         ),
+        if (isSignUp) ...[
+          const SizedBox(height: 16),
+          _buildInviteCodeSection(),
+        ],
         if (_mode == _AuthMode.signIn)
           Align(
             alignment: Alignment.centerRight,
@@ -840,7 +1132,12 @@ class _AuthPageState extends State<AuthPage> {
         }
       } else {
         _log('Starting sign-up flow.');
-        final result = await authState.signUpWithEmail(email: email, password: password);
+        final inviteCode = _inviteCodeController.text.trim();
+        final result = await authState.signUpWithEmail(
+          email: email,
+          password: password,
+          inviteCode: inviteCode.isEmpty ? null : inviteCode,
+        );
         if (!mounted) return;
 
         _log('Sign-up completed. userId=${result.userId}, emailConfirmationRequired=${result.emailConfirmationRequired}');

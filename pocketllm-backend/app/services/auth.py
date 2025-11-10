@@ -28,6 +28,7 @@ from app.schemas.auth import (
 )
 from app.utils.security import create_supabase_service_headers
 from app.services.users import UsersService
+from app.services.referrals import InviteReferralService, InviteApprovalContext
 
 
 logger = logging.getLogger(__name__)
@@ -39,11 +40,26 @@ class AuthService:
     def __init__(self, settings: Settings, database: Database) -> None:
         self._settings = settings
         self._database = database
+        self._invite_service = InviteReferralService(settings=settings, database=database)
 
     async def sign_up(self, payload: SignUpRequest) -> SignUpResponse:
         """Register a new user via Supabase GoTrue."""
 
         self._require_supabase()
+        approval_context: InviteApprovalContext | None = None
+        try:
+            approval_context = await self._invite_service.enforce_signup_policy(
+                payload.email,
+                payload.invite_code or payload.referral_code,
+            )
+        except HTTPException:
+            raise
+        except Exception as exc:  # pragma: no cover - unexpected
+            logger.exception("Failed to enforce signup invite policy: %s", exc)
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Unable to validate invite status. Please try again.",
+            ) from exc
 
         request_body = {
             "email": payload.email,
@@ -72,6 +88,7 @@ class AuthService:
         session = self._map_session(session_payload)
 
         await self._upsert_profile(user, payload.full_name)
+        await self._invite_service.handle_post_signup(user, payload.email, approval_context)
         account_status = AccountStatus()
         return SignUpResponse(
             user=user,

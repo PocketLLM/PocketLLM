@@ -22,6 +22,14 @@ class UserProfile(BaseModel):
     profession: Optional[str] = None
     heard_from: Optional[str] = None
     avatar_url: Optional[str] = None
+    invite_code: Optional[str] = None
+    referral_code: Optional[str] = None
+    referred_by: Optional[UUID] = None
+    invite_status: str = "pending"
+    waitlist_status: str = "pending"
+    waitlist_metadata: dict | None = None
+    waitlist_applied_at: datetime | None = None
+    invite_approved_at: datetime | None = None
     survey_completed: bool = False
     onboarding_responses: dict | None = None
     deletion_status: str = "active"

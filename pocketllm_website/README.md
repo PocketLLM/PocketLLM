@@ -34,6 +34,14 @@ A modern, responsive marketing website for PocketLLM - Your Pocket AI. Built wit
 8. **About/Mission** - Company vision and values
 9. **Footer** - Comprehensive footer with navigation and social links
 
+### 🧭 Standalone Pages
+PocketLLM now includes a full marketing and legal site map built with the App Router:
+- `/pricing`, `/download`, `/about`, `/roadmap`
+- `/docs`, `/api-reference`, `/support`, `/community`, `/blog`
+- `/careers`, `/contact`, `/partnerships`
+- Legal: `/privacy`, `/terms`, `/refund`
+Each page follows the dark, glassmorphic design system and shares reusable hero + card components for consistency.
+
 ### ⚡ Performance
 - **Static Site Generation (SSG)** - Pre-rendered pages for optimal performance
 - **Turbopack** - Lightning-fast builds and hot module replacement

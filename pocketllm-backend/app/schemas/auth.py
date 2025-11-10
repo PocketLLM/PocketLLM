@@ -44,6 +44,16 @@ class SignUpRequest(BaseModel):
     email: EmailStr
     password: str = Field(min_length=8)
     full_name: Optional[str] = Field(default=None, max_length=120)
+    invite_code: Optional[str] = Field(
+        default=None,
+        max_length=64,
+        description="Optional invite code required for gated onboarding.",
+    )
+    referral_code: Optional[str] = Field(
+        default=None,
+        max_length=64,
+        description="Alias for invite_code for backward compatibility.",
+    )
 
     @model_validator(mode="before")
     @classmethod
@@ -51,6 +61,13 @@ class SignUpRequest(BaseModel):
         if isinstance(data, dict) and "full_name" not in data and "name" in data:
             data = dict(data)
             data["full_name"] = data.get("name")
+        if isinstance(data, dict):
+            invite_code = data.get("invite_code") or data.get("referral_code")
+            if invite_code:
+                data = dict(data)
+                normalized = str(invite_code).strip()
+                data["invite_code"] = normalized or None
+                data["referral_code"] = normalized or None
         return data
 
 

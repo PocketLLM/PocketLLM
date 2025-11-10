@@ -6,9 +6,27 @@ import logging
 from dataclasses import dataclass, field
 from typing import Any, Iterable
 
-from langchain.memory import ConversationBufferMemory
 from langchain_core.chat_history import BaseChatMessageHistory, ChatMessageHistory
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, SystemMessage
+
+try:
+    from langchain.memory import ConversationBufferMemory
+except ModuleNotFoundError:  # pragma: no cover - fallback for new LangChain modular releases
+    class ConversationBufferMemory:
+        """Minimal stand-in when langchain.memory is unavailable."""
+
+        def __init__(self, *, return_messages: bool = True) -> None:
+            if not return_messages:
+                raise ValueError("PocketLLM agents require return_messages=True for memory persistence.")
+            self._chat_memory: BaseChatMessageHistory = ChatMessageHistory()
+
+        @property
+        def chat_memory(self) -> BaseChatMessageHistory:
+            return self._chat_memory
+
+        @chat_memory.setter
+        def chat_memory(self, history: BaseChatMessageHistory) -> None:
+            self._chat_memory = history
 
 from .memory import AgentMemoryStore
 

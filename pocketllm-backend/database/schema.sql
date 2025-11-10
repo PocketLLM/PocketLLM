@@ -46,6 +46,14 @@ create table if not exists public.profiles (
     profession text,
     heard_from text,
     avatar_url text,
+    invite_code text,
+    referred_by uuid references public.profiles (id) on delete set null,
+    referral_code text,
+    invite_status text not null default 'pending' check (invite_status in ('pending', 'invited', 'joined', 'revoked')),
+    waitlist_status text not null default 'pending' check (waitlist_status in ('pending', 'approved', 'rejected', 'skipped')),
+    waitlist_metadata jsonb not null default '{}'::jsonb,
+    waitlist_applied_at timestamptz,
+    invite_approved_at timestamptz,
     survey_completed boolean not null default false,
     onboarding_responses jsonb not null default '{}'::jsonb,
     deletion_status text not null default 'active',
@@ -56,6 +64,7 @@ create table if not exists public.profiles (
 );
 
 create unique index if not exists profiles_email_key on public.profiles (email);
+create unique index if not exists profiles_invite_code_key on public.profiles (invite_code) where invite_code is not null;
 
 alter table public.profiles enable row level security;
 
@@ -488,6 +497,196 @@ begin
     ) then
         create trigger set_waitlist_entries_updated_at
             before update on public.waitlist_entries
+            for each row execute function public.set_updated_at();
+    end if;
+end;
+$$;
+
+-- -----------------------------------------------------------------------------
+-- Invite codes
+-- -----------------------------------------------------------------------------
+create table if not exists public.invite_codes (
+    id uuid primary key default gen_random_uuid(),
+    code text not null,
+    issued_by uuid references auth.users (id) on delete set null,
+    created_for uuid references auth.users (id) on delete set null,
+    max_uses integer not null default 1,
+    uses_count integer not null default 0 check (uses_count >= 0),
+    status text not null default 'active' check (status in ('active', 'consumed', 'revoked')),
+    expires_at timestamptz,
+    metadata jsonb not null default '{}'::jsonb,
+    created_at timestamptz not null default timezone('utc', now()),
+    updated_at timestamptz not null default timezone('utc', now()),
+    constraint invite_codes_usage check (uses_count <= max_uses)
+);
+
+create unique index if not exists invite_codes_code_key on public.invite_codes (code);
+create index if not exists invite_codes_issuer_idx on public.invite_codes (issued_by);
+
+alter table public.invite_codes enable row level security;
+
+do $$
+begin
+    if not exists (
+        select 1 from pg_policies where schemaname = 'public' and tablename = 'invite_codes' and policyname = 'invite_codes_access'
+    ) then
+        create policy invite_codes_access on public.invite_codes
+            using (auth.uid() = issued_by or auth.uid() = created_for)
+            with check (auth.uid() = issued_by);
+    end if;
+end;
+$$;
+
+do $$
+begin
+    if not exists (
+        select 1 from pg_trigger where tgname = 'set_invite_codes_updated_at'
+    ) then
+        create trigger set_invite_codes_updated_at
+            before update on public.invite_codes
+            for each row execute function public.set_updated_at();
+    end if;
+end;
+$$;
+
+-- -----------------------------------------------------------------------------
+-- Referral applications (waitlist)
+-- -----------------------------------------------------------------------------
+create table if not exists public.referral_applications (
+    id uuid primary key default gen_random_uuid(),
+    email text not null,
+    full_name text,
+    occupation text,
+    motivation text,
+    use_case text,
+    links jsonb not null default '[]'::jsonb,
+    source text,
+    status text not null default 'pending' check (status in ('pending', 'approved', 'rejected', 'invited', 'converted', 'waitlisted')),
+    metadata jsonb not null default '{}'::jsonb,
+    user_id uuid references auth.users (id) on delete set null,
+    invite_code_id uuid references public.invite_codes (id) on delete set null,
+    applied_at timestamptz not null default timezone('utc', now()),
+    processed_at timestamptz,
+    notes text,
+    created_at timestamptz not null default timezone('utc', now()),
+    updated_at timestamptz not null default timezone('utc', now())
+);
+
+create unique index if not exists referral_applications_email_key on public.referral_applications (email);
+create index if not exists referral_applications_status_idx on public.referral_applications (status);
+
+alter table public.referral_applications enable row level security;
+
+do $$
+begin
+    if not exists (
+        select 1 from pg_policies where schemaname = 'public' and tablename = 'referral_applications' and policyname = 'referral_applications_access'
+    ) then
+        create policy referral_applications_access on public.referral_applications
+            using (auth.uid() = user_id)
+            with check (auth.uid() = user_id);
+    end if;
+end;
+$$;
+
+do $$
+begin
+    if not exists (
+        select 1 from pg_trigger where tgname = 'set_referral_applications_updated_at'
+    ) then
+        create trigger set_referral_applications_updated_at
+            before update on public.referral_applications
+            for each row execute function public.set_updated_at();
+    end if;
+end;
+$$;
+
+-- -----------------------------------------------------------------------------
+-- Referrals & rewards
+-- -----------------------------------------------------------------------------
+create table if not exists public.referrals (
+    id uuid primary key default gen_random_uuid(),
+    invite_code_id uuid references public.invite_codes (id) on delete set null,
+    referrer_user_id uuid references auth.users (id) on delete set null,
+    referee_user_id uuid references auth.users (id) on delete set null,
+    referee_email text not null,
+    status text not null default 'pending' check (status in ('pending', 'joined', 'rejected')),
+    reward_status text not null default 'none' check (reward_status in ('none', 'pending', 'issued', 'revoked')),
+    metadata jsonb not null default '{}'::jsonb,
+    accepted_at timestamptz,
+    reward_issued_at timestamptz,
+    created_at timestamptz not null default timezone('utc', now()),
+    updated_at timestamptz not null default timezone('utc', now())
+);
+
+create unique index if not exists referrals_invite_email_key on public.referrals (invite_code_id, lower(referee_email));
+create index if not exists referrals_referrer_idx on public.referrals (referrer_user_id);
+
+alter table public.referrals enable row level security;
+
+do $$
+begin
+    if not exists (
+        select 1 from pg_policies where schemaname = 'public' and tablename = 'referrals' and policyname = 'referrals_access'
+    ) then
+        create policy referrals_access on public.referrals
+            using (auth.uid() = referrer_user_id or auth.uid() = referee_user_id)
+            with check (auth.uid() = referrer_user_id);
+    end if;
+end;
+$$;
+
+do $$
+begin
+    if not exists (
+        select 1 from pg_trigger where tgname = 'set_referrals_updated_at'
+    ) then
+        create trigger set_referrals_updated_at
+            before update on public.referrals
+            for each row execute function public.set_updated_at();
+    end if;
+end;
+$$;
+
+create table if not exists public.referral_rewards (
+    id uuid primary key default gen_random_uuid(),
+    referral_id uuid not null references public.referrals (id) on delete cascade,
+    reward_type text not null,
+    status text not null default 'pending' check (status in ('pending', 'approved', 'fulfilled', 'revoked')),
+    amount numeric(10, 2),
+    currency text default 'USD',
+    metadata jsonb not null default '{}'::jsonb,
+    issued_at timestamptz,
+    created_at timestamptz not null default timezone('utc', now()),
+    updated_at timestamptz not null default timezone('utc', now())
+);
+
+create index if not exists referral_rewards_referral_idx on public.referral_rewards (referral_id);
+
+alter table public.referral_rewards enable row level security;
+
+do $$
+begin
+    if not exists (
+        select 1 from pg_policies where schemaname = 'public' and tablename = 'referral_rewards' and policyname = 'referral_rewards_access'
+    ) then
+        create policy referral_rewards_access on public.referral_rewards
+            using (
+                auth.uid() = (
+                    select referrer_user_id from public.referrals where id = referral_id
+                )
+            );
+    end if;
+end;
+$$;
+
+do $$
+begin
+    if not exists (
+        select 1 from pg_trigger where tgname = 'set_referral_rewards_updated_at'
+    ) then
+        create trigger set_referral_rewards_updated_at
+            before update on public.referral_rewards
             for each row execute function public.set_updated_at();
     end if;
 end;

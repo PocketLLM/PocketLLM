@@ -6,8 +6,8 @@ in the `Authorization: Bearer <token>` header.
 ## Authentication
 
 ### `POST /v1/auth/signup`
-Register a new user through Supabase GoTrue.
-- **Body:** `SignUpRequest { email, password, full_name? }`
+Register a new user through Supabase GoTrue. Sign-up requires either a valid `invite_code` or a previously approved waitlist application.
+- **Body:** `SignUpRequest { email, password, full_name?, invite_code? }`
 - **Response:** `SignUpResponse { user, tokens, session?, account_status }`
   - `account_status` surfaces deletion metadata (`deletion_scheduled`, `deletion_canceled`, `previous_deletion_*`).
 
@@ -37,6 +37,11 @@ Placeholder endpoint for third-party OAuth provider flows.
 - **Body:** `OAuthProviderRequest { provider }`
 - **Response:** `AuthFeatureAvailabilityResponse { feature="oauth:<provider>", status="coming_soon", message }`
 
+### `POST /v1/auth/validate-invite-code`
+Validate an invite or referral code prior to sign-up.
+- **Body:** `InviteCodeValidationRequest { code }`
+- **Response:** `InviteCodeValidationResponse { valid, status, code { id, code, max_uses, uses_count, remaining_uses, expires_at } }`
+
 ## Users
 
 ### `GET /v1/users/profile`
@@ -64,6 +69,22 @@ Persist onboarding questionnaire results.
 ### `GET /v1/users/{userId}`
 Fetch a profile by identifier. For security the caller must match the requested `userId`.
 - **Response:** `UserProfile`
+
+## Waitlist & Referrals
+
+### `POST /v1/waitlist`
+Submit or update a waitlist/referral application.
+- **Body:** `WaitlistEntryCreate { name, email, occupation?, motivation?, use_case?, links?, source?, metadata? }`
+- **Response:** `WaitlistEntry { id, email, full_name, source, metadata, created_at }`
+
+### `GET /v1/referral/list`
+Return the caller's personal invite code, usage counts, and referral history.
+- **Response:** `ReferralListResponse { invite_code, max_uses, uses_count, remaining_uses, stats, referrals[] }`
+
+### `POST /v1/referral/send`
+Issue a new invite for a teammate via the caller's personal invite code.
+- **Body:** `ReferralSendRequest { email, full_name?, message? }`
+- **Response:** `ReferralSendResponse { referral_id, invite_code, status }`
 
 ## Chats
 

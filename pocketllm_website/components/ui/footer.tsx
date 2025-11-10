@@ -3,12 +3,44 @@ import { motion } from "framer-motion"
 
 // Footer data for PocketLLM
 const footerData = {
-  sections: [
-    { title: "Product", links: ["Features", "Pricing", "Download", "Roadmap"] },
-    { title: "Resources", links: ["Documentation", "API Reference", "Community Forum", "Support"] },
-    { title: "Company", links: ["About", "Blog", "Careers", "Contact"] },
-    { title: "Legal", links: ["Privacy Policy", "Terms of Service", "Security", "Refund Policy"] },
-  ],
+	sections: [
+		{
+			title: "Product",
+			links: [
+				{ label: "Features", href: "/#features" },
+				{ label: "Pricing", href: "/pricing" },
+				{ label: "Download", href: "/download" },
+				{ label: "Roadmap", href: "/roadmap" },
+			],
+		},
+		{
+			title: "Resources",
+			links: [
+				{ label: "Documentation", href: "/docs" },
+				{ label: "API Reference", href: "/api-reference" },
+				{ label: "Community Forum", href: "/community" },
+				{ label: "Support", href: "/support" },
+			],
+		},
+		{
+			title: "Company",
+			links: [
+				{ label: "About", href: "/about" },
+				{ label: "Blog", href: "/blog" },
+				{ label: "Careers", href: "/careers" },
+				{ label: "Contact", href: "/contact" },
+			],
+		},
+		{
+			title: "Legal",
+			links: [
+				{ label: "Privacy Policy", href: "/privacy" },
+				{ label: "Terms of Service", href: "/terms" },
+				{ label: "Security", href: "/support#faq" },
+				{ label: "Refund Policy", href: "/refund" },
+			],
+		},
+	],
   social: [
     { href: "https://twitter.com/PocketLLM", label: "Twitter", icon: "x" },
     { href: "https://github.com/PocketLLM/PocketLLM", label: "GitHub", icon: "Git" },
@@ -20,7 +52,9 @@ const footerData = {
 }
 
 // Reusable components
-const NavSection = ({ title, links, index }: { title: string; links: string[]; index: number }) => (
+type FooterLink = { label: string; href: string }
+
+const NavSection = ({ title, links, index }: { title: string; links: FooterLink[]; index: number }) => (
   <motion.div
     initial={{ opacity: 0, x: -20 }}
     animate={{ opacity: 1, x: 0 }}
@@ -35,21 +69,23 @@ const NavSection = ({ title, links, index }: { title: string; links: string[]; i
     >
       {title}
     </motion.h3>
-    {links.map((link, linkIndex) => (
-      <motion.a
-        key={linkIndex}
-        initial={{ opacity: 0, y: 10 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.4, delay: (index * 0.1) + (linkIndex * 0.05) }}
-        href="#"
-        whileHover={{
-          x: 8,
+		{links.map((link, linkIndex) => (
+			<motion.a
+				key={link.label}
+				initial={{ opacity: 0, y: 10 }}
+				animate={{ opacity: 1, y: 0 }}
+				transition={{ duration: 0.4, delay: (index * 0.1) + (linkIndex * 0.05) }}
+				href={link.href}
+				target={link.href.startsWith('http') ? '_blank' : undefined}
+				rel={link.href.startsWith('http') ? 'noreferrer' : undefined}
+				whileHover={{
+					x: 8,
           transition: { type: "spring", stiffness: 300, damping: 20 },
         }}
         className="text-gray-400 hover:text-white transition-colors duration-300 font-kollektif text-xs md:text-sm group relative"
       >
-        <span className="relative">
-          {link}
+				<span className="relative">
+					{link.label}
           <motion.span
             className="absolute bottom-0 left-0 h-0.5 bg-purple-500"
             initial={{ width: 0 }}

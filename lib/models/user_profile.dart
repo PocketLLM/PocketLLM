@@ -15,6 +15,14 @@ class UserProfile extends Equatable {
   final String? profession;
   final String? heardFrom;
   final String? avatarUrl;
+  final String? inviteCode;
+  final String? referralCode;
+  final String? referredBy;
+  final String inviteStatus;
+  final String waitlistStatus;
+  final Map<String, dynamic>? waitlistMetadata;
+  final DateTime? waitlistAppliedAt;
+  final DateTime? inviteApprovedAt;
   final bool surveyCompleted;
   final int? age;
   final Map<String, dynamic>? onboarding;
@@ -34,6 +42,14 @@ class UserProfile extends Equatable {
     this.profession,
     this.heardFrom,
     this.avatarUrl,
+    this.inviteCode,
+    this.referralCode,
+    this.referredBy,
+    this.inviteStatus = 'pending',
+    this.waitlistStatus = 'pending',
+    this.waitlistMetadata,
+    this.waitlistAppliedAt,
+    this.inviteApprovedAt,
     this.surveyCompleted = false,
     this.age,
     this.onboarding,
@@ -87,6 +103,14 @@ class UserProfile extends Equatable {
       profession: profession ?? this.profession,
       heardFrom: heardFrom ?? this.heardFrom,
       avatarUrl: avatarUrl ?? this.avatarUrl,
+      inviteCode: inviteCode ?? this.inviteCode,
+      referralCode: referralCode ?? this.referralCode,
+      referredBy: referredBy ?? this.referredBy,
+      inviteStatus: inviteStatus ?? this.inviteStatus,
+      waitlistStatus: waitlistStatus ?? this.waitlistStatus,
+      waitlistMetadata: waitlistMetadata ?? this.waitlistMetadata,
+      waitlistAppliedAt: waitlistAppliedAt ?? this.waitlistAppliedAt,
+      inviteApprovedAt: inviteApprovedAt ?? this.inviteApprovedAt,
       surveyCompleted: surveyCompleted ?? this.surveyCompleted,
       age: age ?? this.age,
       onboarding: onboarding ?? this.onboarding,
@@ -109,6 +133,14 @@ class UserProfile extends Equatable {
       'profession': profession,
       'heard_from': heardFrom,
       'avatar_url': avatarUrl,
+      'invite_code': inviteCode,
+      'referral_code': referralCode,
+      'referred_by': referredBy,
+      'invite_status': inviteStatus,
+      'waitlist_status': waitlistStatus,
+      'waitlist_metadata': waitlistMetadata,
+      'waitlist_applied_at': waitlistAppliedAt?.toIso8601String(),
+      'invite_approved_at': inviteApprovedAt?.toIso8601String(),
       'survey_completed': surveyCompleted,
       'age': age,
       'onboarding': onboarding,
@@ -143,6 +175,14 @@ class UserProfile extends Equatable {
       profession: map['profession'] as String?,
       heardFrom: map['heard_from'] as String?,
       avatarUrl: map['avatar_url'] as String?,
+      inviteCode: map['invite_code'] as String?,
+      referralCode: map['referral_code'] as String?,
+      referredBy: map['referred_by'] as String?,
+      inviteStatus: map['invite_status'] as String? ?? 'pending',
+      waitlistStatus: map['waitlist_status'] as String? ?? 'pending',
+      waitlistMetadata: _parseOnboarding(map['waitlist_metadata']),
+      waitlistAppliedAt: parseDate(map['waitlist_applied_at']),
+      inviteApprovedAt: parseDate(map['invite_approved_at']),
       surveyCompleted: _parseBool(map['survey_completed']),
       age: _parseInt(map['age']),
       onboarding: _parseOnboarding(map['onboarding']),
@@ -192,6 +232,14 @@ class UserProfile extends Equatable {
         profession,
         heardFrom,
         avatarUrl,
+        inviteCode,
+        referralCode,
+        referredBy,
+        inviteStatus,
+        waitlistStatus,
+        waitlistMetadata,
+        waitlistAppliedAt,
+        inviteApprovedAt,
         surveyCompleted,
         age,
         onboarding,

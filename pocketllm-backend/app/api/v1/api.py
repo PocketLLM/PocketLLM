@@ -13,6 +13,7 @@ from .endpoints import (
     models,
     prompt_enhancer,
     providers,
+    referral,
     users,
     waitlist,
 )
@@ -26,6 +27,7 @@ api_router.include_router(jobs.router)
 api_router.include_router(providers.router)
 api_router.include_router(models.router)
 api_router.include_router(waitlist.router)
+api_router.include_router(referral.router)
 api_router.include_router(agents.router)
 api_router.include_router(prompt_enhancer.router)
 

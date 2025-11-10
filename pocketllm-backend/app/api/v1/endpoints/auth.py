@@ -19,6 +19,8 @@ from app.schemas.auth import (
     SignUpRequest,
     SignUpResponse,
 )
+from app.schemas.referrals import InviteCodeValidationRequest, InviteCodeValidationResponse
+from app.services.referrals import InviteReferralService
 from app.services.auth import AuthService
 from app.utils.auth_cookies import (
     clear_auth_cookies,
@@ -139,3 +141,17 @@ async def initiate_oauth_sign_in(payload: OAuthProviderRequest) -> AuthFeatureAv
             "Third-party OAuth sign-in is coming soon. Configure the provider in Supabase Auth settings to receive launch updates."
         ),
     )
+
+
+@router.post(
+    "/validate-invite-code",
+    response_model=InviteCodeValidationResponse,
+    summary="Validate an invite or referral code before signup",
+)
+async def validate_invite_code_endpoint(
+    payload: InviteCodeValidationRequest,
+    settings=Depends(get_settings_dependency),
+    database=Depends(get_database_dependency),
+) -> InviteCodeValidationResponse:
+    service = InviteReferralService(settings=settings, database=database)
+    return await service.build_validation_response(payload.code)

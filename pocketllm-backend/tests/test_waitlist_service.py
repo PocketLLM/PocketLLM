@@ -1,4 +1,5 @@
 import uuid
+from collections import defaultdict
 from datetime import UTC, datetime
 
 import pytest
@@ -9,27 +10,29 @@ from app.services.waitlist import WaitlistService
 
 class InMemoryDatabase:
     def __init__(self) -> None:
-        self.rows: list[dict[str, object]] = []
+        self.tables: dict[str, list[dict[str, object]]] = defaultdict(list)
 
     async def select(self, table: str, *, filters=None, limit=None, order_by=None):
+        rows = self.tables[table]
         matches = [
             row
-            for row in self.rows
+            for row in rows
             if all(str(row.get(key)) == str(value) for key, value in (filters or {}).items())
         ]
         return matches[:limit] if limit else matches
 
     async def insert(self, table: str, data: dict[str, object]):
         record = dict(data)
-        record["id"] = uuid.uuid4()
+        record.setdefault("id", uuid.uuid4())
         record["created_at"] = datetime.now(tz=UTC)
         record["updated_at"] = record["created_at"]
-        self.rows.append(record)
+        self.tables[table].append(record)
         return record
 
     async def update(self, table: str, data: dict[str, object], *, filters: dict[str, object]):
+        rows = self.tables[table]
         updated: list[dict[str, object]] = []
-        for row in self.rows:
+        for row in rows:
             if all(str(row.get(key)) == str(value) for key, value in filters.items()):
                 row.update(data)
                 row["updated_at"] = datetime.now(tz=UTC)
@@ -47,7 +50,8 @@ async def test_join_waitlist_inserts_new_record():
 
     assert entry.email == "jane@example.com"
     assert entry.name == "Jane"
-    assert len(database.rows) == 1
+    assert len(database.tables["waitlist_entries"]) == 1
+    assert len(database.tables["referral_applications"]) == 1
 
 
 @pytest.mark.asyncio
@@ -62,7 +66,7 @@ async def test_join_waitlist_updates_existing_entry():
         "created_at": datetime.now(tz=UTC),
         "updated_at": datetime.now(tz=UTC),
     }
-    database.rows.append(existing)
+    database.tables["waitlist_entries"].append(existing)
     service = WaitlistService(database=database)
 
     payload = WaitlistEntryCreate(
@@ -75,4 +79,5 @@ async def test_join_waitlist_updates_existing_entry():
 
     assert entry.name == "Jane Doe"
     assert entry.source == "widget"
-    assert len(database.rows) == 1
+    assert len(database.tables["waitlist_entries"]) == 1
+    assert len(database.tables["referral_applications"]) == 1

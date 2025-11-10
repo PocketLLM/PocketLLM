@@ -14,6 +14,7 @@ import 'auth/auth_flow_screen.dart';
 import '../services/model_service.dart';
 import '../services/theme_service.dart';
 import '../services/auth_state.dart';
+import 'referral_center_page.dart';
 import 'search_settings_page.dart';
 import '../component/models.dart';
 
@@ -72,6 +73,18 @@ class _SettingsPageState extends State<SettingsPage> {
               Navigator.push(
                 context,
                 MaterialPageRoute(builder: (context) => const ProfileSettingsPage()),
+              );
+            },
+          ),
+          _buildSettingsItem(
+            icon: Icons.card_giftcard,
+            iconColor: Colors.pinkAccent,
+            title: 'Referral Center',
+            subtitle: 'Share invites and track rewards',
+            onTap: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (context) => const ReferralCenterPage()),
               );
             },
           ),

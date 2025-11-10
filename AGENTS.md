@@ -139,6 +139,9 @@ echo "✅ Setup completed for $APP_NAME"
   indicators.
 - Do not require provider/API key setup during onboarding; clearly communicate
   that configuration can happen later in Settings.
+- The gated onboarding flow now relies on `/v1/auth/validate-invite-code`,
+  `/v1/waitlist`, and `/v1/referral/*` endpoints—never short-circuit these checks
+  with local state.
 
 **Remember**: The goal is to maintain a high-quality, production-ready codebase that is well-documented and thoroughly tested.
 

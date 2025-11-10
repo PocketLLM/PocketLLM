@@ -49,7 +49,50 @@ class WaitlistService:
         else:
             record = await self._database.insert("waitlist_entries", data)
 
+        await self._upsert_application_record(payload, normalized_email, metadata)
+
         return WaitlistEntry.model_validate(record)
+
+    async def _upsert_application_record(
+        self,
+        payload: WaitlistEntryCreate,
+        normalized_email: str,
+        metadata: dict[str, Any],
+    ) -> None:
+        cleaned_links = None
+        if payload.links:
+            cleaned_links = [
+                link.strip()
+                for link in payload.links
+                if isinstance(link, str) and link.strip()
+            ]
+
+        application_payload: dict[str, Any] = {
+            "email": normalized_email,
+            "full_name": payload.name.strip(),
+            "occupation": payload.occupation.strip() if payload.occupation else None,
+            "motivation": payload.motivation.strip() if payload.motivation else None,
+            "use_case": payload.use_case.strip() if payload.use_case else None,
+            "links": cleaned_links,
+            "source": payload.source.strip() if payload.source else None,
+            "metadata": metadata,
+        }
+
+        application_existing = await self._database.select(
+            "referral_applications",
+            filters={"email": normalized_email},
+            limit=1,
+        )
+
+        if application_existing:
+            await self._database.update(
+                "referral_applications",
+                application_payload,
+                filters={"id": str(application_existing[0]["id"])},
+            )
+        else:
+            application_payload["status"] = "pending"
+            await self._database.insert("referral_applications", application_payload)
 
 
 __all__ = ["WaitlistService"]
