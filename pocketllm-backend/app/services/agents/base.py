@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import logging
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any, Iterable
 
 from langchain.memory import ConversationBufferMemory
@@ -29,7 +29,8 @@ class AgentContext:
     """Execution context supplied when running an agent."""
 
     session_id: str
-    metadata: dict[str, Any]
+    user_id: str
+    metadata: dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass(slots=True)
@@ -53,8 +54,8 @@ class BaseConversationalAgent:
     def metadata(self) -> AgentMetadata:
         return AgentMetadata(self._name, self._description, list(self._capabilities))
 
-    async def _load_history(self, session_id: str) -> ConversationBufferMemory:
-        state = await self._memory_store.load(session_id, self._name)
+    async def _load_history(self, context: AgentContext) -> ConversationBufferMemory:
+        state = await self._memory_store.load(context.user_id, context.session_id, self._name)
         history = _deserialize_history(state.get("messages", []))
         buffer = ConversationBufferMemory(return_messages=True)
         buffer.chat_memory = history
@@ -62,7 +63,7 @@ class BaseConversationalAgent:
 
     async def _persist_history(
         self,
-        session_id: str,
+        context: AgentContext,
         history: BaseChatMessageHistory,
         *,
         extra: dict[str, Any] | None = None,
@@ -70,7 +71,7 @@ class BaseConversationalAgent:
         payload: dict[str, Any] = {"messages": _serialize_history(history.messages)}
         if extra:
             payload.update(extra)
-        await self._memory_store.save(session_id, self._name, payload)
+        await self._memory_store.save(context.user_id, context.session_id, self._name, payload)
 
     async def run(self, context: AgentContext, *, prompt: str, **kwargs: Any) -> AgentRunResult:  # pragma: no cover - interface
         raise NotImplementedError

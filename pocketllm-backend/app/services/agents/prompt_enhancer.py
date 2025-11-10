@@ -54,7 +54,7 @@ class PromptEnhancerAgent(BaseConversationalAgent):
     async def run(self, context: AgentContext, *, prompt: str, task: str | None = None, **_: Any) -> AgentRunResult:
         task_key = (task or "creative_writing").lower()
         system_prompt = _TASK_PROMPTS.get(task_key, _DEFAULT_PROMPT)
-        memory = await self._load_history(context.session_id)
+        memory = await self._load_history(context)
 
         history_messages = list(memory.chat_memory.messages)
         model_messages = [SystemMessage(content=system_prompt)]
@@ -72,7 +72,7 @@ class PromptEnhancerAgent(BaseConversationalAgent):
         # Persist conversation history
         memory.chat_memory.add_user_message(prompt)
         memory.chat_memory.add_ai_message(enhanced_payload["enhanced_prompt"])
-        await self._persist_history(context.session_id, memory.chat_memory)
+        await self._persist_history(context, memory.chat_memory)
 
         return AgentRunResult(
             output=enhanced_payload["enhanced_prompt"],

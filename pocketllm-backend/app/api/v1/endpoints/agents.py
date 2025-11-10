@@ -38,7 +38,7 @@ async def run_agent(
 ) -> AgentRunResponse:
     registry = build_agent_registry(settings, database)
     session_id = payload.session_id or str(user.sub)
-    context = AgentContext(session_id=session_id, metadata=payload.metadata)
+    context = AgentContext(session_id=session_id, user_id=str(user.sub), metadata=payload.metadata)
     try:
         result = await registry.run_agent(payload.agent, context, prompt=payload.prompt, task=payload.task)
     except KeyError as exc:

@@ -59,7 +59,7 @@ class WorkflowAgent(BaseConversationalAgent):
         return graph.compile()
 
     async def run(self, context: AgentContext, *, prompt: str, task: str | None = None, **_: Any) -> AgentRunResult:
-        memory = await self._load_history(context.session_id)
+        memory = await self._load_history(context)
         workflow_task = (task or context.metadata.get("task") or "writing").lower()
         initial_state: WorkflowState = {
             "task": workflow_task,
@@ -72,7 +72,7 @@ class WorkflowAgent(BaseConversationalAgent):
         final_output = result_state.get("result") or result_state.get("enhanced_prompt") or ""
         memory.chat_memory.add_user_message(prompt)
         memory.chat_memory.add_ai_message(final_output)
-        await self._persist_history(context.session_id, memory.chat_memory, extra={"workflow": result_state})
+        await self._persist_history(context, memory.chat_memory, extra={"workflow": result_state})
         return AgentRunResult(output=final_output, data=result_state)
 
     async def _enhance_node(self, state: WorkflowState, config: dict[str, Any]) -> WorkflowState:

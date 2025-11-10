@@ -1037,10 +1037,12 @@ Executes a registered agent. The payload accepts optional metadata and session i
   "task": "summarization",
   "session_id": "chat-session-123",
   "metadata": {
-    "tests": ["assert 1 + 1 == 2"]
+    "audience": "product_team"
   }
 }
 ```
+
+> ℹ️ **Python execution is disabled.** Any `metadata.tests` values are ignored to prevent untrusted code from running inside the API environment.
 
 **Response:**
 ```json

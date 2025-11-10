@@ -7,7 +7,6 @@ from typing import Any
 
 from langchain.chains import LLMChain
 from langchain.prompts import PromptTemplate
-from langchain.tools.python.tool import PythonREPLTool
 
 from .base import AgentContext, AgentRunResult, BaseConversationalAgent
 from .memory import AgentMemoryStore
@@ -25,38 +24,33 @@ _PLAN_PROMPT = PromptTemplate(
 
 
 class CodeAgent(BaseConversationalAgent):
-    """Generates implementation plans and executes quick Python checks."""
+    """Generates implementation plans without executing untrusted code."""
 
     def __init__(self, memory_store: AgentMemoryStore) -> None:
         super().__init__(
             name="code",
-            description="Creates coding plans and can execute lightweight Python REPL checks.",
-            capabilities=["code_planning", "edge_case_generation", "python_repl_testing"],
+            description="Creates coding plans and surfaces suggested manual checks.",
+            capabilities=["code_planning", "edge_case_generation"],
             memory_store=memory_store,
         )
         self._planner = LLMChain(llm=_DeterministicLLM(), prompt=_PLAN_PROMPT)
-        self._python_tool = PythonREPLTool()
 
     async def run(self, context: AgentContext, *, prompt: str, **_: Any) -> AgentRunResult:
-        memory = await self._load_history(context.session_id)
+        memory = await self._load_history(context)
         plan = await self._planner.apredict(requirements=prompt)
         tests = context.metadata.get("tests", [])
         tool_results: list[dict[str, Any]] = []
-
-        for test in tests:
-            try:
-                output = self._python_tool.run(test)
-                tool_results.append({"input": test, "output": output})
-            except Exception as exc:  # pragma: no cover - execution failure branch
-                LOGGER.warning("Python tool execution failed: %s", exc)
-                tool_results.append({"input": test, "error": str(exc)})
+        if tests:
+            LOGGER.warning(
+                "Ignoring %d requested Python test(s) for session %s; remote execution is disabled",
+                len(tests),
+                context.session_id,
+            )
 
         memory.chat_memory.add_user_message(prompt)
-        summary = plan if not tool_results else f"{plan}\n\nTool Results:\n" + "\n".join(
-            f"- {item.get('input')}: {item.get('output') or item.get('error')}" for item in tool_results
-        )
+        summary = plan
         memory.chat_memory.add_ai_message(summary)
-        await self._persist_history(context.session_id, memory.chat_memory, extra={"tool_runs": tool_results})
+        await self._persist_history(context, memory.chat_memory, extra={"tool_runs": tool_results})
 
         return AgentRunResult(
             output=plan,

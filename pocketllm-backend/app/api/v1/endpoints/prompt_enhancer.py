@@ -30,7 +30,7 @@ async def improve_prompt(
 
     memory_store = AgentMemoryStore(database)
     agent = PromptEnhancerAgent(settings, memory_store)
-    context = AgentContext(session_id=session_id, metadata=payload.metadata)
+    context = AgentContext(session_id=session_id, user_id=str(user.sub), metadata=payload.metadata)
     result = await agent.improve_prompt(context, task=payload.task, prompt=payload.prompt)
 
     return PromptEnhancerResponse(

@@ -25,11 +25,12 @@ class _SessionMemoryRetriever(BaseRetriever):
         self._memory_store = memory_store
         self._agent_key = agent_key
         self.session_id: str | None = None
+        self.owner_id: str | None = None
 
     async def _aget_relevant_documents(self, query: str) -> list[Document]:
-        if not self.session_id:
-            raise RuntimeError("Session ID must be set before calling the retriever")
-        state = await self._memory_store.load(self.session_id, self._agent_key)
+        if not self.session_id or not self.owner_id:
+            raise RuntimeError("Session and owner identifiers must be set before calling the retriever")
+        state = await self._memory_store.load(self.owner_id, self.session_id, self._agent_key)
         corpus: Iterable[str] = state.get("knowledge_base", []) or []
         if not corpus:
             corpus = ["No prior knowledge is stored for this session. Respond based on the query context only."]
@@ -84,21 +85,22 @@ class RetrievalAgent(BaseConversationalAgent):
         self._llm = _DeterministicLLM()
 
     async def run(self, context: AgentContext, *, prompt: str, **_: Any) -> AgentRunResult:
-        memory = await self._load_history(context.session_id)
+        memory = await self._load_history(context)
         self._retriever.session_id = context.session_id
+        self._retriever.owner_id = context.user_id
         chain = RetrievalQA.from_chain_type(llm=self._llm, retriever=self._retriever, chain_type="stuff")
         response = await chain.acall({"query": prompt})
         answer = response.get("result") or response.get("output_text") or ""
         sources = response.get("source_documents", [])
 
-        extra_state = await self._memory_store.load(context.session_id, self._name)
+        extra_state = await self._memory_store.load(context.user_id, context.session_id, self._name)
         knowledge_base: list[str] = list(extra_state.get("knowledge_base", []))
         knowledge_base.append(prompt)
 
         memory.chat_memory.add_user_message(prompt)
         memory.chat_memory.add_ai_message(answer)
         await self._persist_history(
-            context.session_id,
+            context,
             memory.chat_memory,
             extra={"knowledge_base": knowledge_base},
         )

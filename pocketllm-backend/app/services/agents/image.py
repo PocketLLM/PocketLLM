@@ -33,11 +33,11 @@ class ImageAgent(BaseConversationalAgent):
         self._chain = LLMChain(llm=_DeterministicLLM(), prompt=_IMAGE_PROMPT)
 
     async def run(self, context: AgentContext, *, prompt: str, **_: Any) -> AgentRunResult:
-        memory = await self._load_history(context.session_id)
+        memory = await self._load_history(context)
         enhanced = await self._chain.apredict(concept=prompt)
         memory.chat_memory.add_user_message(prompt)
         memory.chat_memory.add_ai_message(enhanced)
-        await self._persist_history(context.session_id, memory.chat_memory)
+        await self._persist_history(context, memory.chat_memory)
         return AgentRunResult(output=enhanced, data={"enhanced_prompt": enhanced})
 
 
