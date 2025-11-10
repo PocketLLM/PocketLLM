@@ -277,6 +277,7 @@ class _AuthPageState extends State<AuthPage> {
     if (_mode != _AuthMode.signUp) {
       return const SizedBox.shrink();
     }
+    
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -286,7 +287,7 @@ class _AuthPageState extends State<AuthPage> {
           decoration: const InputDecoration(
             labelText: 'Invite or referral code',
             hintText: 'e.g. HELLO-1234',
-            helperText: 'Required unless your waitlist application has already been approved.',
+            helperText: 'May be required depending on waitlist status. Apply for access if you don\'t have a code.',
           ),
         ),
         const SizedBox(height: 8),
@@ -1086,17 +1087,8 @@ class _AuthPageState extends State<AuthPage> {
 
   Future<void> _handleSubmit(BuildContext context) async {
     final authState = context.read<AuthState>();
-    _log('Submit tapped. mode=$_mode, serviceAvailable=${authState.isServiceAvailable}, isPerformingRequest=${authState.isPerformingRequest}');
-    if (!authState.isServiceAvailable) {
-      _log('Submission aborted: authentication service unavailable.');
-      _showSnackBar(context, 'Authentication service is currently unavailable. Please try again soon.');
-      return;
-    }
-
-    final isValid = _formKey.currentState?.validate() ?? false;
-    _log('Form validation result: $isValid');
-    if (!isValid) {
-      _log('Submission aborted: form validation failed.');
+    final form = _formKey.currentState;
+    if (form == null || !form.validate()) {
       return;
     }
 
@@ -1209,6 +1201,10 @@ class _AuthPageState extends State<AuthPage> {
         displayMessage = 'Please check your internet connection and try again.';
       } else if (message.contains('500')) {
         displayMessage = 'Server error. Please try again later.';
+      } else if (message.contains('Unable to validate invite status')) {
+        displayMessage = 'Unable to validate invite status. Please check your invite code or apply for access.';
+      } else if (message.contains('invite code or approved waitlist application is required')) {
+        displayMessage = 'An invite code or approved waitlist application is required to create an account.';
       }
     }
     

@@ -61,6 +61,10 @@ class InviteReferralService:
         if application:
             return InviteApprovalContext(mode="waitlist", application_record=application)
 
+        # Check if invite code is required based on settings
+        if not getattr(self._settings, "invite_code_required", True):
+            return InviteApprovalContext(mode="bypass")
+
         if self._settings.environment.lower() in {"development", "test"}:
             return InviteApprovalContext(mode="bypass")
 
@@ -206,13 +210,18 @@ class InviteReferralService:
             if reward_status in {"issued", "fulfilled"}:
                 rewards_issued += 1
 
+            # Handle potentially None datetime values
+            created_at = self._parse_datetime(row.get("created_at"))
+            if created_at is None:
+                created_at = datetime.now(tz=UTC)
+
             items.append(
                 ReferralListItem(
                     referral_id=UUID(str(row["id"])),
                     email=row["referee_email"],
                     status=status_value,
                     reward_status=reward_status,
-                    created_at=self._parse_datetime(row.get("created_at")),
+                    created_at=created_at,
                     accepted_at=self._parse_datetime(accepted_at),
                 )
             )

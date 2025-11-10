@@ -42,6 +42,8 @@ LOG_LEVEL=INFO
 SUPABASE_SKIP_CONNECTION_TEST=false
 # Optional: continue booting when Supabase is unreachable (defaults to false)
 SUPABASE_STRICT_STARTUP=false
+# Optional: control whether invite codes are required for signup (defaults to true)
+INVITE_CODE=True
 ```
 
 Refer to [`API_DOCUMENTATION.md`](API_DOCUMENTATION.md) for the full list of optional settings.

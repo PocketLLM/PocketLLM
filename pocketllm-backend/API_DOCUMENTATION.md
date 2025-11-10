@@ -6,7 +6,9 @@ in the `Authorization: Bearer <token>` header.
 ## Authentication
 
 ### `POST /v1/auth/signup`
-Register a new user through Supabase GoTrue. Sign-up requires either a valid `invite_code` or a previously approved waitlist application.
+Register a new user through Supabase GoTrue. Sign-up requires either a valid `invite_code`, a previously approved waitlist application, 
+or the `INVITE_CODE` environment variable to be set to `False`.
+
 - **Body:** `SignUpRequest { email, password, full_name?, invite_code? }`
 - **Response:** `SignUpResponse { user, tokens, session?, account_status }`
   - `account_status` surfaces deletion metadata (`deletion_scheduled`, `deletion_canceled`, `previous_deletion_*`).
@@ -198,14 +200,3 @@ Delete a saved model configuration.
 Mark a configuration as the default model for the user.
 - **Body:** `ModelDefaultRequest`
 - **Response:** `ModelConfiguration`
-
-## Default
-
-### `GET /`
-Simple status message.
-
-### `GET /health`
-Health probe returning API version and uptime state.
-
-Refer to [`api_structure.json`](api_structure.json) for a machine-readable representation of the routes and to the FastAPI-generated
-OpenAPI specification at `/openapi.json`.

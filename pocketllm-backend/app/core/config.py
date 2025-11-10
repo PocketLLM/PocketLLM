@@ -93,6 +93,9 @@ class Settings(BaseSettings):
         default=30.0, alias="PROVIDER_CATALOGUE_TOTAL_TIMEOUT"
     )
 
+    # Invite code configuration
+    invite_code_required: bool = Field(default=True, alias="INVITE_CODE")
+
 
 @lru_cache
 def get_settings() -> Settings:
