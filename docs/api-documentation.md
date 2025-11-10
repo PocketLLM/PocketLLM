@@ -972,6 +972,95 @@ If the device cannot reach the backend, double-check VPNs or firewalls, and ensu
 
 ---
 
+## ✨ Prompt Enhancer
+
+**POST** `/prompt-enhancer/improve`
+
+Enhances a user-supplied prompt using Groq's `openai/gpt-oss-120b` model with task-specific instructions. Requests require authentication and are rate limited (10 per minute per user).
+
+**Request Body:**
+```json
+{
+  "prompt": "Draw a dragon in the mountains",
+  "task": "image_generation",
+  "session_id": "chat-session-123"
+}
+```
+
+**Response:**
+```json
+{
+  "task": "image_generation",
+  "enhanced_prompt": "Cinematic illustration of a crimson dragon circling snow-capped alpine peaks, dramatic golden-hour lighting, ultra-wide 16:9 aspect ratio, volumetric mist in the valley, painted in the style of Studio Ghibli and Ruan Jia.",
+  "guidance": "Emphasize lighting, include foreground terrain, reference painterly texture.",
+  "raw_response": "{...full model JSON...}"
+}
+```
+
+## 🤖 Agent Registry
+
+**GET** `/agents/list`
+
+Returns all registered LangChain/LangGraph agents along with any custom components discovered in `docs/langchain`.
+
+**Response:**
+```json
+{
+  "agents": [
+    {
+      "name": "prompt_enhancer",
+      "description": "Enhances user prompts according to the requested task category.",
+      "capabilities": ["prompt_optimization", "task_routing", "contextual_memory"]
+    },
+    {
+      "name": "workflow",
+      "description": "Multi-step coordinator that enhances prompts and dispatches to specialist agents.",
+      "capabilities": ["prompt_enhancement", "task_routing", "multi_agent_execution"]
+    }
+  ],
+  "discovered_components": {
+    "agents": ["Tool calling agents", "Structured output chains"],
+    "tools": ["Python REPL tool", "Search tool"]
+  }
+}
+```
+
+**POST** `/agents/run`
+
+Executes a registered agent. The payload accepts optional metadata and session identifiers to persist memory across calls.
+
+**Request Body:**
+```json
+{
+  "agent": "workflow",
+  "prompt": "Summarize yesterday's meeting notes",
+  "task": "summarization",
+  "session_id": "chat-session-123",
+  "metadata": {
+    "tests": ["assert 1 + 1 == 2"]
+  }
+}
+```
+
+**Response:**
+```json
+{
+  "agent": "workflow",
+  "output": "Knowledge-grounded response: ...",
+  "data": {
+    "task": "summarization",
+    "enhanced_prompt": "...",
+    "result": "...",
+    "metadata": {
+      "enhancement": {"enhanced_prompt": "..."},
+      "execution": {"sources": ["..."]}
+    }
+  }
+}
+```
+
+---
+
 ## 🚨 Error Handling
 
 The API uses standard HTTP status codes:

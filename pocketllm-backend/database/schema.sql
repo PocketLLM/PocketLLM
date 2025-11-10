@@ -208,6 +208,33 @@ end;
 $$;
 
 -- -----------------------------------------------------------------------------
+-- Agent memory store
+-- -----------------------------------------------------------------------------
+create table if not exists public.agent_memories (
+    id uuid primary key default gen_random_uuid(),
+    session_id text not null,
+    agent_key text not null,
+    memory_state jsonb not null default '{}'::jsonb,
+    created_at timestamptz not null default timezone('utc', now()),
+    updated_at timestamptz not null default timezone('utc', now()),
+    constraint agent_memories_session_agent_key unique (session_id, agent_key)
+);
+
+create index if not exists agent_memories_session_idx on public.agent_memories (session_id);
+
+do $$
+begin
+    if not exists (
+        select 1 from pg_trigger where tgname = 'set_agent_memories_updated_at'
+    ) then
+        create trigger set_agent_memories_updated_at
+            before update on public.agent_memories
+            for each row execute function public.set_updated_at();
+    end if;
+end;
+$$;
+
+-- -----------------------------------------------------------------------------
 -- Chats
 -- -----------------------------------------------------------------------------
 create table if not exists public.chats (

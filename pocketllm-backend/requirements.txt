@@ -5,6 +5,10 @@ pydantic-settings
 httpx
 groq
 openai
+langchain
+langchain-core
+langchain-community
+langgraph
 cryptography
 asyncpg
 supabase
