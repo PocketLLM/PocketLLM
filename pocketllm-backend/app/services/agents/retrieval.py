@@ -3,13 +3,15 @@
 from __future__ import annotations
 
 import logging
-from typing import Any, Iterable
+from typing import Any, Iterable, Optional
 
-from langchain.chains import RetrievalQA
+from langchain_classic.chains import RetrievalQA
 from langchain_core.documents import Document
 from langchain_core.language_models.llms import LLM
-from langchain_core.outputs import LLMResult
+from langchain_core.outputs import LLMResult, Generation
 from langchain_core.retrievers import BaseRetriever
+from langchain_core.callbacks import CallbackManagerForRetrieverRun, AsyncCallbackManagerForRetrieverRun
+from langchain_core.callbacks.manager import CallbackManagerForLLMRun, AsyncCallbackManagerForLLMRun
 
 from .base import AgentContext, AgentRunResult, BaseConversationalAgent
 from .memory import AgentMemoryStore
@@ -27,7 +29,9 @@ class _SessionMemoryRetriever(BaseRetriever):
         self.session_id: str | None = None
         self.owner_id: str | None = None
 
-    async def _aget_relevant_documents(self, query: str) -> list[Document]:
+    async def _aget_relevant_documents(
+        self, query: str, *, run_manager: Optional[AsyncCallbackManagerForRetrieverRun] = None
+    ) -> list[Document]:
         if not self.session_id or not self.owner_id:
             raise RuntimeError("Session and owner identifiers must be set before calling the retriever")
         state = await self._memory_store.load(self.owner_id, self.session_id, self._agent_key)
@@ -38,7 +42,9 @@ class _SessionMemoryRetriever(BaseRetriever):
         LOGGER.debug("Retrieved %d context documents for query", len(documents))
         return documents
 
-    def _get_relevant_documents(self, query: str) -> list[Document]:  # pragma: no cover - sync bridge
+    def _get_relevant_documents(
+        self, query: str, *, run_manager: Optional[CallbackManagerForRetrieverRun] = None
+    ) -> list[Document]:  # pragma: no cover - sync bridge
         import asyncio
 
         try:
@@ -59,16 +65,35 @@ class _DeterministicLLM(LLM):
     def _llm_type(self) -> str:
         return "pocketllm-retrieval"
 
-    def _call(self, prompt: str, stop: list[str] | None = None) -> str:
+    def _call(
+        self,
+        prompt: str,
+        stop: list[str] | None = None,
+        run_manager: CallbackManagerForLLMRun | None = None,
+        **kwargs: Any,
+    ) -> str:
         suffix = "" if not stop else f" (stopped on: {', '.join(stop)})"
         return f"Knowledge-grounded response:{suffix}\n{prompt.strip()}"
 
-    async def _acall(self, prompt: str, stop: list[str] | None = None) -> str:
-        return self._call(prompt, stop=stop)
+    async def _acall(
+        self,
+        prompt: str,
+        stop: list[str] | None = None,
+        run_manager: AsyncCallbackManagerForLLMRun | None = None,
+        **kwargs: Any,
+    ) -> str:
+        return await self._acall(prompt, stop=stop, run_manager=run_manager, **kwargs)
 
-    def _generate(self, prompts: list[str], stop: list[str] | None = None) -> LLMResult:
-        generations = [[self._call(prompt, stop=stop)] for prompt in prompts]
-        return LLMResult(generations=[[{"text": text} for text in row] for row in generations])
+    def _generate(
+        self,
+        prompts: list[str],
+        stop: list[str] | None = None,
+        run_manager: CallbackManagerForLLMRun | None = None,
+        **kwargs: Any,
+    ) -> LLMResult:
+        generations = [[self._call(prompt, stop=stop, run_manager=run_manager, **kwargs)] for prompt in prompts]
+        gen_objs = [[Generation(text=text) for text in row] for row in generations]
+        return LLMResult(generations=gen_objs)
 
 
 class RetrievalAgent(BaseConversationalAgent):

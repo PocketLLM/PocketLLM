@@ -6,6 +6,7 @@ httpx
 groq
 openai
 langchain
+langchain-classic
 langchain-core
 langchain-community
 langgraph

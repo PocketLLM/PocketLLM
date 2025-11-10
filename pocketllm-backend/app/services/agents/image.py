@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from typing import Any
 
-from langchain.chains import LLMChain
-from langchain.prompts import PromptTemplate
+from langchain_classic.chains import LLMChain
+from langchain_classic.prompts import PromptTemplate
 
 from .base import AgentContext, AgentRunResult, BaseConversationalAgent
 from .memory import AgentMemoryStore

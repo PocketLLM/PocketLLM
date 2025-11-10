@@ -5,6 +5,8 @@ from __future__ import annotations
 import logging
 from typing import Any, TypedDict
 
+from langchain_core.runnables import RunnableConfig
+from langgraph.store.base import BaseStore
 from langgraph.graph import END, StateGraph
 
 from .base import AgentContext, AgentRunResult, BaseConversationalAgent
@@ -73,20 +75,36 @@ class WorkflowAgent(BaseConversationalAgent):
         memory.chat_memory.add_user_message(prompt)
         memory.chat_memory.add_ai_message(final_output)
         await self._persist_history(context, memory.chat_memory, extra={"workflow": result_state})
-        return AgentRunResult(output=final_output, data=result_state)
+        return AgentRunResult(output=final_output, data=dict(result_state))
 
-    async def _enhance_node(self, state: WorkflowState, config: dict[str, Any]) -> WorkflowState:
-        context: AgentContext = config.get("configurable", {}).get("agent_context")
-        prompt = state["prompt"]
-        task = state["task"]
+    async def _enhance_node(
+        self, 
+        state: WorkflowState, 
+        *, 
+        config: RunnableConfig, 
+        store: BaseStore
+    ) -> WorkflowState:
+        context = config.get("configurable", {}).get("agent_context")
+        if context is None:
+            raise ValueError("Agent context is required but not provided in config")
+        prompt = state.get("prompt", "")
+        task = state.get("task", "writing")
         LOGGER.debug("WorkflowAgent: enhancing prompt for task %s", task)
         result = await self._prompt_agent.run(context, prompt=prompt, task=task)
         metadata = dict(state.get("metadata") or {})
         metadata["enhancement"] = result.data
         return {"enhanced_prompt": result.output, "metadata": metadata}
 
-    async def _execute_node(self, state: WorkflowState, config: dict[str, Any]) -> WorkflowState:
-        context: AgentContext = config.get("configurable", {}).get("agent_context")
+    async def _execute_node(
+        self, 
+        state: WorkflowState, 
+        *, 
+        config: RunnableConfig, 
+        store: BaseStore
+    ) -> WorkflowState:
+        context = config.get("configurable", {}).get("agent_context")
+        if context is None:
+            raise ValueError("Agent context is required but not provided in config")
         task = state.get("task", "writing")
         prompt = state.get("enhanced_prompt") or state.get("prompt") or ""
         LOGGER.debug("WorkflowAgent: executing task %s", task)

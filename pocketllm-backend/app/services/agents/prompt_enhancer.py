@@ -6,7 +6,7 @@ import json
 import logging
 from typing import Any
 
-from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
+from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, SystemMessage
 
 from app.core.config import Settings
 from app.services.providers.groq import GroqSDKService
@@ -57,7 +57,7 @@ class PromptEnhancerAgent(BaseConversationalAgent):
         memory = await self._load_history(context)
 
         history_messages = list(memory.chat_memory.messages)
-        model_messages = [SystemMessage(content=system_prompt)]
+        model_messages: list[BaseMessage] = [SystemMessage(content=system_prompt)]
         model_messages.extend(history_messages)
         model_messages.append(HumanMessage(content=_format_user_payload(prompt, task_key)))
 

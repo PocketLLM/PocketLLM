@@ -6,27 +6,31 @@ import logging
 from dataclasses import dataclass, field
 from typing import Any, Iterable
 
-from langchain_core.chat_history import BaseChatMessageHistory, ChatMessageHistory
+from langchain_core.chat_history import BaseChatMessageHistory, InMemoryChatMessageHistory
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, SystemMessage
 
+# Always define our fallback class
+class _FallbackConversationBufferMemory:
+    """Minimal stand-in when langchain.memory is unavailable."""
+
+    def __init__(self, *, return_messages: bool = True) -> None:
+        if not return_messages:
+            raise ValueError("PocketLLM agents require return_messages=True for memory persistence.")
+        self._chat_memory: BaseChatMessageHistory = InMemoryChatMessageHistory()
+
+    @property
+    def chat_memory(self) -> BaseChatMessageHistory:
+        return self._chat_memory
+
+    @chat_memory.setter
+    def chat_memory(self, history: BaseChatMessageHistory) -> None:
+        self._chat_memory = history
+
+# Try to import the actual class and use it, otherwise use our fallback
 try:
-    from langchain.memory import ConversationBufferMemory
+    from langchain_classic.memory import ConversationBufferMemory
 except ModuleNotFoundError:  # pragma: no cover - fallback for new LangChain modular releases
-    class ConversationBufferMemory:
-        """Minimal stand-in when langchain.memory is unavailable."""
-
-        def __init__(self, *, return_messages: bool = True) -> None:
-            if not return_messages:
-                raise ValueError("PocketLLM agents require return_messages=True for memory persistence.")
-            self._chat_memory: BaseChatMessageHistory = ChatMessageHistory()
-
-        @property
-        def chat_memory(self) -> BaseChatMessageHistory:
-            return self._chat_memory
-
-        @chat_memory.setter
-        def chat_memory(self, history: BaseChatMessageHistory) -> None:
-            self._chat_memory = history
+    ConversationBufferMemory = _FallbackConversationBufferMemory
 
 from .memory import AgentMemoryStore
 
@@ -72,7 +76,7 @@ class BaseConversationalAgent:
     def metadata(self) -> AgentMetadata:
         return AgentMetadata(self._name, self._description, list(self._capabilities))
 
-    async def _load_history(self, context: AgentContext) -> ConversationBufferMemory:
+    async def _load_history(self, context: AgentContext) -> Any:
         state = await self._memory_store.load(context.user_id, context.session_id, self._name)
         history = _deserialize_history(state.get("messages", []))
         buffer = ConversationBufferMemory(return_messages=True)
@@ -95,8 +99,8 @@ class BaseConversationalAgent:
         raise NotImplementedError
 
 
-def _deserialize_history(serialized: Iterable[dict[str, Any]]) -> ChatMessageHistory:
-    history = ChatMessageHistory()
+def _deserialize_history(serialized: Iterable[dict[str, Any]]) -> InMemoryChatMessageHistory:
+    history = InMemoryChatMessageHistory()
     for message in serialized:
         role = message.get("type") or message.get("role")
         content = message.get("content", "")
