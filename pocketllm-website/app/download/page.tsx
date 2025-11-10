@@ -1,6 +1,6 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
-import { Android, Apple, Download, Globe, Laptop, MonitorSmartphone } from 'lucide-react';
+import { Smartphone, Apple, Download, Globe, Laptop, MonitorSmartphone } from 'lucide-react';
 import { PageShell, PageHero, PageSection, GlassCard, GradientPill } from '@/components/marketing/page-shell';
 
 const platforms = [
@@ -13,7 +13,7 @@ const platforms = [
 	},
 	{
 		name: 'Android',
-		icon: Android,
+		icon: Smartphone,
 		requirements: 'Android 7.0+ (API 24)',
 		size: '~20 MB',
 		cta: 'Coming soon',
