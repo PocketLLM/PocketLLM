@@ -324,6 +324,11 @@ class AuthStateNotifier extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Public method to refresh the authentication session
+  Future<bool> refreshSession() async {
+    return _ensureFreshAccessToken(forceRefreshIfExpired: true);
+  }
+
   Future<void> completeProfile({
     required String fullName,
     required String username,
@@ -405,8 +410,16 @@ class AuthStateNotifier extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> updatePassword(String newPassword) async {
-    throw const AuthException('Password updates are not supported yet.');
+  Future<void> updatePassword(String oldPassword, String newPassword) async {
+    _ensureAuthenticated();
+    await _post(
+      '/auth/password/change',
+      body: {
+        'old': oldPassword,
+        'new': newPassword,
+      },
+      requiresAuth: true,
+    );
   }
 
   Future<String?> uploadProfileImage(File imageFile) async {
@@ -476,6 +489,18 @@ class AuthStateNotifier extends ChangeNotifier {
       }
     });
 
+    notifyListeners();
+  }
+
+  /// Immediately delete the user's account without waiting for the grace period
+  Future<void> deleteAccount() async {
+    _ensureAuthenticated();
+    await _runWithLoading(() async {
+      await _delete('/users/profile', requiresAuth: true);
+    });
+    
+    // Clear the local session after successful deletion
+    await _clearSession();
     notifyListeners();
   }
 

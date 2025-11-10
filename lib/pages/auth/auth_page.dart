@@ -11,7 +11,11 @@ import '../../models/user_profile.dart';
 import '../../services/auth_state.dart';
 import '../../services/backend_api_service.dart';
 import '../../widgets/clear_text_field.dart';
+import '../../widgets/auth/custom_button.dart';
+import '../../widgets/auth/custom_text_field.dart';
 import 'user_survey_page.dart';
+import 'forgot_password_screen.dart';
+import 'email_verification_pending_screen.dart';
 
 enum _AuthMode { signIn, signUp }
 
@@ -282,13 +286,10 @@ class _AuthPageState extends State<AuthPage> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        TextFormField(
+        CustomTextField(
           controller: _inviteCodeController,
-          textCapitalization: TextCapitalization.characters,
-          decoration: const InputDecoration(
-            labelText: 'Invite or referral code',
-            hintText: 'e.g. HELLO-1234'
-          ),
+          label: 'Invite or referral code',
+          hintText: 'e.g. HELLO-1234',
         ),
         const SizedBox(height: 8),
         Wrap(
@@ -391,16 +392,16 @@ class _AuthPageState extends State<AuthPage> {
                           ],
                         ),
                         const SizedBox(height: 16),
-                        TextFormField(
+                        CustomTextField(
                           controller: _waitlistNameController,
-                          decoration: const InputDecoration(labelText: 'Full name'),
+                          label: 'Full name',
                           validator: (value) =>
                               (value == null || value.trim().isEmpty) ? 'Please share your name' : null,
                         ),
                         const SizedBox(height: 12),
-                        TextFormField(
+                        CustomTextField(
                           controller: _waitlistEmailController,
-                          decoration: const InputDecoration(labelText: 'Email'),
+                          label: 'Email',
                           keyboardType: TextInputType.emailAddress,
                           validator: (value) {
                             if (value == null || value.trim().isEmpty) {
@@ -413,59 +414,42 @@ class _AuthPageState extends State<AuthPage> {
                           },
                         ),
                         const SizedBox(height: 12),
-                        TextFormField(
+                        CustomTextField(
                           controller: _waitlistOccupationController,
-                          decoration: const InputDecoration(labelText: 'Occupation'),
+                          label: 'Occupation',
                         ),
                         const SizedBox(height: 12),
-                        TextFormField(
+                        CustomTextField(
                           controller: _waitlistMotivationController,
-                          decoration: const InputDecoration(
-                            labelText: 'Why do you want access?',
-                            hintText: 'Share what you are building or researching',
-                          ),
+                          label: 'Why do you want access?',
+                          hintText: 'Share what you are building or researching',
                           maxLines: 3,
                         ),
                         const SizedBox(height: 12),
-                        TextFormField(
+                        CustomTextField(
                           controller: _waitlistUseCaseController,
-                          decoration: const InputDecoration(
-                            labelText: 'How will you use PocketLLM?',
-                          ),
+                          label: 'How will you use PocketLLM?',
                           maxLines: 3,
                         ),
                         const SizedBox(height: 12),
-                        TextFormField(
+                        CustomTextField(
                           controller: _waitlistLinksController,
-                          decoration: const InputDecoration(
-                            labelText: 'Links (optional)',
-                            helperText: 'Comma separated portfolio, LinkedIn, or project links.',
-                          ),
+                          label: 'Links (optional)',
+                          helperText: 'Comma separated portfolio, LinkedIn, or project links.',
                           maxLines: 2,
                         ),
                         const SizedBox(height: 20),
-                        SizedBox(
-                          width: double.infinity,
-                          child: ElevatedButton(
-                            onPressed: isSubmitting ? null : () => submit(setModalState),
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: const Color(0xFF8B5CF6),
-                              foregroundColor: Colors.white,
-                              padding: const EdgeInsets.symmetric(vertical: 14),
-                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                            ),
-                            child: isSubmitting
-                                ? const SizedBox(
-                                    width: 20,
-                                    height: 20,
-                                    child: CircularProgressIndicator(
-                                      strokeWidth: 2,
-                                      color: Colors.white,
-                                    ),
-                                  )
-                                : const Text('Submit application'),
-                          ),
+                        CustomButton(
+                          text: 'Submit application',
+                          onPressed: isSubmitting ? () {} : () => submit(setModalState),
+                          variant: ButtonVariant.filled,
+                          size: ButtonSize.large,
                         ),
+                        if (isSubmitting)
+                          const Padding(
+                            padding: EdgeInsets.only(top: 16),
+                            child: Center(child: CircularProgressIndicator()),
+                          ),
                       ],
                     ),
                   ),
@@ -579,13 +563,13 @@ class _AuthPageState extends State<AuthPage> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  ClearTextField(
+                  CustomTextField(
                     controller: _emailController,
                     focusNode: _emailFocus,
-                    hintText: 'Email',
+                    label: 'Email',
+                    hintText: 'Enter your email',
                     keyboardType: TextInputType.emailAddress,
                     textInputAction: TextInputAction.next,
-                    autovalidateMode: AutovalidateMode.onUserInteraction,
                     onSubmitted: (_) =>
                         FocusScope.of(context).requestFocus(_passwordFocus),
                     validator: (value) {
@@ -600,23 +584,19 @@ class _AuthPageState extends State<AuthPage> {
                     },
                   ),
                   const SizedBox(height: 16),
-                  TextFormField(
+                  CustomTextField(
                     controller: _passwordController,
                     focusNode: _passwordFocus,
+                    label: isSignUp ? 'Create Password' : 'Password',
+                    hintText: 'Enter your password',
                     obscureText: _obscurePassword,
-                    decoration: InputDecoration(
-                      labelText: isSignUp ? 'Create Password' : 'Password',
-                      suffixIcon: IconButton(
-                        icon: Icon(_obscurePassword ? Icons.visibility_off : Icons.visibility),
-                        onPressed: () {
-                          setState(() {
-                            _obscurePassword = !_obscurePassword;
-                          });
-                        },
-                      ),
-                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                      filled: true,
-                      fillColor: Colors.grey[100],
+                    suffixIcon: IconButton(
+                      icon: Icon(_obscurePassword ? Icons.visibility_off : Icons.visibility),
+                      onPressed: () {
+                        setState(() {
+                          _obscurePassword = !_obscurePassword;
+                        });
+                      },
                     ),
                     validator: (value) {
                       if (value == null || value.isEmpty) {
@@ -630,33 +610,29 @@ class _AuthPageState extends State<AuthPage> {
                   ),
                   if (isSignUp) ...[
                     const SizedBox(height: 16),
-                  TextFormField(
+                  CustomTextField(
                     controller: _confirmPasswordController,
+                    label: 'Confirm Password',
+                    hintText: 'Confirm your password',
                     obscureText: _obscureConfirmPassword,
-                      decoration: InputDecoration(
-                        labelText: 'Confirm Password',
-                        suffixIcon: IconButton(
-                          icon: Icon(_obscureConfirmPassword ? Icons.visibility_off : Icons.visibility),
-                          onPressed: () {
-                            setState(() {
-                              _obscureConfirmPassword = !_obscureConfirmPassword;
-                            });
-                          },
-                        ),
-                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                        filled: true,
-                        fillColor: Colors.grey[100],
-                      ),
-                      validator: (value) {
-                        if (value == null || value.isEmpty) {
-                          return 'Confirm your password';
-                        }
-                        if (value != _passwordController.text) {
-                          return 'Passwords do not match';
-                        }
-                        return null;
+                    suffixIcon: IconButton(
+                      icon: Icon(_obscureConfirmPassword ? Icons.visibility_off : Icons.visibility),
+                      onPressed: () {
+                        setState(() {
+                          _obscureConfirmPassword = !_obscureConfirmPassword;
+                        });
                       },
                     ),
+                    validator: (value) {
+                      if (value == null || value.isEmpty) {
+                        return 'Confirm your password';
+                      }
+                      if (value != _passwordController.text) {
+                        return 'Passwords do not match';
+                      }
+                      return null;
+                    },
+                  ),
                   ],
                 ],
               ),
@@ -676,22 +652,17 @@ class _AuthPageState extends State<AuthPage> {
             ),
           ),
         const SizedBox(height: 16),
-        ElevatedButton(
-          onPressed: authState.isPerformingRequest ? null : () => _handleSubmit(context),
-          style: ElevatedButton.styleFrom(
-            backgroundColor: const Color(0xFF8B5CF6),
-            foregroundColor: Colors.white,
-            padding: const EdgeInsets.symmetric(vertical: 16),
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-          ),
-          child: authState.isPerformingRequest
-              ? const SizedBox(
-                  width: 22,
-                  height: 22,
-                  child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
-                )
-              : Text(isSignUp ? 'Create Account' : 'Sign In', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+        CustomButton(
+          text: isSignUp ? 'Create Account' : 'Sign In',
+          onPressed: authState.isPerformingRequest ? () {} : () => _handleSubmit(context),
+          variant: ButtonVariant.filled,
+          size: ButtonSize.large,
         ),
+        if (authState.isPerformingRequest)
+          const Padding(
+            padding: EdgeInsets.only(top: 16),
+            child: Center(child: CircularProgressIndicator()),
+          ),
         const SizedBox(height: 16),
         _buildDivider(),
         const SizedBox(height: 16),
@@ -1121,16 +1092,23 @@ class _AuthPageState extends State<AuthPage> {
         _log('Sign-up completed. userId=${result.userId}, emailConfirmationRequired=${result.emailConfirmationRequired}');
 
         if (result.emailConfirmationRequired) {
-          await _clearAuthSkipFlag();
-          final message = (result.message?.isNotEmpty ?? false)
-              ? result.message!
-              : 'Please check your email to confirm your account before continuing.';
-          _showSnackBar(
-            context,
-            message,
-            success: true,
-          );
-          widget.onLoginSuccess?.call(authState.currentUserEmail ?? email);
+          // Navigate to email verification pending screen
+          if (mounted) {
+            Navigator.pushReplacement(
+              context,
+              MaterialPageRoute(
+                builder: (context) => EmailVerificationPendingScreen(
+                  email: email,
+                  onBackToSignIn: () {
+                    Navigator.pop(context);
+                    setState(() {
+                      _mode = _AuthMode.signIn;
+                    });
+                  },
+                ),
+              ),
+            );
+          }
         } else {
           await _clearAuthSkipFlag();
           _showSnackBar(
@@ -1154,19 +1132,12 @@ class _AuthPageState extends State<AuthPage> {
   }
 
   void _showPasswordResetInfo(BuildContext context) {
-    showDialog<void>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Password Reset'),
-        content: const Text(
-          'Password reset is coming soon. For now, contact support to regain access to your account.',
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => ForgotPasswordScreen(
+          onBackToSignIn: () => Navigator.pop(context),
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Close'),
-          ),
-        ],
       ),
     );
   }
