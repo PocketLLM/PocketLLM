@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import secrets
 import string
+import logging
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any, Dict, Literal, Sequence
@@ -23,6 +24,9 @@ from app.schemas.referrals import (
     ReferralSendResponse,
     ReferralStats,
 )
+
+
+logger = logging.getLogger(__name__)
 
 
 InviteApprovalMode = Literal["invite", "waitlist", "bypass"]
@@ -47,7 +51,7 @@ class InviteReferralService:
     # ------------------------------------------------------------------
     # Public API
     # ------------------------------------------------------------------
-    async def enforce_signup_policy(self, email: str, invite_code: str | None) -> InviteApprovalContext:
+    async def enforce_signup_policy(self, email: str, invite_code: str | None) -> InviteApprovalContext | None:
         """Ensure a signup attempt is backed by a valid invite or approval."""
 
         normalized_email = self._normalize_email(email)
@@ -63,14 +67,18 @@ class InviteReferralService:
 
         # Check if invite code is required based on settings
         if not getattr(self._settings, "invite_code_required", True):
-            return InviteApprovalContext(mode="bypass")
+            return None
 
         if self._settings.environment.lower() in {"development", "test"}:
-            return InviteApprovalContext(mode="bypass")
+            return None
 
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="An invite code or approved waitlist application is required to create an account.",
+            detail={
+                "message": "No invite code provided. Apply for an invite to continue.",
+                "code": "invite_required",
+                "waitlist_endpoint": "/v1/waitlist",
+            },
         )
 
     async def handle_post_signup(
@@ -90,7 +98,6 @@ class InviteReferralService:
             await self._mark_invite_consumed(approval.invite_record, user.id, email)
             updates.update(
                 {
-                    "invite_status": "joined",
                     "referral_code": approval.invite_record["code"],
                     "referred_by": approval.invite_record.get("issued_by"),
                     "invite_approved_at": datetime.now(tz=UTC).isoformat(),
@@ -103,14 +110,13 @@ class InviteReferralService:
                     "waitlist_status": "approved",
                     "waitlist_metadata": approval.application_record.get("metadata") or {},
                     "waitlist_applied_at": approval.application_record.get("applied_at"),
-                    "invite_status": "invited",
                 }
             )
         else:
-            updates["invite_status"] = "pending"
+            pass
 
         if updates:
-            await self._database.update_profile(user.id, updates)
+            await self._persist_profile_metadata(user.id, updates)
 
     async def validate_invite_code(self, code: str, *, require_active: bool = False) -> Dict[str, Any]:
         """Load an invite code record and optionally ensure it is usable."""
@@ -414,6 +420,31 @@ class InviteReferralService:
             return parsed
         except ValueError:
             return None
+
+    async def _persist_profile_metadata(self, user_id: UUID, updates: Dict[str, Any]) -> None:
+        try:
+            await self._database.update_profile(user_id, updates)
+        except Exception as exc:
+            if self._looks_like_missing_invite_columns(exc):
+                logger.warning(
+                    "Profile metadata update skipped for %s because Supabase is missing invite columns: %s",
+                    user_id,
+                    exc,
+                )
+                return
+            raise
+
+    def _looks_like_missing_invite_columns(self, exc: Exception) -> bool:
+        message = ""
+        for attr in ("message", "msg", "detail"):
+            value = getattr(exc, attr, None)
+            if isinstance(value, str) and value.strip():
+                message = value
+                break
+        if not message:
+            message = str(exc)
+        lowered = message.lower()
+        return "invite_status" in lowered and ("schema" in lowered or "column" in lowered)
 
 
 __all__ = ["InviteReferralService", "InviteApprovalContext"]

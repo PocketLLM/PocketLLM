@@ -28,9 +28,9 @@ async def test_invite_code_setting():
     # This should not raise an exception when invite_code_required is False
     try:
         context = await service.enforce_signup_policy("test@example.com", None)
-        print(f"Success: {context.mode}")
-        assert context.mode == "bypass"
-        print("Test passed: invite_code_required=False allows signup without invite code")
+        print(f"Success: context={context}")
+        assert context is None
+        print("Test passed: invite_code_required=False bypasses invite checks")
     except Exception as e:
         print(f"Test failed: {e}")
         return False

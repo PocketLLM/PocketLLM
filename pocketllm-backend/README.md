@@ -69,7 +69,12 @@ or production.
 
 Run the SQL statements in [`database/schema.sql`](database/schema.sql) against your Supabase/Postgres instance. The schema ships
 with primary keys, foreign keys, row-level security, triggers, and indexes tailored for PocketLLM's services, and can be applied
-multiple times safely.
+multiple times safely. After the base schema has been installed, apply the targeted invite/waitlist patch to ensure the `profiles`
+table exposes the columns required by the FastAPI services:
+
+```bash
+psql "$SUPABASE_DB_URL" -f database/migrations/20251111_add_invite_columns.sql
+```
 
 ### 4. Launch the API
 

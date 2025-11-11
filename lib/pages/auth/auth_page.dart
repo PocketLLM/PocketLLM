@@ -1149,19 +1149,22 @@ class _AuthPageState extends State<AuthPage> {
     // Provide more user-friendly error messages
     String displayMessage = message;
     if (!success) {
-      if (message.contains('Failed to parse backend response') || 
-          message.contains('Unexpected character')) {
+      final normalizedMessage = message.toLowerCase();
+      if (normalizedMessage.contains('failed to parse backend response') || 
+          normalizedMessage.contains('unexpected character')) {
         displayMessage = 'Server error. Please try again later.';
-      } else if (message.contains('SocketException') || 
-                 message.contains('Failed host lookup') ||
-                 message.contains('Unable to reach')) {
+      } else if (normalizedMessage.contains('socketexception') || 
+                 normalizedMessage.contains('failed host lookup') ||
+                 normalizedMessage.contains('unable to reach')) {
         displayMessage = 'Please check your internet connection and try again.';
-      } else if (message.contains('500')) {
+      } else if (normalizedMessage.contains('500')) {
         displayMessage = 'Server error. Please try again later.';
-      } else if (message.contains('Unable to validate invite status')) {
+      } else if (normalizedMessage.contains('unable to validate invite status')) {
         displayMessage = 'Unable to validate invite status. Please check your invite code or apply for access.';
-      } else if (message.contains('invite code or approved waitlist application is required')) {
+      } else if (normalizedMessage.contains('invite code or approved waitlist application is required')) {
         displayMessage = 'An invite code or approved waitlist application is required to create an account.';
+      } else if (normalizedMessage.contains('no invite code provided')) {
+        displayMessage = 'No invite code was provided. Please apply for access to continue.';
       }
     }
     

@@ -11,9 +11,10 @@ from app.services.referrals import InviteApprovalContext, InviteReferralService
 
 
 class FakeDatabase:
-    def __init__(self) -> None:
+    def __init__(self, *, fail_profile_update: bool = False) -> None:
         self.tables: dict[str, list[dict[str, object]]] = defaultdict(list)
         self.profiles: dict[str, dict[str, object]] = {}
+        self._fail_profile_update = fail_profile_update
 
     async def select(self, table: str, *, filters=None, limit=None, order_by=None):
         rows = self.tables[table]
@@ -51,6 +52,8 @@ class FakeDatabase:
         return [inserted]
 
     async def update_profile(self, user_id, payload):
+        if self._fail_profile_update:
+            raise RuntimeError("Could not find the 'invite_status' column of 'profiles' in the schema cache")
         profile = self.profiles.get(str(user_id), {"id": str(user_id)})
         profile.update(payload)
         self.profiles[str(user_id)] = profile
@@ -120,6 +123,36 @@ async def test_handle_post_signup_consumes_invite_and_updates_profile():
     updated_invite = database.tables["invite_codes"][0]
     assert updated_invite["uses_count"] == 1
     assert database.profiles[str(user_id)]["referral_code"] == "INVITER1"
+    referrals = database.tables["referrals"]
+    assert len(referrals) == 1
+    assert referrals[0]["status"] == "joined"
+
+
+@pytest.mark.asyncio
+async def test_handle_post_signup_continues_when_profile_columns_missing():
+    database = FakeDatabase(fail_profile_update=True)
+    issuer_id = uuid.uuid4()
+    invite_id = uuid.uuid4()
+    invite_record = await database.insert(
+        "invite_codes",
+        {
+            "id": invite_id,
+            "code": "APPLY123",
+            "status": "active",
+            "uses_count": 0,
+            "max_uses": 1,
+            "issued_by": str(issuer_id),
+        },
+    )
+    user_id = uuid.uuid4()
+    service = InviteReferralService(settings=Settings(), database=database)
+    user = AuthenticatedUser(id=user_id, email="friend@example.com", full_name="Friend")
+
+    context = InviteApprovalContext(mode="invite", invite_record=invite_record)
+    await service.handle_post_signup(user, user.email, context)
+
+    # Profile update is skipped but referrals still record the join event
+    assert str(user_id) not in database.profiles
     referrals = database.tables["referrals"]
     assert len(referrals) == 1
     assert referrals[0]["status"] == "joined"
