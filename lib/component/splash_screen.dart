@@ -103,7 +103,7 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
                       ),
                       SizedBox(height: 12),
                       Text(
-                        'AI in your pocket',
+                        'Your Pocket AI. One chat for every LLM.',
                         style: TextStyle(
                           fontSize: 16,
                           color: Colors.white,

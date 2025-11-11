@@ -19,6 +19,7 @@ import 'library_page.dart';
 import 'model_settings_page.dart';
 import 'referral_center_page.dart';
 import 'search_settings_page.dart';
+import 'app_info_page.dart';
 
 class SettingsPage extends StatefulWidget {
   const SettingsPage({Key? key}) : super(key: key);
@@ -192,7 +193,12 @@ class _SettingsPageState extends State<SettingsPage> {
             icon: Icons.info_outline,
             iconColor: Colors.blue,
             title: 'App Information',
-            // subtitle: 'Version, licenses, and documentation',
+            onTap: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (context) => const AppInfoPage()),
+              );
+            },
           ),
           
           SizedBox(height: 40),
@@ -236,6 +242,7 @@ class _SettingsPageState extends State<SettingsPage> {
       'Model Settings',
       'Search Configuration',
       'API Keys',
+      'App Information',
     ].contains(title);
 
     return Card(
@@ -347,15 +354,21 @@ class _SettingsPageState extends State<SettingsPage> {
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
+      constraints: BoxConstraints(
+        maxWidth: MediaQuery.of(context).size.width,
+      ),
       builder: (BuildContext buildContext) {
-        return DraggableScrollableSheet(
-          initialChildSize: 0.8,
-          minChildSize: 0.5,
-          maxChildSize: 0.9,
-          expand: false,
-          builder: (BuildContext buildContext, ScrollController scrollController) {
-            return AppearanceSettingsPopup(themeService: themeService);
-          },
+        return Container(
+          width: double.infinity,
+          child: DraggableScrollableSheet(
+            initialChildSize: 0.8,
+            minChildSize: 0.5,
+            maxChildSize: 0.9,
+            expand: false,
+            builder: (BuildContext buildContext, ScrollController scrollController) {
+              return AppearanceSettingsPopup(themeService: themeService);
+            },
+          ),
         );
       },
     );

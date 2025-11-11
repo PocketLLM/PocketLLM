@@ -217,19 +217,19 @@ extension ModelProviderExtension on ModelProvider {
       case ModelProvider.groq:
         return 'assets/brand_icons/groq.svg';
       case ModelProvider.anthropic:
-        return null;
+        return 'assets/brand_icons/Claude_AI_logo.svg';
       case ModelProvider.openRouter:
         return 'assets/brand_icons/openrouter.jpeg';
       case ModelProvider.imageRouter:
         return 'assets/brand_icons/hyperbrowser.svg';
       case ModelProvider.mistral:
-        return null;
+        return 'assets/brand_icons/mistral.png';
       case ModelProvider.deepseek:
-        return null;
+        return 'assets/brand_icons/deepseek.png';
       case ModelProvider.lmStudio:
-        return null;
+        return 'assets/brand_icons/lmstudio.png';
       case ModelProvider.googleAI:
-        return 'assets/brand_icons/gemini.svg';
+        return 'assets/brand_icons/Google_Gemini_icon_2025.svg';
     }
   }
 

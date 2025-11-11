@@ -4,6 +4,7 @@
 /// - Backend Migration: Keep UI but rely on backend-managed providers/models,
 ///   removing any direct client-side persistence.
 import 'package:flutter/material.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 import '../component/models.dart';
 import '../services/model_service.dart';
 import 'library_page.dart';
@@ -268,7 +269,32 @@ class _ModelSettingsPageState extends State<ModelSettingsPage> {
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Icon(icon, color: color),
+                  if (provider.provider.brandAsset != null)
+                    Builder(
+                      builder: (context) {
+                        final isSvg = provider.provider.brandAsset!.endsWith('.svg');
+                        if (isSvg) {
+                          return SvgPicture.asset(
+                            provider.provider.brandAsset!,
+                            width: 20,
+                            height: 20,
+                            placeholderBuilder: (context) => Icon(icon, color: color, size: 20),
+                            fit: BoxFit.contain,
+                          );
+                        } else {
+                          return Image.asset(
+                            provider.provider.brandAsset!,
+                            width: 20,
+                            height: 20,
+                            errorBuilder: (context, error, stackTrace) {
+                              return Icon(icon, color: color, size: 20);
+                            },
+                          );
+                        }
+                      },
+                    )
+                  else
+                    Icon(icon, color: color),
                   const SizedBox(width: 8),
                   Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -381,7 +407,31 @@ class _ModelSettingsPageState extends State<ModelSettingsPage> {
                       color: model.provider.color.withOpacity(0.12),
                       borderRadius: BorderRadius.circular(12),
                     ),
-                    child: Icon(model.provider.icon, color: model.provider.color),
+                    child: model.provider.brandAsset != null
+                      ? Builder(
+                          builder: (context) {
+                            final isSvg = model.provider.brandAsset!.endsWith('.svg');
+                            if (isSvg) {
+                              return SvgPicture.asset(
+                                model.provider.brandAsset!,
+                                width: 24,
+                                height: 24,
+                                placeholderBuilder: (context) => Icon(model.provider.icon, color: model.provider.color, size: 24),
+                                fit: BoxFit.contain,
+                              );
+                            } else {
+                              return Image.asset(
+                                model.provider.brandAsset!,
+                                width: 24,
+                                height: 24,
+                                errorBuilder: (context, error, stackTrace) {
+                                  return Icon(model.provider.icon, color: model.provider.color, size: 24);
+                                },
+                              );
+                            }
+                          },
+                        )
+                      : Icon(model.provider.icon, color: model.provider.color),
                   ),
                   const SizedBox(width: 16),
                   Expanded(
@@ -526,7 +576,31 @@ class _ModelDetailsSheet extends StatelessWidget {
           ),
           Row(
             children: [
-              Icon(model.provider.icon, color: model.provider.color),
+              model.provider.brandAsset != null
+                ? Builder(
+                    builder: (context) {
+                      final isSvg = model.provider.brandAsset!.endsWith('.svg');
+                      if (isSvg) {
+                        return SvgPicture.asset(
+                          model.provider.brandAsset!,
+                          width: 24,
+                          height: 24,
+                          placeholderBuilder: (context) => Icon(model.provider.icon, color: model.provider.color, size: 24),
+                          fit: BoxFit.contain,
+                        );
+                      } else {
+                        return Image.asset(
+                          model.provider.brandAsset!,
+                          width: 24,
+                          height: 24,
+                          errorBuilder: (context, error, stackTrace) {
+                            return Icon(model.provider.icon, color: model.provider.color, size: 24);
+                          },
+                        );
+                      }
+                    },
+                  )
+                : Icon(model.provider.icon, color: model.provider.color),
               const SizedBox(width: 12),
               Expanded(
                 child: Text(

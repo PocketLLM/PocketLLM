@@ -425,37 +425,37 @@ class _SidebarState extends State<Sidebar> {
       _NavigationItem(
         icon: Icons.home_outlined,
         label: 'Home',
-        subtitle: 'Return to your main workspace',
+        // subtitle: 'Return to your main workspace',
         onTap: _closeDrawer,
       ),
       _NavigationItem(
         icon: Icons.chat_bubble_outline,
         label: 'Chat History',
-        subtitle: 'Browse all previous conversations',
+        // subtitle: 'Browse all previous conversations',
         onTap: _openChatHistoryPage,
       ),
       _NavigationItem(
         icon: Icons.store_outlined,
         label: 'Library',
-        subtitle: 'Explore bundled model presets',
+        // subtitle: 'Explore bundled model presets',
         onTap: () => _openPage(LibraryPage()),
       ),
       _NavigationItem(
         icon: Icons.settings_outlined,
         label: 'Settings',
-        subtitle: 'Adjust providers and preferences',
+        // subtitle: 'Adjust providers and preferences',
         onTap: () => _openPage(const SettingsPage()),
       ),
       _NavigationItem(
         icon: Icons.description_outlined,
         label: 'Documentation',
-        subtitle: 'Read integration and API guides',
+        // subtitle: 'Read integration and API guides',
         onTap: () => _openPage(const DocsPage()),
       ),
       _NavigationItem(
         icon: Icons.computer_outlined,
         label: 'System Config',
-        subtitle: 'Manage backend and deployment',
+        // subtitle: 'Manage backend and deployment',
         onTap: () => _openPage(ConfigPage(appName: 'PocketLLM')),
       ),
     ];

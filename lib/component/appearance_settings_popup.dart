@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_colorpicker/flutter_colorpicker.dart';
 import '../services/theme_service.dart';
 
 class AppearanceSettingsPopup extends StatefulWidget {
@@ -278,93 +279,52 @@ class _AppearanceSettingsPopupState extends State<AppearanceSettingsPopup> {
       children: [
         Text(
           title,
-          style: const TextStyle(
+          style: TextStyle(
             fontSize: 14,
-            fontWeight: FontWeight.normal,
+            fontWeight: FontWeight.w500,
+            color: isDarkMode ? Colors.white : Colors.black,
           ),
         ),
         const SizedBox(height: 8),
-        GridView.count(
-          crossAxisCount: 6,
-          crossAxisSpacing: 8,
-          mainAxisSpacing: 8,
-          shrinkWrap: true,
-          physics: const NeverScrollableScrollPhysics(),
-          children: [
-            ...colors.map((color) => _buildColorSwatch(
-              color: color,
-              isSelected: color.value == selectedColor.value,
-              onTap: () => onColorSelected(color),
-              isDarkMode: isDarkMode,
-            )).toList(),
-            // Add "+" swatch for custom color
-            _buildCustomColorSwatch(isDarkMode: isDarkMode),
-          ],
-        ),
-      ],
-    );
-  }
-
-  Widget _buildColorSwatch({
-    required Color color,
-    required bool isSelected,
-    required VoidCallback onTap,
-    required bool isDarkMode,
-  }) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        width: 34,
-        height: 34,
-        decoration: BoxDecoration(
-          color: color,
-          shape: BoxShape.circle,
-          border: isSelected
-              ? Border.all(
-                  color: const Color(0xFF4D43C6),
-                  width: 2.5,
-                )
-              : null,
-          boxShadow: isSelected
-              ? [
-                  BoxShadow(
-                    color: color.withOpacity(0.35),
-                    blurRadius: 10,
+        SizedBox(
+          height: 48,
+          child: ListView.builder(
+            scrollDirection: Axis.horizontal,
+            itemCount: colors.length,
+            itemBuilder: (context, index) {
+              final color = colors[index];
+              final isSelected = color == selectedColor;
+              return Padding(
+                padding: const EdgeInsets.only(right: 12),
+                child: GestureDetector(
+                  onTap: () => onColorSelected(color),
+                  child: Container(
+                    width: 48,
+                    height: 48,
+                    decoration: BoxDecoration(
+                      color: color,
+                      shape: BoxShape.circle,
+                      border: isSelected
+                          ? Border.all(
+                              color: isDarkMode ? Colors.white : Colors.black,
+                              width: 2,
+                            )
+                          : null,
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withOpacity(0.1),
+                          blurRadius: 4,
+                          offset: const Offset(0, 2),
+                        ),
+                      ],
+                    ),
                   ),
-                ]
-              : null,
-        ),
-        child: isSelected
-            ? const Icon(
-                Icons.check,
-                color: Colors.white,
-                size: 20,
-              )
-            : null,
-      ),
-    );
-  }
-
-  Widget _buildCustomColorSwatch({required bool isDarkMode}) {
-    return GestureDetector(
-      onTap: () {
-        // TODO: Implement custom color picker
-      },
-      child: Container(
-        width: 34,
-        height: 34,
-        decoration: BoxDecoration(
-          shape: BoxShape.circle,
-          border: Border.all(
-            color: isDarkMode ? const Color(0xFFF5F3FF) : const Color(0xFF111111),
+                ),
+              );
+            },
           ),
         ),
-        child: const Icon(
-          Icons.add,
-          size: 20,
-          color: Color(0xFF7C70F2),
-        ),
-      ),
+      ],
     );
   }
 

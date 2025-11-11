@@ -28,7 +28,7 @@ dependencies:
   clipboard:
   device_info_plus:
   system_info2:
-  url_launcher:
+  url_launcher: ^6.3.2
   permission_handler:
   flutter_secure_storage:
   equatable:
@@ -45,6 +45,9 @@ dependencies:
   intl: 
   connectivity_plus: 
   crypto: 
+  flutter_colorpicker: ^1.1.0
+  package_info_plus: ^9.0.0
+  font_awesome_flutter: ^10.12.0
 
 dev_dependencies:
   flutter_test:

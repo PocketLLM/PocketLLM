@@ -4,6 +4,7 @@
 /// - Backend Migration: Keep UI but ensure key storage/activation happens on
 ///   the backend rather than device-side.
 import 'package:flutter/material.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 
 import '../component/models.dart';
 import '../services/backend_api_service.dart';
@@ -205,17 +206,56 @@ class _ApiKeysPageState extends State<ApiKeysPage> {
                   children: [
                     Row(
                       children: [
-                        Icon(provider.provider.icon, color: provider.provider.color, size: 20),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: Text(
-                            provider.displayName,
-                            style: const TextStyle(
-                              fontSize: 16,
-                              fontWeight: FontWeight.w600,
+                        if (provider.provider.brandAsset != null) 
+                          Builder(
+                            builder: (context) {
+                              print('Loading brand asset for ${provider.provider}: ${provider.provider.brandAsset}');
+                              final isSvg = provider.provider.brandAsset!.endsWith('.svg');
+                              // Make icons smaller for Anthropic and Groq
+                              final iconSize = (provider.provider == ModelProvider.anthropic || provider.provider == ModelProvider.groq) ? 20.0 : 24.0;
+                              if (isSvg) {
+                                return SvgPicture.asset(
+                                  provider.provider.brandAsset!,
+                                  width: iconSize,
+                                  height: iconSize,
+                                  placeholderBuilder: (context) => Icon(provider.provider.icon, color: provider.provider.color, size: iconSize),
+                                  fit: BoxFit.contain,
+                                );
+                              } else {
+                                return Image.asset(
+                                  provider.provider.brandAsset!,
+                                  width: iconSize,
+                                  height: iconSize,
+                                  errorBuilder: (context, error, stackTrace) {
+                                    print('Error loading brand asset ${provider.provider.brandAsset}: $error');
+                                    return provider.provider == ModelProvider.imageRouter
+                                      ? const Text('IR', style: TextStyle(fontWeight: FontWeight.bold))
+                                      : Icon(provider.provider.icon, color: provider.provider.color, size: iconSize);
+                                  },
+                                );
+                              }
+                            },
+                          )
+                        else if (provider.provider == ModelProvider.imageRouter)
+                          const Text('IR', style: TextStyle(fontWeight: FontWeight.bold))
+                        else
+                          // Make icons smaller for Anthropic and Groq
+                          Icon(provider.provider.icon, color: provider.provider.color, size: (provider.provider == ModelProvider.anthropic || provider.provider == ModelProvider.groq) ? 20.0 : 24.0),
+                        // Remove provider name text for Anthropic and Groq
+                        if (provider.provider != ModelProvider.anthropic && provider.provider != ModelProvider.groq)
+                          const SizedBox(width: 8)
+                        else
+                          const SizedBox(width: 0),
+                        if (provider.provider != ModelProvider.anthropic && provider.provider != ModelProvider.groq)
+                          Expanded(
+                            child: Text(
+                              provider.displayName,
+                              style: const TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.w600,
+                              ),
                             ),
                           ),
-                        ),
                       ],
                     ),
                     const SizedBox(height: 4),
