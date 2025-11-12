@@ -14,9 +14,12 @@ from typing import Any
 from app.core.config import Settings
 from app.schemas.providers import ProviderModel
 
+from .anthropic import AnthropicProviderClient
 from .base import ProviderClient
+from .deepseek import DeepSeekProviderClient
 from .groq import GroqProviderClient
 from .imagerouter import ImageRouterProviderClient
+from .mistral import MistralProviderClient
 from .openai import OpenAIProviderClient
 from .openrouter import OpenRouterProviderClient
 
@@ -56,9 +59,12 @@ class ProviderModelCatalogue:
             if client_factories is not None
             else {
                 "openai": OpenAIProviderClient,
+                "anthropic": AnthropicProviderClient,
+                "deepseek": DeepSeekProviderClient,
                 "groq": GroqProviderClient,
                 "openrouter": OpenRouterProviderClient,
                 "imagerouter": ImageRouterProviderClient,
+                "mistral": MistralProviderClient,
             }
         )
         self._cache_ttl_seconds = self._coerce_ttl(
@@ -271,6 +277,39 @@ class ProviderModelCatalogue:
             api_key=cleaned_imagerouter_key,
             metadata=None,
         )
+
+        anthropic_key = getattr(self._settings, "anthropic_api_key", None)
+        if isinstance(anthropic_key, str):
+            anthropic_key = anthropic_key.strip()
+        if anthropic_key:
+            fallbacks["anthropic"] = _ProviderConfig(
+                provider="anthropic",
+                base_url=getattr(self._settings, "anthropic_api_base", None),
+                api_key=anthropic_key,
+                metadata=None,
+            )
+
+        deepseek_key = getattr(self._settings, "deepseek_api_key", None)
+        if isinstance(deepseek_key, str):
+            deepseek_key = deepseek_key.strip()
+        if deepseek_key:
+            fallbacks["deepseek"] = _ProviderConfig(
+                provider="deepseek",
+                base_url=getattr(self._settings, "deepseek_api_base", None),
+                api_key=deepseek_key,
+                metadata=None,
+            )
+
+        mistral_key = getattr(self._settings, "mistral_api_key", None)
+        if isinstance(mistral_key, str):
+            mistral_key = mistral_key.strip()
+        if mistral_key:
+            fallbacks["mistral"] = _ProviderConfig(
+                provider="mistral",
+                base_url=getattr(self._settings, "mistral_api_base", None),
+                api_key=mistral_key,
+                metadata=None,
+            )
 
         return fallbacks
 

@@ -5,6 +5,8 @@ pydantic-settings
 httpx
 groq
 openai
+anthropic>=0.3.0
+mistralai>=0.0.8
 langchain
 langchain-classic
 langchain-core
