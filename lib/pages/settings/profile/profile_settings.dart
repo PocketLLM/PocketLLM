@@ -363,16 +363,16 @@ class _ProfileSettingsPageState extends State<ProfileSettingsPage> {
   }
 
   Widget _buildSectionHeader(String title, BuildContext context, {bool isDanger = false}) {
-    final theme = Theme.of(context);
+    final colors = ThemeService().colorScheme;
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 24, 16, 8),
       child: Text(
         title.toUpperCase(),
-        style: theme.textTheme.labelSmall?.copyWith(
+        style: Theme.of(context).textTheme.labelSmall?.copyWith(
               fontWeight: FontWeight.w600,
               color: isDanger 
-                  ? theme.colorScheme.error 
-                  : theme.textTheme.bodySmall?.color?.withOpacity(0.6) ?? Colors.grey[600],
+                  ? colors.error 
+                  : colors.onSurface.withOpacity(0.6),
               letterSpacing: 1.0,
             ),
       ),
@@ -391,51 +391,68 @@ class _ProfileSettingsPageState extends State<ProfileSettingsPage> {
     VoidCallback? onTap,
     bool showTrailing = true,
   }) {
-    final theme = Theme.of(context);
-    final primaryColor = theme.primaryColor;
-    final surfaceColor = theme.cardColor;
-    final textColor = theme.textTheme.bodyLarge?.color;
+    final colors = ThemeService().colorScheme;
+    final textColor = colors.onSurface;
     
-    return Card(
-      margin: const EdgeInsets.only(bottom: 8),
-      elevation: 0,
-      color: surfaceColor,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
-        side: BorderSide(color: theme.dividerColor.withOpacity(0.5)),
-      ),
-      child: ListTile(
-        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-        leading: Container(
-          padding: const EdgeInsets.all(8),
-          decoration: BoxDecoration(
-            color: primaryColor.withOpacity(0.1),
-            borderRadius: BorderRadius.circular(8),
-          ),
-          child: Icon(icon, color: primaryColor, size: 20),
-        ),
-        title: Text(
-          label,
-          style: theme.textTheme.bodyMedium?.copyWith(
-                color: theme.textTheme.bodySmall?.color?.withOpacity(0.8) ?? Colors.grey[600],
-              ),
-        ),
-        subtitle: Text(
-          value,
-          style: theme.textTheme.bodyLarge?.copyWith(
-                color: textColor,
-                fontWeight: FontWeight.w500,
-              ),
-        ),
-        trailing: showTrailing
-            ? Icon(
-                Icons.chevron_right,
-                color: textColor?.withOpacity(0.5) ?? Colors.grey[400],
-              )
-            : null,
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
         onTap: onTap,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(12),
+        child: Container(
+          decoration: BoxDecoration(
+            color: null,
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 12),
+            child: Row(
+              children: [
+                Container(
+                  width: 36,
+                  height: 36,
+                  decoration: BoxDecoration(
+                    color: colors.primary.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Icon(
+                    icon,
+                    size: 20,
+                    color: colors.primary,
+                  ),
+                ),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        label,
+                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                              color: colors.onSurface.withOpacity(0.7),
+                              fontWeight: FontWeight.w400,
+                            ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        value,
+                        style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                              color: textColor,
+                              fontWeight: FontWeight.w500,
+                            ),
+                      ),
+                    ],
+                  ),
+                ),
+                if (showTrailing)
+                  Icon(
+                    Icons.chevron_right,
+                    color: colors.onSurface.withOpacity(0.5),
+                    size: 24,
+                  ),
+              ],
+            ),
+          ),
         ),
       ),
     );
@@ -449,49 +466,66 @@ class _ProfileSettingsPageState extends State<ProfileSettingsPage> {
     Widget? trailing,
     VoidCallback? onTap,
   }) {
-    final theme = Theme.of(context);
-    final primaryColor = theme.primaryColor;
-    final surfaceColor = theme.cardColor;
-    final textColor = theme.textTheme.bodyLarge?.color;
+    final colors = ThemeService().colorScheme;
+    final textColor = colors.onSurface;
     
-    return Card(
-      margin: const EdgeInsets.only(bottom: 8),
-      elevation: 0,
-      color: surfaceColor,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
-        side: BorderSide(color: theme.dividerColor.withOpacity(0.5)),
-      ),
-      child: ListTile(
-        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-        leading: Container(
-          padding: const EdgeInsets.all(8),
-          decoration: BoxDecoration(
-            color: primaryColor.withOpacity(0.1),
-            borderRadius: BorderRadius.circular(8),
-          ),
-          child: Icon(icon, color: primaryColor, size: 20),
-        ),
-        title: Text(
-          title,
-          style: theme.textTheme.bodyLarge?.copyWith(
-                fontWeight: FontWeight.w500,
-                color: textColor,
-              ),
-        ),
-        subtitle: Text(
-          subtitle,
-          style: theme.textTheme.bodySmall?.copyWith(
-                color: theme.textTheme.bodySmall?.color?.withOpacity(0.7) ?? Colors.grey[600],
-              ),
-        ),
-        trailing: trailing ?? Icon(
-          Icons.chevron_right,
-          color: textColor?.withOpacity(0.5) ?? Colors.grey[400],
-        ),
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
         onTap: onTap,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(12),
+        child: Container(
+          decoration: BoxDecoration(
+            color: null,
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 12),
+            child: Row(
+              children: [
+                Container(
+                  width: 36,
+                  height: 36,
+                  decoration: BoxDecoration(
+                    color: colors.primary.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Icon(
+                    icon,
+                    size: 20,
+                    color: colors.primary,
+                  ),
+                ),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        title,
+                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                              color: textColor,
+                              fontWeight: FontWeight.w500,
+                            ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        subtitle,
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                              color: colors.onSurface.withOpacity(0.7),
+                            ),
+                      ),
+                    ],
+                  ),
+                ),
+                trailing ?? Icon(
+                  Icons.chevron_right,
+                  color: colors.onSurface.withOpacity(0.5),
+                  size: 24,
+                ),
+              ],
+            ),
+          ),
         ),
       ),
     );
