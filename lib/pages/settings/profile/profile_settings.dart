@@ -2,13 +2,14 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
-import 'package:flutter_svg/flutter_svg.dart';
 
 import '../../auth/auth_page.dart';
+import '../../auth/user_survey_page.dart';
 import '../../../models/user_profile.dart';
 import '../../../services/auth_state.dart';
 import '../../../services/theme_service.dart';
 import '../../../theme/app_colors.dart';
+import '../../../component/appearance_settings_popup.dart';
 
 class ProfileSettingsPage extends StatefulWidget {
   const ProfileSettingsPage({Key? key}) : super(key: key);
@@ -123,244 +124,235 @@ class _ProfileSettingsPageState extends State<ProfileSettingsPage> {
     final colors = ThemeService().colorScheme;
     final authState = context.watch<AuthState>();
     final profile = authState.profile;
-    final isDark = theme.brightness == Brightness.dark;
-    final primaryColor = Theme.of(context).primaryColor;
-    final backgroundColor = Theme.of(context).scaffoldBackgroundColor;
-    final surfaceColor = Theme.of(context).cardColor;
-    final onSurfaceColor = Theme.of(context).textTheme.bodyLarge?.color ?? Colors.black;
-    final onPrimaryColor = Colors.white;
-    final primaryVariant = Theme.of(context).primaryColorLight;
 
     if (_isProcessing) {
       return Scaffold(
-        backgroundColor: backgroundColor,
+        backgroundColor: colors.background,
         appBar: AppBar(
-          title: const Text('Profile Settings'),
-          backgroundColor: surfaceColor,
-          foregroundColor: onSurfaceColor,
+          backgroundColor: colors.background,
           elevation: 0,
+          leading: IconButton(
+            icon: Icon(Icons.arrow_back, color: colors.onBackground, size: 28),
+            onPressed: () => Navigator.pop(context),
+          ),
+          title: Text('Profile Settings',
+              style: TextStyle(color: colors.onBackground, fontSize: 32, fontWeight: FontWeight.bold)),
         ),
         body: Center(
           child: CircularProgressIndicator(
-            valueColor: AlwaysStoppedAnimation<Color>(primaryColor),
+            valueColor: AlwaysStoppedAnimation<Color>(colors.primary),
           ),
         ),
       );
     }
 
     return Scaffold(
-      backgroundColor: backgroundColor,
+      backgroundColor: colors.background,
       appBar: AppBar(
-        title: const Text('Profile Settings'),
-        backgroundColor: surfaceColor,
-        foregroundColor: onSurfaceColor,
+        backgroundColor: colors.background,
         elevation: 0,
+        leading: IconButton(
+          icon: Icon(Icons.arrow_back, color: colors.onBackground, size: 28),
+          onPressed: () => Navigator.pop(context),
+        ),
+        title: Text(
+          'Profile Settings',
+          style: TextStyle(
+            color: colors.onBackground,
+            fontSize: 32,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
       ),
-      body: SingleChildScrollView(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Profile Header
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.all(24),
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.topCenter,
-                  end: Alignment.bottomCenter,
-                  colors: [
-                    primaryColor,
-                    primaryVariant,
+      body: ListView(
+        padding: const EdgeInsets.all(16.0),
+        children: [
+          // Header (avatar + basic info)
+          Center(
+            child: Column(
+              children: [
+                Stack(
+                  children: [
+                    Container(
+                      width: 100,
+                      height: 100,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        border: Border.all(
+                          color: colors.cardBorder,
+                          width: 2,
+                        ),
+                        boxShadow: [
+                          BoxShadow(
+                            color: colors.shadow.withOpacity(0.1),
+                            blurRadius: 10,
+                            offset: const Offset(0, 4),
+                          ),
+                        ],
+                      ),
+                      child: ClipOval(
+                        child: profile?.avatarUrl != null
+                            ? Image.network(
+                                profile!.avatarUrl!,
+                                fit: BoxFit.cover,
+                                errorBuilder: (context, error, stackTrace) => _buildDefaultAvatar(colors),
+                              )
+                            : _buildDefaultAvatar(colors),
+                      ),
+                    ),
+                    Positioned(
+                      bottom: 0,
+                      right: 0,
+                      child: GestureDetector(
+                        onTap: () => _pickImage(authState),
+                        child: Container(
+                          padding: const EdgeInsets.all(6),
+                          decoration: BoxDecoration(
+                            color: colors.primaryVariant,
+                            shape: BoxShape.circle,
+                            border: Border.all(
+                              color: colors.background,
+                              width: 2,
+                            ),
+                          ),
+                          child: const Icon(
+                            Icons.camera_alt,
+                            size: 18,
+                            color: Colors.white,
+                          ),
+                        ),
+                      ),
+                    ),
                   ],
                 ),
-              ),
-              child: Column(
-                children: [
-                  Stack(
-                    children: [
-                      Container(
-                        width: 100,
-                        height: 100,
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          border: Border.all(
-                            color: surfaceColor,
-                            width: 4,
-                          ),
-                          boxShadow: [
-                            BoxShadow(
-                              color: Colors.black.withOpacity(0.1),
-                              blurRadius: 10,
-                              offset: const Offset(0, 4),
-                            ),
-                          ],
-                        ),
-                        child: ClipOval(
-                          child: profile?.avatarUrl != null
-                              ? Image.network(
-                                  profile!.avatarUrl!,
-                                  fit: BoxFit.cover,
-                                  errorBuilder: (context, error, stackTrace) => _buildDefaultAvatar(theme),
-                                )
-                              : _buildDefaultAvatar(theme),
-                        ),
-                      ),
-                      Positioned(
-                        bottom: 0,
-                        right: 0,
-                        child: GestureDetector(
-                          onTap: () => _pickImage(authState),
-                          child: Container(
-                            padding: const EdgeInsets.all(6),
-                            decoration: BoxDecoration(
-                              color: primaryVariant,
-                              shape: BoxShape.circle,
-                              border: Border.all(
-                                color: surfaceColor,
-                                width: 2,
-                              ),
-                            ),
-                            child: const Icon(
-                              Icons.camera_alt,
-                              size: 18,
-                              color: Colors.white,
-                            ),
-                          ),
-                        ),
-                      ),
-                    ],
+                const SizedBox(height: 12),
+                Text(
+                  profile?.fullName ?? 'No name',
+                  style: theme.textTheme.titleLarge?.copyWith(
+                    color: colors.onSurface,
+                    fontWeight: FontWeight.w600,
                   ),
-                  const SizedBox(height: 16),
+                ),
+                if (profile?.username != null) ...[
+                  const SizedBox(height: 4),
                   Text(
-                    profile?.fullName ?? 'No name',
-                    style: theme.textTheme.titleLarge?.copyWith(
-                      color: onPrimaryColor,
-                      fontWeight: FontWeight.w600,
+                    '@${profile!.username!}',
+                    style: theme.textTheme.bodyMedium?.copyWith(
+                      color: colors.onSurface.withOpacity(0.7),
                     ),
                   ),
-                  if (profile?.username != null) ...[
-                    const SizedBox(height: 4),
-                    Text(
-                      '@${profile!.username!}',
-                      style: theme.textTheme.bodyMedium?.copyWith(
-                        color: onPrimaryColor.withOpacity(0.9),
-                      ),
-                    ),
-                  ],
                 ],
-              ),
+              ],
             ),
-          ],
-        ),
-      ),
-      // Main content
-      Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-                  _buildSectionHeader('Account', context),
-                  _buildEditableField(
-                    context: context,
-                    label: 'Display Name',
-                    value: profile?.fullName ?? 'Not set',
-                    icon: Icons.person_outline,
-                    onTap: () => _updateField(
-                      authState,
-                      'full_name',
-                      profile?.fullName ?? '',
-                    ),
-                  ),
-                  _buildDivider(),
-                  _buildEditableField(
-                    context: context,
-                    label: 'Username',
-                    value: profile?.username ?? 'Not set',
-                    icon: Icons.alternate_email,
-                    onTap: () => _updateField(
-                      authState,
-                      'username',
-                      profile?.username ?? '',
-                    ),
-                  ),
-                  _buildDivider(),
-                  _buildEditableField(
-                    context: context,
-                    label: 'Email',
-                    value: profile?.email ?? 'Not set',
-                    icon: Icons.email_outlined,
-                    onTap: () {},
-                    showTrailing: false,
-                  ),
-                  const SizedBox(height: 24),
-                  _buildSectionHeader('Preferences', context),
-                  // Theme Mode
-                  _buildPreferenceTile(
-                    context: context,
-                    title: 'Appearance',
-                    subtitle: isDark ? 'Dark Mode' : 'Light Mode',
-                    icon: isDark ? Icons.dark_mode : Icons.light_mode,
-                    trailing: Switch.adaptive(
-                      value: isDark,
-                      onChanged: (_) => context.read<ThemeService>().toggleDarkMode(),
-                      activeColor: primaryColor,
-                    ),
-                  ),
-                  _buildDivider(),
-                  // Complete Onboarding
-                  _buildPreferenceTile(
-                    context: context,
-                    title: 'Complete Onboarding',
-                    subtitle: 'Fill out your profile details',
-                    icon: Icons.person_add_alt_1_rounded,
-                    onTap: () => _showOnboardingFlow(context, authState),
-                  ),
-                  _buildDivider(),
-                  _buildPreferenceTile(
-                    context: context,
-                    title: 'Language',
-                    subtitle: _languageLabels[_currentLanguage(profile)] ?? 'English',
-                    icon: Icons.language,
-                    onTap: () => _showLanguagePicker(authState, _currentLanguage(profile)),
-                  ),
-                  const SizedBox(height: 24),
-                  _buildSectionHeader('Danger Zone', context, isDanger: true),
-                  _buildDangerTile(
-                    context: context,
-                    title: 'Change Password',
-                    icon: Icons.lock_outline,
-                    onTap: () => _showChangePasswordDialog(authState),
-                  ),
-                  _buildDivider(),
-                  _buildDangerTile(
-                    context: context,
-                    title: 'Sign Out',
-                    icon: Icons.logout,
-                    onTap: () => _showSignOutConfirmation(context, authState),
-                  ),
-                  _buildDivider(),
-                  _buildDangerTile(
-                    context: context,
-                    title: 'Delete Account',
-                    icon: Icons.delete_forever,
-                    onTap: () => _showDeleteAccountConfirmation(context, authState),
-                    isDestructive: true,
-                  ),
-                  const SizedBox(height: 40),
-                ],
-              ),
+          ),
+          const SizedBox(height: 16),
+          _buildSectionHeader('Account', context),
+          _buildEditableField(
+            context: context,
+            label: 'Display Name',
+            value: profile?.fullName ?? 'Not set',
+            icon: Icons.person_outline,
+            onTap: () => _updateField(
+              authState,
+              'full_name',
+              profile?.fullName ?? '',
             ),
-          ],
-        ),
+          ),
+          _buildDivider(context),
+          _buildEditableField(
+            context: context,
+            label: 'Username',
+            value: profile?.username ?? 'Not set',
+            icon: Icons.alternate_email,
+            onTap: () => _updateField(
+              authState,
+              'username',
+              profile?.username ?? '',
+            ),
+          ),
+          _buildDivider(context),
+          _buildEditableField(
+            context: context,
+            label: 'Email',
+            value: profile?.email ?? 'Not set',
+            icon: Icons.email_outlined,
+            onTap: () {},
+            showTrailing: false,
+          ),
+          const SizedBox(height: 24),
+          _buildSectionHeader('Preferences', context),
+          _buildPreferenceTile(
+            context: context,
+            title: 'Theme Settings',
+            subtitle: 'Appearance, color and contrast',
+            icon: Icons.palette_outlined,
+            onTap: () => _showThemeSettings(context),
+          ),
+          _buildDivider(context),
+          _buildPreferenceTile(
+            context: context,
+            title: 'Language',
+            subtitle: _languageLabels[_currentLanguage(profile)] ?? 'English',
+            icon: Icons.language,
+            onTap: () => _showLanguagePicker(authState, _currentLanguage(profile)),
+          ),
+          _buildDivider(context),
+          _buildPreferenceTile(
+            context: context,
+            title: authState.profile?.surveyCompleted == true ? 'Edit Onboarding' : 'Complete Onboarding',
+            subtitle: 'Answer questions to personalize your experience',
+            icon: Icons.task_alt,
+            onTap: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => UserSurveyPage(
+                    onComplete: () async {
+                      await authState.refreshProfile();
+                      if (!mounted) return;
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('Onboarding saved.')),
+                      );
+                    },
+                  ),
+                ),
+              );
+            },
+          ),
+          const SizedBox(height: 24),
+          _buildSectionHeader('Danger Zone', context, isDanger: true),
+          _buildDangerTile(
+            context: context,
+            title: 'Change Password',
+            icon: Icons.lock_outline,
+            onTap: () => _showChangePasswordDialog(authState),
+          ),
+          _buildDivider(context),
+          _buildDangerTile(
+            context: context,
+            title: 'Sign Out',
+            icon: Icons.logout,
+            onTap: () => _showSignOutConfirmation(context, authState),
+          ),
+          _buildDivider(context),
+          _buildDangerTile(
+            context: context,
+            title: 'Delete Account',
+            icon: Icons.delete_forever,
+            isDestructive: true,
+            onTap: () => _showDeleteAccountConfirmation(context, authState),
+          ),
+          const SizedBox(height: 40),
+        ],
       ),
     );
   }
 
-  Widget _buildDefaultAvatar(ThemeData theme) {
+  Widget _buildDefaultAvatar(AppColorScheme colors) {
     return Icon(
       Icons.person,
       size: 50,
-      color: theme.textTheme.bodyLarge?.color?.withOpacity(0.7) ?? Colors.grey[400],
+      color: colors.onSurface.withOpacity(0.7),
     );
   }
 
@@ -387,7 +379,7 @@ class _ProfileSettingsPageState extends State<ProfileSettingsPage> {
     );
   }
 
-  Widget _buildDivider() {
+  Widget _buildDivider(BuildContext context) {
     return const SizedBox(height: 8);
   }
 
@@ -512,52 +504,29 @@ class _ProfileSettingsPageState extends State<ProfileSettingsPage> {
     required VoidCallback onTap,
     bool isDestructive = false,
   }) {
-    final theme = Theme.of(context);
-    final primaryColor = theme.primaryColor;
-    final errorColor = theme.colorScheme.error;
-    final textColor = theme.textTheme.bodyLarge?.color;
+    final colors = ThemeService().colorScheme;
+    final textColor = isDestructive ? colors.error : colors.onSurface;
     
-    return Card(
-      margin: const EdgeInsets.only(bottom: 8),
-      elevation: 0,
-      color: theme.cardColor,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
-        side: BorderSide(color: theme.dividerColor.withOpacity(0.5)),
-      ),
-      child: ListTile(
-        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-        leading: Container(
-          padding: const EdgeInsets.all(8),
-          decoration: BoxDecoration(
-            color: isDestructive 
-                ? errorColor.withOpacity(0.1)
-                : primaryColor.withOpacity(0.1),
-            borderRadius: BorderRadius.circular(8),
-          ),
-          child: Icon(
-            icon,
-            color: isDestructive ? errorColor : primaryColor,
-            size: 20,
-          ),
-        ),
-        title: Text(
-          title,
-          style: theme.textTheme.bodyLarge?.copyWith(
-                color: isDestructive ? errorColor : textColor,
-                fontWeight: FontWeight.w500,
-              ),
-        ),
-        trailing: Icon(
-          Icons.chevron_right,
-          color: isDestructive 
-              ? errorColor.withOpacity(0.8)
-              : (textColor?.withOpacity(0.5) ?? Colors.grey[400]),
-        ),
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
         onTap: onTap,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(12),
-        ),
+        borderRadius: BorderRadius.circular(12),
+        child: Container(
+          decoration: BoxDecoration(
+            color: null,
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 12),
+            child: Row(
+              children: [
+                Container(
+                  width: 36,
+                  height: 36,
+                  decoration: BoxDecoration(
+                    color: isDestructive ? colors.error.withOpacity(0.1) : colors.primary.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(10),
                   ),
                   child: Icon(
                     icon,
@@ -585,6 +554,32 @@ class _ProfileSettingsPageState extends State<ProfileSettingsPage> {
           ),
         ),
       ),
+    );
+  }
+
+  void _showThemeSettings(BuildContext context) {
+    final themeService = ThemeService();
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      constraints: BoxConstraints(
+        maxWidth: MediaQuery.of(context).size.width,
+      ),
+      builder: (BuildContext buildContext) {
+        return SizedBox(
+          width: double.infinity,
+          child: DraggableScrollableSheet(
+            initialChildSize: 0.8,
+            minChildSize: 0.5,
+            maxChildSize: 0.9,
+            expand: false,
+            builder: (BuildContext buildContext, ScrollController scrollController) {
+              return AppearanceSettingsPopup(themeService: themeService);
+            },
+          ),
+        );
+      },
     );
   }
 

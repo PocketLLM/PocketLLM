@@ -5,7 +5,6 @@
 ///   features (e.g., direct model saves) as backend ownership grows.
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import '../component/appearance_settings_popup.dart';
 import '../models/user_profile.dart';
 import '../services/auth_state.dart';
 import '../services/model_service.dart';
@@ -56,16 +55,6 @@ class _SettingsPageState extends State<SettingsPage> {
       body: ListView(
         padding: EdgeInsets.all(16),
         children: [
-          _buildSectionTitle('Appearance'),
-          _buildSettingsItem(
-            icon: Icons.palette_outlined,
-            iconColor: ThemeService().colorScheme.primary,
-            title: 'Theme Settings',
-            // subtitle: 'Configure app appearance and dark mode',
-            onTap: () => _showThemeSettings(context),
-          ),
-          
-          SizedBox(height: 32),
           _buildSectionTitle('Account'),
           _buildSettingsItem(
             icon: Icons.person_outline,
@@ -348,31 +337,7 @@ class _SettingsPageState extends State<SettingsPage> {
     );
   }
 
-  void _showThemeSettings(BuildContext context) {
-    final themeService = ThemeService();
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      constraints: BoxConstraints(
-        maxWidth: MediaQuery.of(context).size.width,
-      ),
-      builder: (BuildContext buildContext) {
-        return Container(
-          width: double.infinity,
-          child: DraggableScrollableSheet(
-            initialChildSize: 0.8,
-            minChildSize: 0.5,
-            maxChildSize: 0.9,
-            expand: false,
-            builder: (BuildContext buildContext, ScrollController scrollController) {
-              return AppearanceSettingsPopup(themeService: themeService);
-            },
-          ),
-        );
-      },
-    );
-  }
+  
   
   String _getThemeModeLabel(AppThemeMode mode) {
     switch (mode) {
