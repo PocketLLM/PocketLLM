@@ -11,7 +11,7 @@ import '../services/auth_state.dart';
 import '../services/model_service.dart';
 import '../services/theme_service.dart';
 import 'auth/auth_flow_screen.dart';
-import 'settings/profile_settings.dart';
+import 'settings/profile/profile_settings.dart';
 import 'api_keys_page.dart';
 import 'config_page.dart';
 import 'docs_page.dart';
