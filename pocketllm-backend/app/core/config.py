@@ -83,6 +83,12 @@ class Settings(BaseSettings):
     openrouter_app_name: str | None = Field(default=None, alias="OPENROUTER_APP_NAME")
     imagerouter_api_key: str | None = Field(default=None, alias="IMAGEROUTER_API_KEY")
     imagerouter_api_base: str | None = Field(default=None, alias="IMAGEROUTER_API_BASE")
+    anthropic_api_key: str | None = Field(default=None, alias="ANTHROPIC_API_KEY")
+    anthropic_api_base: str | None = Field(default=None, alias="ANTHROPIC_API_BASE")
+    deepseek_api_key: str | None = Field(default=None, alias="DEEPSEEK_API_KEY")
+    deepseek_api_base: str | None = Field(default=None, alias="DEEPSEEK_API_BASE")
+    mistral_api_key: str | None = Field(default=None, alias="MISTRAL_API_KEY")
+    mistral_api_base: str | None = Field(default=None, alias="MISTRAL_API_BASE")
     provider_catalogue_cache_ttl: int = Field(
         default=300, alias="PROVIDER_CATALOGUE_CACHE_TTL"
     )
