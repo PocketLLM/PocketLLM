@@ -654,15 +654,11 @@ class _AuthPageState extends State<AuthPage> {
         const SizedBox(height: 16),
         CustomButton(
           text: isSignUp ? 'Create Account' : 'Sign In',
-          onPressed: authState.isPerformingRequest ? () {} : () => _handleSubmit(context),
+          onPressed: authState.isPerformingRequest ? null : () => _handleSubmit(context),
           variant: ButtonVariant.filled,
           size: ButtonSize.large,
+          child: authState.isPerformingRequest ? const CircularProgressIndicator.adaptive() : null,
         ),
-        if (authState.isPerformingRequest)
-          const Padding(
-            padding: EdgeInsets.only(top: 16),
-            child: Center(child: CircularProgressIndicator()),
-          ),
         const SizedBox(height: 16),
         _buildDivider(),
         const SizedBox(height: 16),

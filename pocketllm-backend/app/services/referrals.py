@@ -54,19 +54,13 @@ class InviteReferralService:
     # ------------------------------------------------------------------
     async def enforce_signup_policy(self, email: str, invite_code: str | None) -> InviteApprovalContext | None:
         """Ensure a signup attempt is backed by a valid invite or approval."""
-
         normalized_email = self._normalize_email(email)
-        normalized_code = invite_code.strip() if invite_code else None
+        normalized_code = self._normalize_code(invite_code) if invite_code else None
 
         if normalized_code:
             record = await self.validate_invite_code(normalized_code, require_active=True)
             return InviteApprovalContext(mode="invite", invite_record=record)
 
-        application = await self._get_approved_application(normalized_email)
-        if application:
-            return InviteApprovalContext(mode="waitlist", application_record=application)
-
-        # Check if invite code is required based on settings
         if not getattr(self._settings, "invite_code_required", True):
             return None
 
@@ -78,7 +72,6 @@ class InviteReferralService:
             detail={
                 "message": "No invite code provided. Apply for an invite to continue.",
                 "code": "invite_required",
-                "waitlist_endpoint": "/v1/waitlist",
             },
         )
 
@@ -89,42 +82,43 @@ class InviteReferralService:
         approval: InviteApprovalContext | None,
     ) -> None:
         """Apply referral metadata after Supabase has created the account."""
-
-        if approval is None:
+        if approval is None or approval.mode != "invite" or not approval.invite_record:
             return
 
-        updates: Dict[str, Any] = {}
+        invite_record = approval.invite_record
+        referrer_id = invite_record.get("user_id")
+        if not referrer_id:
+            return
 
-        if approval.mode == "invite" and approval.invite_record:
-            await self._mark_invite_consumed(approval.invite_record, user.id, email)
-            updates.update(
-                {
-                    "referral_code": approval.invite_record["code"],
-                    "referred_by": approval.invite_record.get("issued_by"),
-                    "invite_approved_at": datetime.now(tz=UTC).isoformat(),
-                }
-            )
-        elif approval.mode == "waitlist" and approval.application_record:
-            await self._mark_application_converted(approval.application_record, user.id)
-            updates.update(
-                {
-                    "waitlist_status": "approved",
-                    "waitlist_metadata": approval.application_record.get("metadata") or {},
-                    "waitlist_applied_at": approval.application_record.get("applied_at"),
-                }
-            )
-        else:
-            pass
+        # Update the referral status
+        await self._database.update(
+            "referrals",
+            {
+                "status": "complete",
+                "referred_id": str(user.id),
+                "accepted_at": datetime.now(tz=UTC).isoformat(),
+            },
+            filters={"referrer_id": str(referrer_id), "referred_email": self._normalize_email(email)},
+        )
 
-        if updates:
-            await self._persist_profile_metadata(user.id, updates)
+        # Update the uses_count of the invite code
+        await self._database.update(
+            "user_invite_codes",
+            {"uses_count": invite_record.get("uses_count", 0) + 1},
+            filters={"id": invite_record["id"]},
+        )
+        try:
+            await self._database.update_profile(
+                user.id, {"referral_code": self._normalize_code(invite_record["code"])}
+            )
+        except Exception:
+            logger.exception("Failed to update profile with referral code")
 
     async def validate_invite_code(self, code: str, *, require_active: bool = False) -> Dict[str, Any]:
         """Load an invite code record and optionally ensure it is usable."""
-
         normalized = self._normalize_code(code)
         records = await self._database.select(
-            "invite_codes",
+            "user_invite_codes",
             filters={"code": normalized},
             limit=1,
         )
@@ -138,131 +132,80 @@ class InviteReferralService:
 
     async def build_validation_response(self, code: str) -> InviteCodeValidationResponse:
         """Return a DTO describing the state of an invite code."""
-
         record = await self.validate_invite_code(code, require_active=False)
         info = self._map_invite_info(record)
-        status_label = "active" if self._is_code_active(record) else record.get("status", "unknown")
+        is_active = self._is_code_active(record)
+        status_label = "active" if is_active else "inactive"
         message = None
-        if not self._is_code_active(record):
+        if not is_active:
             message = "Invite code is inactive or expired."
-        return InviteCodeValidationResponse(valid=message is None, status=status_label, message=message, code=info)
+        return InviteCodeValidationResponse(valid=is_active, status=status_label, message=message, code=info)
 
-    async def ensure_personal_invite_code(self, user_id: UUID, *, max_uses: int = 50) -> Dict[str, Any]:
+    async def ensure_personal_invite_code(self, user_id: UUID, *, max_uses: int = 5) -> Dict[str, Any]:
         """Ensure the given user has a personal invite code (create when missing)."""
+        records = await self._database.select(
+            "user_invite_codes",
+            filters={"user_id": str(user_id)},
+            limit=1,
+        )
+        if records:
+            return records[0]
 
-        profile = await self._database.get_profile(user_id)
-        existing_code = (profile or {}).get("invite_code")
-        if existing_code:
-            try:
-                return await self.validate_invite_code(existing_code, require_active=False)
-            except HTTPException:
-                pass
-
-        record = await self._issue_new_code(user_id=user_id, max_uses=max_uses)
-        try:
-            await self._database.update_profile(user_id, {"invite_code": record["code"]})
-        except Exception as exc:
-            # Handle the case where the invite_code column might not exist in the schema cache
-            if self._looks_like_missing_invite_columns(exc):
-                logger.warning(
-                    "Profile invite_code update skipped for %s because Supabase is missing invite columns: %s",
-                    user_id,
-                    exc,
-                )
-            else:
-                raise
-        return record
+        return await self._issue_new_code(user_id=user_id, max_uses=max_uses)
 
     async def send_invite(self, user_id: UUID, payload: ReferralSendRequest) -> ReferralSendResponse:
         """Create or update a referral row for the target email."""
-
         invite = await self.ensure_personal_invite_code(user_id)
         normalized_email = self._normalize_email(payload.email)
 
-        metadata: Dict[str, Any] = {}
-        if payload.full_name:
-            metadata["full_name"] = payload.full_name
-        if payload.message:
-            metadata["message"] = payload.message
-
         data = {
-            "invite_code_id": str(invite["id"]),
-            "referrer_user_id": str(user_id),
-            "referee_email": normalized_email,
-            "status": "pending",
-            "metadata": metadata,
+            "referrer_id": str(user_id),
+            "referred_email": normalized_email,
         }
 
-        record = await self._database.upsert(
-            "referrals",
-            data,
-            on_conflict="invite_code_id,referee_email",
-        )
-        referral = record[0] if isinstance(record, list) else record
+        record = await self._database.insert("referrals", data)
         return ReferralSendResponse(
-            referral_id=UUID(referral["id"]),
+            referral_id=record["id"],
             invite_code=invite["code"],
-            status=referral.get("status", "pending"),
+            status=record["status"],
         )
 
     async def list_referrals(self, user_id: UUID) -> ReferralListResponse:
         """Return the caller's invite code plus referral stats."""
-
         invite = await self.ensure_personal_invite_code(user_id)
         rows = await self._database.select(
             "referrals",
-            filters={"referrer_user_id": str(user_id)},
+            filters={"referrer_id": str(user_id)},
             order_by=[("created_at", True)],
         )
 
         items: list[ReferralListItem] = []
-        total_joined = 0
-        rewards_issued = 0
-
         for row in rows:
-            accepted_at = row.get("accepted_at")
-            status_value = row.get("status", "pending")
-            reward_status = row.get("reward_status", "none")
-            if status_value == "joined":
-                total_joined += 1
-            if reward_status in {"issued", "fulfilled"}:
-                rewards_issued += 1
-
-            # Handle potentially None datetime values
-            created_at = self._parse_datetime(row.get("created_at"))
-            if created_at is None:
-                created_at = datetime.now(tz=UTC)
-
-            metadata = self._extract_referral_metadata(row.get("metadata"))
-
             items.append(
                 ReferralListItem(
-                    referral_id=UUID(str(row["id"])),
-                    email=row["referee_email"],
-                    status=status_value,
-                    reward_status=reward_status,
-                    created_at=created_at,
-                    accepted_at=self._parse_datetime(accepted_at),
-                    full_name=metadata.get("full_name"),
-                    message=metadata.get("message"),
+                    referral_id=row["id"],
+                    email=row["referred_email"],
+                    status=row["status"],
+                    reward_status=row["reward_status"],
+                    created_at=row["created_at"],
+                    accepted_at=row.get("accepted_at"),
                 )
             )
 
         stats = ReferralStats(
             total_sent=len(items),
-            total_joined=total_joined,
+            total_joined=len([item for item in items if item.status == "complete"]),
             pending=len([item for item in items if item.status == "pending"]),
-            rewards_issued=rewards_issued,
+            rewards_issued=len([item for item in items if item.reward_status == "fulfilled"]),
         )
 
-        info = self._map_invite_info(invite)
-        invite_link = self._build_invite_link(info.code)
-        share_message = self._compose_share_message(info.code, invite_link)
+        invite_link = self._build_invite_link(invite["code"])
+        share_message = self._compose_share_message(invite["code"], invite_link)
         return ReferralListResponse(
-            invite_code=info.code,
-            max_uses=info.max_uses,
-            uses_count=info.uses_count,
-            remaining_uses=info.remaining_uses,
+            invite_code=invite["code"],
+            max_uses=invite["max_uses"],
+            uses_count=invite["uses_count"],
+            remaining_uses=invite["max_uses"] - invite["uses_count"],
             invite_link=invite_link,
             share_message=share_message,
             referrals=items,
@@ -272,117 +215,31 @@ class InviteReferralService:
     # ------------------------------------------------------------------
     # Internal helpers
     # ------------------------------------------------------------------
-    async def _get_approved_application(self, email: str) -> Dict[str, Any] | None:
-        records = await self._database.select(
-            "referral_applications",
-            filters={"email": email},
-            limit=1,
-        )
-        if not records:
-            return None
-        record = records[0]
-        if record.get("status") in {"approved", "invited"}:
-            return record
-        return None
-
-    async def _mark_invite_consumed(
-        self,
-        invite_record: Dict[str, Any],
-        referee_user_id: UUID,
-        referee_email: str,
-    ) -> None:
-        invite_id = invite_record["id"]
-        max_uses = invite_record.get("max_uses") or 1
-        uses_count = invite_record.get("uses_count") or 0
-        new_count = int(uses_count) + 1
-        status_value = invite_record.get("status", "active")
-
-        if new_count >= max_uses and status_value == "active":
-            status_value = "consumed"
-
-        await self._database.update(
-            "invite_codes",
-            {"uses_count": new_count, "status": status_value},
-            filters={"id": str(invite_id)},
-        )
-
-        await self._mark_referral_joined(invite_record, referee_user_id, referee_email)
-
-    async def _mark_referral_joined(
-        self,
-        invite_record: Dict[str, Any],
-        referee_user_id: UUID,
-        referee_email: str,
-    ) -> None:
-        normalized_email = self._normalize_email(referee_email)
-        invite_id = str(invite_record["id"])
-        now_iso = datetime.now(tz=UTC).isoformat()
-
-        existing = await self._database.select(
-            "referrals",
-            filters={
-                "invite_code_id": invite_id,
-                "referee_email": normalized_email,
-            },
-            limit=1,
-        )
-
-        if existing:
-            await self._database.update(
-                "referrals",
-                {
-                    "status": "joined",
-                    "referee_user_id": str(referee_user_id),
-                    "accepted_at": now_iso,
-                },
-                filters={"id": str(existing[0]["id"])},
-            )
-            return
-
-        await self._database.insert(
-            "referrals",
-            {
-                "invite_code_id": invite_id,
-                "referrer_user_id": invite_record.get("issued_by"),
-                "referee_user_id": str(referee_user_id),
-                "referee_email": normalized_email,
-                "status": "joined",
-                "accepted_at": now_iso,
-                "metadata": {},
-            },
-        )
-
-    async def _mark_application_converted(self, application: Dict[str, Any], user_id: UUID) -> None:
-        await self._database.update(
-            "referral_applications",
-            {
-                "status": "converted",
-                "user_id": str(user_id),
-                "processed_at": datetime.now(tz=UTC).isoformat(),
-            },
-            filters={"id": str(application["id"])},
-        )
-
     async def _issue_new_code(self, *, user_id: UUID, max_uses: int) -> Dict[str, Any]:
+        """Generate a new unique invite code for a user."""
         attempts = 0
         last_error: Exception | None = None
 
+        prefix = "POCKET-"
+        code_length = 6
+
         while attempts < 5:
             attempts += 1
-            candidate = self._generate_code()
+            random_part = "".join(secrets.choice(string.ascii_uppercase + string.digits) for _ in range(code_length))
+            candidate = f"{prefix}{random_part}"
+
             try:
                 record = await self._database.insert(
-                    "invite_codes",
+                    "user_invite_codes",
                     {
+                        "user_id": str(user_id),
                         "code": candidate,
-                        "issued_by": str(user_id),
                         "max_uses": max_uses,
-                        "status": "active",
-                        "metadata": {"type": "personal"},
+                        "uses_count": 0,
                     },
                 )
                 return record
-            except Exception as exc:  # pragma: no cover - unique violation handled by retry
+            except Exception as exc:
                 last_error = exc
 
         raise HTTPException(
@@ -393,30 +250,20 @@ class InviteReferralService:
     def _map_invite_info(self, record: Dict[str, Any]) -> InviteCodeInfo:
         uses_count = int(record.get("uses_count") or 0)
         max_uses = int(record.get("max_uses") or 0)
-        remaining = max(max_uses - uses_count, 0) if max_uses else None
-        expires_at = self._parse_datetime(record.get("expires_at"))
+        remaining = max(max_uses - uses_count, 0)
         return InviteCodeInfo(
             id=UUID(str(record["id"])),
             code=record["code"],
-            status=record.get("status", "active"),
-            max_uses=max_uses or 0,
+            max_uses=max_uses,
             uses_count=uses_count,
             remaining_uses=remaining,
-            expires_at=expires_at,
         )
 
     def _is_code_active(self, record: Dict[str, Any]) -> bool:
-        status_value = (record.get("status") or "active").lower()
-        if status_value not in {"active"}:
-            return False
-        expires_at = self._parse_datetime(record.get("expires_at"))
-        if expires_at and expires_at < datetime.now(tz=UTC):
-            return False
-        max_uses = int(record.get("max_uses") or 0)
-        uses_count = int(record.get("uses_count") or 0)
-        if max_uses and uses_count >= max_uses:
-            return False
-        return True
+        """Check if an invite code is still active."""
+        uses_count = record.get("uses_count", 0)
+        max_uses = record.get("max_uses", 0)
+        return uses_count < max_uses
 
     def _normalize_email(self, email: str) -> str:
         return email.strip().lower()
@@ -440,36 +287,6 @@ class InviteReferralService:
             return parsed
         except ValueError:
             return None
-
-    async def _persist_profile_metadata(self, user_id: UUID, updates: Dict[str, Any]) -> None:
-        try:
-            await self._database.update_profile(user_id, updates)
-        except Exception as exc:
-            if self._looks_like_missing_invite_columns(exc):
-                logger.warning(
-                    "Profile metadata update skipped for %s because Supabase is missing invite columns: %s",
-                    user_id,
-                    exc,
-                )
-                return
-            raise
-
-    def _looks_like_missing_invite_columns(self, exc: Exception) -> bool:
-        message = ""
-        for attr in ("message", "msg", "detail"):
-            value = getattr(exc, attr, None)
-            if isinstance(value, str) and value.strip():
-                message = value
-                break
-        if not message:
-            message = str(exc)
-        lowered = message.lower()
-        return ("invite_code" in lowered or "invite_status" in lowered) and ("schema" in lowered or "column" in lowered)
-
-    def _extract_referral_metadata(self, value: Any) -> Dict[str, Any]:
-        if isinstance(value, dict):
-            return value
-        return {}
 
     def _build_invite_link(self, code: str) -> str:
         raw_base = getattr(self._settings, "referral_share_base_url", None) or getattr(self._settings, "backend_base_url", "")

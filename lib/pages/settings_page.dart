@@ -16,9 +16,10 @@ import 'config_page.dart';
 import 'docs_page.dart';
 import 'library_page.dart';
 import 'model_settings_page.dart';
-import 'settings/refereals_and_invite/referral_center_page.dart';
+import 'referral/referral_center_page.dart';
 import 'search_settings_page.dart';
 import 'app_info_page.dart';
+import 'notifications/notification_center_page.dart';
 
 class SettingsPage extends StatefulWidget {
   const SettingsPage({Key? key}) : super(key: key);
@@ -85,6 +86,12 @@ class _SettingsPageState extends State<SettingsPage> {
             iconColor: Colors.orange,
             title: 'Notifications',
             // subtitle: 'Configure app notifications',
+            onTap: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (context) => const NotificationCenterScreen()),
+              );
+            },
           ),
           
           SizedBox(height: 32),
@@ -233,6 +240,7 @@ class _SettingsPageState extends State<SettingsPage> {
       'API Keys',
       'App Information',
       'Referral Center',
+      'Notifications',
     ].contains(title);
 
     return Card(
