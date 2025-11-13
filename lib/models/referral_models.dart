@@ -82,6 +82,8 @@ class ReferralOverview extends Equatable {
   final int maxUses;
   final int usesCount;
   final int? remainingUses;
+  final String? inviteLink;
+  final String? shareMessage;
   final ReferralStats stats;
   final List<ReferralEntry> referrals;
 
@@ -90,6 +92,8 @@ class ReferralOverview extends Equatable {
     required this.maxUses,
     required this.usesCount,
     this.remainingUses,
+    this.inviteLink,
+    this.shareMessage,
     required this.stats,
     required this.referrals,
   });
@@ -100,6 +104,8 @@ class ReferralOverview extends Equatable {
       maxUses: (map['max_uses'] as num?)?.toInt() ?? 0,
       usesCount: (map['uses_count'] as num?)?.toInt() ?? 0,
       remainingUses: (map['remaining_uses'] as num?)?.toInt(),
+      inviteLink: map['invite_link'] as String?,
+      shareMessage: map['share_message'] as String?,
       stats: map['stats'] != null
           ? ReferralStats.fromMap(Map<String, dynamic>.from(map['stats']))
           : ReferralStats(
@@ -118,7 +124,52 @@ class ReferralOverview extends Equatable {
   }
 
   @override
-  List<Object?> get props => [inviteCode, maxUses, usesCount, remainingUses, stats, referrals];
+  List<Object?> get props => [
+        inviteCode,
+        maxUses,
+        usesCount,
+        remainingUses,
+        inviteLink,
+        shareMessage,
+        stats,
+        referrals,
+      ];
 
-  String get inviteLink => 'https://pocketllm.ai/invite?code=$inviteCode';
+  int get totalSlots {
+    if (maxUses > 0) return maxUses;
+    if (remainingUses != null) {
+      final safeRemaining = remainingUses! < 0 ? 0 : remainingUses!;
+      return usesCount + safeRemaining;
+    }
+    return 0;
+  }
+
+  int get availableSlots {
+    if (maxUses <= 0 && remainingUses == null) {
+      return 0;
+    }
+    final computed = (totalSlots - usesCount).clamp(0, totalSlots);
+    return computed;
+  }
+
+  double get usageProgress {
+    final total = totalSlots;
+    if (total <= 0) return 0;
+    final ratio = usesCount / total;
+    if (ratio.isNaN || ratio.isInfinite) {
+      return 0;
+    }
+    return ratio.clamp(0.0, 1.0);
+  }
+
+  String buildShareMessage() {
+    if (shareMessage != null && shareMessage!.trim().isNotEmpty) {
+      return shareMessage!;
+    }
+    final link = inviteLink;
+    if (link != null && link.isNotEmpty) {
+      return 'Join me on PocketLLM with invite code $inviteCode: $link';
+    }
+    return 'Join me on PocketLLM with invite code $inviteCode';
+  }
 }

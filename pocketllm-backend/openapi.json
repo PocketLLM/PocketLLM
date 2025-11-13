@@ -18,9 +18,7 @@
             "description": "Successful Response",
             "content": {
               "application/json": {
-                "schema": {
-
-                }
+                "schema": {}
               }
             }
           }
@@ -62,9 +60,7 @@
             "description": "Successful Response",
             "content": {
               "application/json": {
-                "schema": {
-
-                }
+                "schema": {}
               }
             }
           }
@@ -538,6 +534,52 @@
             "application/json": {
               "schema": {
                 "$ref": "#/components/schemas/OnboardingSurvey"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserProfile"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/v1/users/profile/avatar": {
+      "post": {
+        "tags": [
+          "users"
+        ],
+        "summary": "Upload or update the signed-in user's avatar image",
+        "operationId": "upload_profile_avatar_v1_users_profile_avatar_post",
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_upload_profile_avatar_v1_users_profile_avatar_post"
               }
             }
           },
@@ -2358,6 +2400,20 @@
         "title": "AuthenticatedUser",
         "description": "Information about the authenticated user."
       },
+      "Body_upload_profile_avatar_v1_users_profile_avatar_post": {
+        "properties": {
+          "file": {
+            "type": "string",
+            "format": "binary",
+            "title": "File"
+          }
+        },
+        "type": "object",
+        "required": [
+          "file"
+        ],
+        "title": "Body_upload_profile_avatar_v1_users_profile_avatar_post"
+      },
       "CancelDeletionResponse": {
         "properties": {
           "canceled": {
@@ -3210,8 +3266,8 @@
         "properties": {
           "temperature": {
             "type": "number",
-            "maximum": 2,
-            "minimum": 0,
+            "maximum": 2.0,
+            "minimum": 0.0,
             "title": "Temperature",
             "default": 0.7
           },
@@ -3219,7 +3275,7 @@
             "anyOf": [
               {
                 "type": "integer",
-                "minimum": 16
+                "minimum": 16.0
               },
               {
                 "type": "null"
@@ -3232,43 +3288,43 @@
             "anyOf": [
               {
                 "type": "number",
-                "maximum": 1,
-                "minimum": 0
+                "maximum": 1.0,
+                "minimum": 0.0
               },
               {
                 "type": "null"
               }
             ],
             "title": "Top P",
-            "default": 1
+            "default": 1.0
           },
           "frequency_penalty": {
             "anyOf": [
               {
                 "type": "number",
-                "maximum": 2,
-                "minimum": 0
+                "maximum": 2.0,
+                "minimum": 0.0
               },
               {
                 "type": "null"
               }
             ],
             "title": "Frequency Penalty",
-            "default": 0
+            "default": 0.0
           },
           "presence_penalty": {
             "anyOf": [
               {
                 "type": "number",
-                "maximum": 2,
-                "minimum": 0
+                "maximum": 2.0,
+                "minimum": 0.0
               },
               {
                 "type": "null"
               }
             ],
             "title": "Presence Penalty",
-            "default": 0
+            "default": 0.0
           },
           "system_prompt": {
             "anyOf": [
@@ -3431,8 +3487,8 @@
             "anyOf": [
               {
                 "type": "integer",
-                "maximum": 120,
-                "minimum": 13
+                "maximum": 120.0,
+                "minimum": 13.0
               },
               {
                 "type": "null"
@@ -4047,6 +4103,30 @@
               }
             ],
             "title": "Accepted At"
+          },
+          "full_name": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 120
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Full Name"
+          },
+          "message": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 500
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Message"
           }
         },
         "type": "object",
@@ -4084,6 +4164,30 @@
               }
             ],
             "title": "Remaining Uses"
+          },
+          "invite_link": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1,
+                "format": "uri"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Invite Link"
+          },
+          "share_message": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Share Message"
           },
           "referrals": {
             "items": {
@@ -4478,8 +4582,8 @@
             "anyOf": [
               {
                 "type": "integer",
-                "maximum": 120,
-                "minimum": 13
+                "maximum": 120.0,
+                "minimum": 13.0
               },
               {
                 "type": "null"
@@ -4721,8 +4825,8 @@
             "anyOf": [
               {
                 "type": "integer",
-                "maximum": 120,
-                "minimum": 13
+                "maximum": 120.0,
+                "minimum": 13.0
               },
               {
                 "type": "null"

@@ -8,7 +8,7 @@ void main() {
   group('ChatInterface', () {
     testWidgets('should create ChatInterface widget', (WidgetTester tester) async {
       await tester.pumpWidget(
-        MaterialApp(
+        const MaterialApp(
           home: Scaffold(
             body: ChatInterface(),
           ),
@@ -20,7 +20,7 @@ void main() {
 
     testWidgets('should show welcome screen when no messages', (WidgetTester tester) async {
       await tester.pumpWidget(
-        MaterialApp(
+        const MaterialApp(
           home: Scaffold(
             body: ChatInterface(),
           ),
@@ -36,7 +36,7 @@ void main() {
 
     testWidgets('should show suggestion cards', (WidgetTester tester) async {
       await tester.pumpWidget(
-        MaterialApp(
+        const MaterialApp(
           home: Scaffold(
             body: ChatInterface(),
           ),
@@ -52,7 +52,7 @@ void main() {
 
     testWidgets('should show input area', (WidgetTester tester) async {
       await tester.pumpWidget(
-        MaterialApp(
+        const MaterialApp(
           home: Scaffold(
             body: ChatInterface(),
           ),
@@ -69,7 +69,7 @@ void main() {
 
     testWidgets('should handle text input', (WidgetTester tester) async {
       await tester.pumpWidget(
-        MaterialApp(
+        const MaterialApp(
           home: Scaffold(
             body: ChatInterface(),
           ),
@@ -91,7 +91,7 @@ void main() {
 
     testWidgets('should show attachment options when add button is pressed', (WidgetTester tester) async {
       await tester.pumpWidget(
-        MaterialApp(
+        const MaterialApp(
           home: Scaffold(
             body: ChatInterface(),
           ),
@@ -113,7 +113,7 @@ void main() {
 
     testWidgets('should handle send button state based on text input', (WidgetTester tester) async {
       await tester.pumpWidget(
-        MaterialApp(
+        const MaterialApp(
           home: Scaffold(
             body: ChatInterface(),
           ),
@@ -138,7 +138,7 @@ void main() {
     group('Model Change Handling', () {
       testWidgets('should not show model indicator when no messages', (WidgetTester tester) async {
         await tester.pumpWidget(
-          MaterialApp(
+          const MaterialApp(
             home: Scaffold(
               body: ChatInterface(),
             ),
@@ -153,7 +153,7 @@ void main() {
 
       testWidgets('should handle model state changes', (WidgetTester tester) async {
         await tester.pumpWidget(
-          MaterialApp(
+          const MaterialApp(
             home: Scaffold(
               body: ChatInterface(),
             ),
@@ -170,7 +170,7 @@ void main() {
     group('Message Handling', () {
       testWidgets('should handle empty message submission', (WidgetTester tester) async {
         await tester.pumpWidget(
-          MaterialApp(
+          const MaterialApp(
             home: Scaffold(
               body: ChatInterface(),
             ),
@@ -189,7 +189,7 @@ void main() {
 
       testWidgets('should handle message submission with text', (WidgetTester tester) async {
         await tester.pumpWidget(
-          MaterialApp(
+          const MaterialApp(
             home: Scaffold(
               body: ChatInterface(),
             ),
@@ -214,7 +214,7 @@ void main() {
     group('UI Components', () {
       testWidgets('should show suggestion cards with proper styling', (WidgetTester tester) async {
         await tester.pumpWidget(
-          MaterialApp(
+          const MaterialApp(
             home: Scaffold(
               body: ChatInterface(),
             ),
@@ -230,7 +230,7 @@ void main() {
 
       testWidgets('should handle suggestion card taps', (WidgetTester tester) async {
         await tester.pumpWidget(
-          MaterialApp(
+          const MaterialApp(
             home: Scaffold(
               body: ChatInterface(),
             ),
@@ -251,7 +251,7 @@ void main() {
     group('Accessibility', () {
       testWidgets('should have proper semantics for screen readers', (WidgetTester tester) async {
         await tester.pumpWidget(
-          MaterialApp(
+          const MaterialApp(
             home: Scaffold(
               body: ChatInterface(),
             ),
@@ -270,7 +270,7 @@ void main() {
       testWidgets('should handle widget creation without errors', (WidgetTester tester) async {
         expect(() async {
           await tester.pumpWidget(
-            MaterialApp(
+            const MaterialApp(
               home: Scaffold(
                 body: ChatInterface(),
               ),
@@ -282,7 +282,7 @@ void main() {
 
       testWidgets('should handle state changes without errors', (WidgetTester tester) async {
         await tester.pumpWidget(
-          MaterialApp(
+          const MaterialApp(
             home: Scaffold(
               body: ChatInterface(),
             ),
@@ -306,7 +306,7 @@ void main() {
   group('ChatInterfaceState', () {
     testWidgets('should initialize properly', (WidgetTester tester) async {
       await tester.pumpWidget(
-        MaterialApp(
+        const MaterialApp(
           home: Scaffold(
             body: ChatInterface(),
           ),
@@ -321,7 +321,7 @@ void main() {
 
     testWidgets('should dispose properly', (WidgetTester tester) async {
       await tester.pumpWidget(
-        MaterialApp(
+        const MaterialApp(
           home: Scaffold(
             body: ChatInterface(),
           ),

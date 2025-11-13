@@ -266,6 +266,33 @@ class BackendApiService {
     return _handleResponse(response);
   }
 
+  Future<dynamic> postMultipart(
+    String path, {
+    Map<String, String>? fields,
+    required List<http.MultipartFile> files,
+  }) async {
+    if (files.isEmpty) {
+      throw BackendApiException(400, 'At least one file must be attached.');
+    }
+
+    final headers = await _buildHeaders();
+    headers.remove('Content-Type'); // Multipart requests set their own boundary header.
+
+    final response = await _executeWithFallback(
+      (baseUrl) async {
+        final request = http.MultipartRequest('POST', _resolveUri(baseUrl, path));
+        request.headers.addAll(headers);
+        if (fields != null && fields.isNotEmpty) {
+          request.fields.addAll(fields);
+        }
+        request.files.addAll(files);
+        final streamed = await request.send();
+        return http.Response.fromStream(streamed);
+      },
+    );
+    return _handleResponse(response);
+  }
+
   Future<dynamic> put(String path, {Map<String, dynamic>? body}) async {
     final headers = await _buildHeaders();
     final response = await _executeWithFallback(

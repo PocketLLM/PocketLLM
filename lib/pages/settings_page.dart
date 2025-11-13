@@ -16,7 +16,7 @@ import 'config_page.dart';
 import 'docs_page.dart';
 import 'library_page.dart';
 import 'model_settings_page.dart';
-import 'referral_center_page.dart';
+import 'settings/refereals_and_invite/referral_center_page.dart';
 import 'search_settings_page.dart';
 import 'app_info_page.dart';
 

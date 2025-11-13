@@ -9,6 +9,9 @@ import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:http/http.dart' as http;
+import 'package:http_parser/http_parser.dart';
+import 'package:path/path.dart' as p;
 
 import '../models/user_profile.dart';
 import 'backend_api_service.dart';
@@ -423,7 +426,44 @@ class AuthStateNotifier extends ChangeNotifier {
   }
 
   Future<String?> uploadProfileImage(File imageFile) async {
-    throw const AuthException('Profile image uploads require a storage integration.');
+    _ensureAuthenticated();
+
+    if (!await imageFile.exists()) {
+      throw const AuthException('The selected image could not be found. Please try again.');
+    }
+
+    final hasValidSession = await _ensureFreshAccessToken(forceRefreshIfExpired: true);
+    if (!hasValidSession) {
+      throw const AuthException('Your session has expired. Please sign in again.', statusCode: 401);
+    }
+
+    final extension = p.extension(imageFile.path).toLowerCase();
+    final mimeType = _resolveImageMimeType(extension);
+
+    final multipart = await http.MultipartFile.fromPath(
+      'file',
+      imageFile.path,
+      contentType: MediaType.parse(mimeType),
+    );
+
+    final response = await _backendApi.postMultipart(
+      '/users/profile/avatar',
+      files: [multipart],
+    );
+
+    final payload = _wrapBackendResponse(response);
+    final data = _extractData(payload);
+    final profileData = _extractProfilePayload(data) ?? data;
+    final avatarUrl = profileData['avatar_url'] as String?;
+
+    if (profileData.isNotEmpty) {
+      final updatedProfile = UserProfile.fromMap(Map<String, dynamic>.from(profileData));
+      _profile = updatedProfile;
+      await _cacheProfile(updatedProfile);
+      notifyListeners();
+    }
+
+    return avatarUrl;
   }
 
   Future<void> requestAccountDeletion() async {
@@ -1154,6 +1194,22 @@ class AuthStateNotifier extends ChangeNotifier {
     return {
       'value': data,
     };
+  }
+
+  String _resolveImageMimeType(String extension) {
+    switch (extension) {
+      case '.png':
+        return 'image/png';
+      case '.jpg':
+      case '.jpeg':
+        return 'image/jpeg';
+      case '.webp':
+        return 'image/webp';
+      case '.heic':
+        return 'image/heic';
+      default:
+        throw const AuthException('Please choose a PNG, JPG, WEBP, or HEIC image.');
+    }
   }
 
   bool _looksLikeWhitelistError(AuthException error) {

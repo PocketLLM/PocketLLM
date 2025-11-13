@@ -5,6 +5,7 @@ from __future__ import annotations
 import secrets
 import string
 import logging
+from urllib.parse import parse_qsl, urlencode, urlparse, urlunparse
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any, Dict, Literal, Sequence
@@ -232,6 +233,8 @@ class InviteReferralService:
             if created_at is None:
                 created_at = datetime.now(tz=UTC)
 
+            metadata = self._extract_referral_metadata(row.get("metadata"))
+
             items.append(
                 ReferralListItem(
                     referral_id=UUID(str(row["id"])),
@@ -240,6 +243,8 @@ class InviteReferralService:
                     reward_status=reward_status,
                     created_at=created_at,
                     accepted_at=self._parse_datetime(accepted_at),
+                    full_name=metadata.get("full_name"),
+                    message=metadata.get("message"),
                 )
             )
 
@@ -251,11 +256,15 @@ class InviteReferralService:
         )
 
         info = self._map_invite_info(invite)
+        invite_link = self._build_invite_link(info.code)
+        share_message = self._compose_share_message(info.code, invite_link)
         return ReferralListResponse(
             invite_code=info.code,
             max_uses=info.max_uses,
             uses_count=info.uses_count,
             remaining_uses=info.remaining_uses,
+            invite_link=invite_link,
+            share_message=share_message,
             referrals=items,
             stats=stats,
         )
@@ -456,6 +465,26 @@ class InviteReferralService:
             message = str(exc)
         lowered = message.lower()
         return ("invite_code" in lowered or "invite_status" in lowered) and ("schema" in lowered or "column" in lowered)
+
+    def _extract_referral_metadata(self, value: Any) -> Dict[str, Any]:
+        if isinstance(value, dict):
+            return value
+        return {}
+
+    def _build_invite_link(self, code: str) -> str:
+        raw_base = getattr(self._settings, "referral_share_base_url", None) or getattr(self._settings, "backend_base_url", "")
+        base = str(raw_base)
+        normalized = base.strip() or "https://pocketllm.ai/download"
+        parsed = urlparse(normalized)
+        query = dict(parse_qsl(parsed.query, keep_blank_values=True))
+        query["invite_code"] = code
+        new_query = urlencode(query)
+        rebuilt = parsed._replace(query=new_query)
+        return urlunparse(rebuilt)
+
+    def _compose_share_message(self, code: str, link: str) -> str:
+        app_name = getattr(self._settings, "app_name", "PocketLLM")
+        return f"Join me on {app_name} with my invite code {code}: {link}"
 
 
 __all__ = ["InviteReferralService", "InviteApprovalContext"]

@@ -68,6 +68,11 @@ Persist onboarding questionnaire results.
 - **Body:** `OnboardingSurvey`
 - **Response:** `UserProfile`
 
+### `POST /v1/users/profile/avatar`
+Upload or rotate the authenticated user's avatar.
+- **Body:** `multipart/form-data` with `file` (PNG/JPG/WEBP/HEIC)
+- **Response:** `UserProfile`
+
 ### `GET /v1/users/{userId}`
 Fetch a profile by identifier. For security the caller must match the requested `userId`.
 - **Response:** `UserProfile`
@@ -80,8 +85,8 @@ Submit or update a waitlist/referral application.
 - **Response:** `WaitlistEntry { id, email, full_name, source, metadata, created_at }`
 
 ### `GET /v1/referral/list`
-Return the caller's personal invite code, usage counts, and referral history.
-- **Response:** `ReferralListResponse { invite_code, max_uses, uses_count, remaining_uses, stats, referrals[] }`
+Return the caller's personal invite code, usage counts, referral history, and a canonical share link.
+- **Response:** `ReferralListResponse { invite_code, max_uses, uses_count, remaining_uses, invite_link, share_message, stats, referrals[] }`
 
 ### `POST /v1/referral/send`
 Issue a new invite for a teammate via the caller's personal invite code.

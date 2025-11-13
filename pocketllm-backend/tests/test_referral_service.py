@@ -30,6 +30,7 @@ class FakeDatabase:
         record.setdefault("id", uuid.uuid4())
         record.setdefault("created_at", datetime.now(tz=UTC))
         record.setdefault("updated_at", record["created_at"])
+        record.setdefault("metadata", {})
         self.tables[table].append(record)
         return record
 
@@ -156,3 +157,45 @@ async def test_handle_post_signup_continues_when_profile_columns_missing():
     referrals = database.tables["referrals"]
     assert len(referrals) == 1
     assert referrals[0]["status"] == "joined"
+
+
+@pytest.mark.asyncio
+async def test_list_referrals_includes_share_link_and_metadata():
+    database = FakeDatabase()
+    user_id = uuid.uuid4()
+    invite_id = uuid.uuid4()
+    code = "SHARE42"
+    await database.insert(
+        "invite_codes",
+        {
+            "id": invite_id,
+            "code": code,
+            "status": "active",
+            "uses_count": 1,
+            "max_uses": 5,
+            "issued_by": str(user_id),
+        },
+    )
+    database.profiles[str(user_id)] = {"id": str(user_id), "invite_code": code}
+    await database.insert(
+        "referrals",
+        {
+            "invite_code_id": str(invite_id),
+            "referrer_user_id": str(user_id),
+            "referee_email": "friend@example.com",
+            "status": "joined",
+            "reward_status": "issued",
+            "metadata": {"full_name": "Ana M", "message": "See you inside"},
+            "accepted_at": datetime(2024, 5, 21, tzinfo=UTC),
+        },
+    )
+
+    settings = Settings(referral_share_base_url="https://example.dev/download")
+    service = InviteReferralService(settings=settings, database=database)
+
+    response = await service.list_referrals(user_id)
+
+    assert response.invite_link == "https://example.dev/download?invite_code=SHARE42"
+    assert response.share_message and "SHARE42" in response.share_message
+    assert response.referrals[0].full_name == "Ana M"
+    assert response.referrals[0].message == "See you inside"

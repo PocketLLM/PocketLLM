@@ -3,9 +3,9 @@ import 'package:flutter/services.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:url_launcher/url_launcher_string.dart';
 
-import '../models/referral_models.dart';
-import '../services/referral_service.dart';
-import '../services/backend_api_service.dart';
+import '../../../models/referral_models.dart';
+import '../../../services/referral_service.dart';
+import '../../../services/backend_api_service.dart';
 
 class ReferralPage extends StatefulWidget {
   const ReferralPage({Key? key}) : super(key: key);
@@ -347,7 +347,7 @@ class _ReferralPageState extends State<ReferralPage> {
                 final referral = overview.referrals[index];
                 return ListTile(
                   leading: CircleAvatar(
-                    backgroundColor: Theme.of(context).primaryColor.withOpacity(0.1),
+                    backgroundColor: Theme.of(context).primaryColor.withValues(alpha: 0.1),
                     child: Icon(
                       Icons.person_outline,
                       color: Theme.of(context).primaryColor,
@@ -400,7 +400,7 @@ class _ReferralPageState extends State<ReferralPage> {
                     borderRadius: BorderRadius.circular(8),
                   ),
                   child: Text(
-                    overview.inviteLink,
+                    overview.inviteLink ?? '',
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                   ),
@@ -410,7 +410,7 @@ class _ReferralPageState extends State<ReferralPage> {
               IconButton(
                 onPressed: () {
                   _copyToClipboard(
-                    overview.inviteLink,
+                    overview.inviteLink ?? '',
                     'Referral link copied to clipboard!',
                   );
                 },
@@ -420,7 +420,7 @@ class _ReferralPageState extends State<ReferralPage> {
               IconButton(
                 onPressed: () {
                   Share.share(
-                    'Join me on PocketLLM using my referral code: ${overview.inviteCode}\n${overview.inviteLink}',
+                    'Join me on PocketLLM using my referral code: ${overview.inviteCode}\n${overview.inviteLink ?? ''}',
                     subject: 'Join me on PocketLLM!',
                   );
                 },
@@ -449,7 +449,7 @@ class _ReferralPageState extends State<ReferralPage> {
             Container(
               padding: const EdgeInsets.all(8),
               decoration: BoxDecoration(
-                color: Theme.of(context).primaryColor.withOpacity(0.1),
+                color: Theme.of(context).primaryColor.withValues(alpha: 0.1),
                 shape: BoxShape.circle,
               ),
               child: Icon(icon, color: Theme.of(context).primaryColor),

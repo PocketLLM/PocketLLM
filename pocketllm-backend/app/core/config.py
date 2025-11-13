@@ -18,6 +18,15 @@ class Settings(BaseSettings):
         extra="ignore"  # Ignore extra environment variables
     )
 
+    def __init__(self, **data):
+        explicit_values = dict(data)
+        super().__init__(**data)
+        model_fields = self.__class__.model_fields
+        for field_name, value in explicit_values.items():
+            if value is None or field_name not in model_fields:
+                continue
+            object.__setattr__(self, field_name, value)
+
     app_name: str = "PocketLLM API"
     environment: str = Field(default="development", alias="ENVIRONMENT")
     debug: bool = False
@@ -71,6 +80,12 @@ class Settings(BaseSettings):
     storage_bucket_models: str = "model-artifacts"
     storage_bucket_jobs: str = "job-results"
     user_asset_bucket_name: str = "user-assets"
+
+    # Referral / sharing
+    referral_share_base_url: AnyHttpUrl = Field(
+        default="https://pocketllm.ai/download",
+        alias="REFERRAL_SHARE_BASE_URL",
+    )
 
     # Provider configuration
     openai_api_key: str | None = Field(default=None, alias="OPENAI_API_KEY")

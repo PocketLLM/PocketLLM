@@ -69,6 +69,12 @@
   `/v1/waitlist`, and `/v1/referral/*` endpoints—never short-circuit these checks
   with local state.
 
+**Referrals & Profile Media**
+
+- The backend now returns canonical `invite_link` + `share_message` fields—use them instead of hard-coded URLs.
+- Configure `REFERRAL_SHARE_BASE_URL` and `USER_ASSET_BUCKET_NAME` in your `.env` before testing referrals or avatar uploads.
+- Profile avatars must be uploaded through `/v1/users/profile/avatar`; clients should call `AuthState.uploadProfileImage` so storage paths remain consistent.
+
 **Remember**: The goal is to maintain a high-quality, production-ready codebase that is well-documented and thoroughly tested.
 
 ### Chat Architecture Notes

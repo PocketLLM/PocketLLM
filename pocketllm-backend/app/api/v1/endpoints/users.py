@@ -4,9 +4,13 @@ from __future__ import annotations
 
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
 
-from app.api.deps import get_current_request_user, get_database_dependency
+from app.api.deps import (
+    get_current_request_user,
+    get_database_dependency,
+    get_settings_dependency,
+)
 from app.schemas.auth import TokenPayload
 from app.schemas.users import (
     CancelDeletionResponse,
@@ -15,6 +19,7 @@ from app.schemas.users import (
     UserProfile,
     UserProfileUpdate,
 )
+from app.services.assets import UserAssetService
 from app.services.users import UsersService
 
 router = APIRouter(prefix="/users", tags=["users"])
@@ -69,6 +74,21 @@ async def complete_onboarding(
 ) -> UserProfile:
     service = UsersService(database=database)
     return await service.complete_onboarding(user.sub, payload)
+
+
+@router.post(
+    "/profile/avatar",
+    response_model=UserProfile,
+    summary="Upload or update the signed-in user's avatar image",
+)
+async def upload_profile_avatar(
+    file: UploadFile = File(...),
+    user: TokenPayload = Depends(get_current_request_user),
+    settings=Depends(get_settings_dependency),
+    database=Depends(get_database_dependency),
+) -> UserProfile:
+    service = UserAssetService(settings=settings, database=database)
+    return await service.upload_avatar(user.sub, file)
 
 
 @router.get("/{user_id}", response_model=UserProfile, summary="Get user profile by ID")

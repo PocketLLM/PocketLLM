@@ -49,7 +49,9 @@ class _ProfileSettingsPageState extends State<ProfileSettingsPage> {
       setState(() => _isProcessing = true);
       final file = File(image.path);
       final avatarUrl = await authState.uploadProfileImage(file);
-      await authState.updateProfileFields({'avatar_url': avatarUrl});
+      if (avatarUrl == null || avatarUrl.isEmpty) {
+        throw const AuthException('Avatar upload did not return a file URL.');
+      }
       await authState.refreshProfile();
       if (!mounted) return;
       
