@@ -33,6 +33,8 @@ class ReferralEntry extends Equatable {
   final String rewardStatus;
   final DateTime createdAt;
   final DateTime? acceptedAt;
+  final String? fullName;
+  final String? message;
 
   const ReferralEntry({
     required this.id,
@@ -41,30 +43,38 @@ class ReferralEntry extends Equatable {
     required this.rewardStatus,
     required this.createdAt,
     this.acceptedAt,
+    this.fullName,
+    this.message,
   });
 
   factory ReferralEntry.fromMap(Map<String, dynamic> map) {
     return ReferralEntry(
       id: map['referral_id']?.toString() ?? map['id'].toString(),
       email: map['email'] as String? ?? '',
-      status: map['status'] as String? ?? 'pending',
-      rewardStatus: map['reward_status'] as String? ?? 'none',
-      createdAt: _parseDate(map['created_at']) ?? DateTime.now(),
-      acceptedAt: _parseDate(map['accepted_at']),
+      status: (map['status'] as String?)?.toLowerCase() ?? 'pending',
+      rewardStatus: (map['reward_status'] as String?)?.toLowerCase() ?? 'pending',
+      createdAt: map['created_at'] != null 
+          ? DateTime.parse(map['created_at'].toString()).toLocal() 
+          : DateTime.now(),
+      acceptedAt: map['accepted_at'] != null 
+          ? DateTime.parse(map['accepted_at'].toString()).toLocal() 
+          : null,
+      fullName: map['full_name'] as String?,
+      message: map['message'] as String?,
     );
   }
 
-  static DateTime? _parseDate(dynamic value) {
-    if (value == null) return null;
-    if (value is DateTime) return value;
-    if (value is String && value.isNotEmpty) {
-      return DateTime.tryParse(value);
-    }
-    return null;
-  }
-
   @override
-  List<Object?> get props => [id, email, status, rewardStatus, createdAt, acceptedAt];
+  List<Object?> get props => [
+        id,
+        email,
+        status,
+        rewardStatus,
+        createdAt,
+        acceptedAt,
+        fullName,
+        message,
+      ];
 }
 
 class ReferralOverview extends Equatable {
@@ -79,23 +89,31 @@ class ReferralOverview extends Equatable {
     required this.inviteCode,
     required this.maxUses,
     required this.usesCount,
-    required this.remainingUses,
+    this.remainingUses,
     required this.stats,
     required this.referrals,
   });
 
   factory ReferralOverview.fromMap(Map<String, dynamic> map) {
-    final referralItems = (map['referrals'] as List<dynamic>? ?? [])
-        .whereType<Map<String, dynamic>>()
-        .map(ReferralEntry.fromMap)
-        .toList();
     return ReferralOverview(
       inviteCode: map['invite_code'] as String? ?? '',
       maxUses: (map['max_uses'] as num?)?.toInt() ?? 0,
       usesCount: (map['uses_count'] as num?)?.toInt() ?? 0,
       remainingUses: (map['remaining_uses'] as num?)?.toInt(),
-      stats: ReferralStats.fromMap((map['stats'] as Map<String, dynamic>?) ?? <String, dynamic>{}),
-      referrals: referralItems,
+      stats: map['stats'] != null
+          ? ReferralStats.fromMap(Map<String, dynamic>.from(map['stats']))
+          : ReferralStats(
+              totalSent: 0,
+              totalJoined: 0,
+              pending: 0,
+              rewardsIssued: 0,
+            ),
+      referrals: map['referrals'] != null
+          ? (map['referrals'] as List<dynamic>)
+              .map((e) => ReferralEntry.fromMap(
+                  Map<String, dynamic>.from(e as Map)))
+              .toList()
+          : <ReferralEntry>[],
     );
   }
 

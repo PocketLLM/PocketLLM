@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:share_plus/share_plus.dart';
 
 import '../models/referral_models.dart';
 import '../services/backend_api_service.dart';
@@ -58,7 +59,8 @@ class _ReferralCenterPageState extends State<ReferralCenterPage> {
     final overview = _overview;
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Referral Center'),
+        title: const Text('Refer & Earn'),
+        elevation: 0,
       ),
       body: _buildBody(overview),
     );
@@ -110,7 +112,7 @@ class _ReferralCenterPageState extends State<ReferralCenterPage> {
               ),
               const SizedBox(height: 16),
               ElevatedButton.icon(
-                onPressed: _showInviteSheet,
+                onPressed: _showInviteDialog,
                 icon: const Icon(Icons.send),
                 label: const Text('Send invite'),
               ),
@@ -122,359 +124,442 @@ class _ReferralCenterPageState extends State<ReferralCenterPage> {
 
     return RefreshIndicator(
       onRefresh: _loadOverview,
-      child: ListView(
-        padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
-        children: [
-          _buildInviteCard(overview),
-          const SizedBox(height: 16),
-          _buildStatsRow(overview),
-          const SizedBox(height: 24),
-          _buildReferralList(overview),
-        ],
-      ),
+      child: _buildOverview(overview),
     );
   }
 
-  Widget _buildInviteCard(ReferralOverview overview) {
-    return Card(
-      elevation: 0,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      child: Padding(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'Your invite code',
-              style: TextStyle(
-                color: Colors.grey[700],
-                fontWeight: FontWeight.w500,
-              ),
-            ),
-            const SizedBox(height: 8),
-            SelectableText(
-              overview.inviteCode,
-              style: const TextStyle(fontSize: 32, fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 12),
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: [
-                OutlinedButton.icon(
-                  onPressed: () => _copyToClipboard(overview.inviteCode, 'Code copied'),
-                  icon: const Icon(Icons.copy),
-                  label: const Text('Copy code'),
-                ),
-                OutlinedButton.icon(
-                  onPressed: () => _copyToClipboard(overview.inviteLink, 'Invite link copied'),
-                  icon: const Icon(Icons.link),
-                  label: const Text('Copy link'),
-                ),
-                FilledButton.icon(
-                  onPressed: _showInviteSheet,
-                  icon: const Icon(Icons.send),
-                  label: const Text('Send invite'),
-                ),
-              ],
-            ),
-            const SizedBox(height: 12),
-            Text(
-              'Uses ${overview.usesCount} of ${overview.maxUses} • ${overview.remainingUses ?? 'Unlimited'} remaining',
-              style: TextStyle(color: Colors.grey[600]),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildStatsRow(ReferralOverview overview) {
-    final stats = overview.stats;
-    return Row(
-      children: [
-        Expanded(child: _buildStatTile('Sent', stats.totalSent, Icons.mail_outline)),
-        const SizedBox(width: 12),
-        Expanded(child: _buildStatTile('Joined', stats.totalJoined, Icons.verified)),
-        const SizedBox(width: 12),
-        Expanded(child: _buildStatTile('Pending', stats.pending, Icons.hourglass_bottom)),
-        const SizedBox(width: 12),
-        Expanded(child: _buildStatTile('Rewards', stats.rewardsIssued, Icons.emoji_events_outlined)),
-      ],
-    );
-  }
-
-  Widget _buildStatTile(String label, int value, IconData icon) {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(14),
-        color: Colors.grey[100],
-      ),
+  Widget _buildOverview(ReferralOverview overview) {
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(16.0),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(icon, color: Colors.deepPurple[300]),
-          const SizedBox(height: 12),
-          Text(
-            value.toString(),
-            style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-          ),
-          Text(label, style: TextStyle(color: Colors.grey[600])),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildReferralList(ReferralOverview overview) {
-    if (overview.referrals.isEmpty) {
-      return Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text(
-            'Recent invites',
-            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-          ),
-          const SizedBox(height: 12),
-          Container(
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(14),
-              color: Colors.grey[100],
+          // Header Card
+          Card(
+            elevation: 4,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
             ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text(
-                  'No invites sent yet',
-                  style: TextStyle(fontWeight: FontWeight.w600),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  'Share your code to unlock early access rewards.',
-                  style: TextStyle(color: Colors.grey[600]),
-                ),
-              ],
-            ),
-          ),
-        ],
-      );
-    }
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const Text(
-          'Recent invites',
-          style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-        ),
-        const SizedBox(height: 12),
-        ...overview.referrals.map(_buildReferralTile),
-      ],
-    );
-  }
-
-  Widget _buildReferralTile(ReferralEntry entry) {
-    final statusColor = _statusColor(entry.status);
-    final rewardColor = _rewardColor(entry.rewardStatus);
-    return Card(
-      elevation: 0,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-      child: ListTile(
-        title: Text(entry.email, style: const TextStyle(fontWeight: FontWeight.w600)),
-        subtitle: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const SizedBox(height: 4),
-            Text(
-              entry.createdAt.toLocal().toString(),
-              style: TextStyle(color: Colors.grey[600], fontSize: 13),
-            ),
-            if (entry.acceptedAt != null)
-              Text(
-                'Joined ${entry.acceptedAt!.toLocal()}',
-                style: TextStyle(color: Colors.grey[600], fontSize: 13),
-              ),
-          ],
-        ),
-        trailing: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          crossAxisAlignment: CrossAxisAlignment.end,
-          children: [
-            Chip(
-              label: Text(entry.status.toUpperCase()),
-              backgroundColor: statusColor.withOpacity(0.12),
-              labelStyle: TextStyle(color: statusColor),
-            ),
-            const SizedBox(height: 6),
-            Text(
-              entry.rewardStatus.toUpperCase(),
-              style: TextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.w600,
-                color: rewardColor,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Color _statusColor(String status) {
-    switch (status.toLowerCase()) {
-      case 'joined':
-        return Colors.green;
-      case 'rejected':
-        return Colors.redAccent;
-      default:
-        return Colors.orange;
-    }
-  }
-
-  Color _rewardColor(String status) {
-    switch (status.toLowerCase()) {
-      case 'issued':
-      case 'fulfilled':
-        return Colors.green;
-      case 'pending':
-        return Colors.orange;
-      case 'revoked':
-        return Colors.redAccent;
-      default:
-        return Colors.grey[600]!;
-    }
-  }
-
-  Future<void> _showInviteSheet() async {
-    final emailController = TextEditingController();
-    final nameController = TextEditingController();
-    final messageController = TextEditingController();
-    final emailRegex = RegExp(r'^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$');
-
-    await showModalBottomSheet<bool>(
-      context: context,
-      isScrollControlled: true,
-      builder: (modalContext) {
-        bool isSubmitting = false;
-        String? errorText;
-
-        Future<void> submit(StateSetter setModalState) async {
-          final email = emailController.text.trim();
-          if (!emailRegex.hasMatch(email)) {
-            setModalState(() {
-              errorText = 'Enter a valid email';
-            });
-            return;
-          }
-          setModalState(() {
-            isSubmitting = true;
-            errorText = null;
-          });
-          try {
-            await _referralService.sendInvite(
-              email: email,
-              fullName: nameController.text.trim(),
-              message: messageController.text.trim(),
-            );
-            if (!mounted) return;
-            Navigator.of(modalContext).pop(true);
-            _showSnackBar('Invite sent to $email', success: true);
-            await _loadOverview();
-          } on BackendApiException catch (error) {
-            setModalState(() {
-              isSubmitting = false;
-              errorText = error.message;
-            });
-          } catch (error) {
-            setModalState(() {
-              isSubmitting = false;
-              errorText = error.toString();
-            });
-          }
-        }
-
-        return StatefulBuilder(
-          builder: (context, setModalState) {
-            return Padding(
-              padding: EdgeInsets.only(bottom: MediaQuery.of(modalContext).viewInsets.bottom),
-              child: SafeArea(
-                child: SingleChildScrollView(
-                  padding: const EdgeInsets.fromLTRB(24, 24, 24, 32),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
+            child: Padding(
+              padding: const EdgeInsets.all(16.0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'Invite Friends & Earn Rewards',
+                    style: TextStyle(
+                      fontSize: 20,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  const Text(
+                    'Share your referral code and earn exclusive rewards when your friends sign up and subscribe.',
+                    style: TextStyle(fontSize: 14, color: Colors.grey),
+                  ),
+                  const SizedBox(height: 16),
+                  Row(
                     children: [
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          const Expanded(
-                            child: Text(
-                              'Send invite',
-                              style: TextStyle(fontSize: 20, fontWeight: FontWeight.w600),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text(
+                              'Your Referral Code',
+                              style: TextStyle(
+                                fontSize: 14,
+                                color: Colors.grey,
+                              ),
                             ),
-                          ),
-                          IconButton(
-                            icon: const Icon(Icons.close),
-                            onPressed: () => Navigator.of(modalContext).pop(false),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 12),
-                      TextField(
-                        controller: emailController,
-                        keyboardType: TextInputType.emailAddress,
-                        decoration: const InputDecoration(labelText: 'Email'),
-                      ),
-                      const SizedBox(height: 12),
-                      TextField(
-                        controller: nameController,
-                        decoration: const InputDecoration(labelText: 'Name (optional)'),
-                      ),
-                      const SizedBox(height: 12),
-                      TextField(
-                        controller: messageController,
-                        decoration: const InputDecoration(
-                          labelText: 'Personal message',
-                          hintText: 'Let your teammate know why they should join you.',
+                            const SizedBox(height: 4),
+                            Text(
+                              overview.inviteCode,
+                              style: const TextStyle(
+                                fontSize: 20,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ],
                         ),
-                        maxLines: 3,
                       ),
-                      if (errorText != null) ...[
-                        const SizedBox(height: 12),
-                        Text(errorText!, style: const TextStyle(color: Colors.redAccent)),
-                      ],
-                      const SizedBox(height: 20),
-                      SizedBox(
-                        width: double.infinity,
-                        child: ElevatedButton(
-                          onPressed: isSubmitting ? null : () => submit(setModalState),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: const Color(0xFF8B5CF6),
-                            foregroundColor: Colors.white,
-                            padding: const EdgeInsets.symmetric(vertical: 14),
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                          ),
-                          child: isSubmitting
-                              ? const SizedBox(
-                                  width: 20,
-                                  height: 20,
-                                  child: CircularProgressIndicator(
-                                    strokeWidth: 2,
-                                    color: Colors.white,
-                                  ),
-                                )
-                              : const Text('Send invite'),
+                      ElevatedButton.icon(
+                        onPressed: () {
+                          _copyToClipboard(
+                            overview.inviteCode,
+                            'Referral code copied to clipboard!',
+                          );
+                        },
+                        icon: const Icon(Icons.copy, size: 16),
+                        label: const Text('Copy Code'),
+                        style: ElevatedButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                         ),
                       ),
                     ],
                   ),
+                  const SizedBox(height: 16),
+                  SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton.icon(
+                      onPressed: _showInviteDialog,
+                      icon: const Icon(Icons.mail_outline),
+                      label: const Text('Invite via Email'),
+                      style: ElevatedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(vertical: 16),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+
+          const SizedBox(height: 24),
+
+          // Stats Overview
+          const Text(
+            'Your Referral Stats',
+            style: TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          const SizedBox(height: 12),
+          _buildStatsSection(overview.stats),
+
+          const SizedBox(height: 24),
+          _buildReferralsList(overview.referrals, overview.inviteLink),
+
+          const SizedBox(height: 32),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildStatsSection(ReferralStats stats) {
+    return GridView.count(
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      crossAxisCount: 2,
+      crossAxisSpacing: 12,
+      mainAxisSpacing: 12,
+      childAspectRatio: 2.5,
+      children: [
+        _buildStatCard(
+          'Total Sent',
+          '${stats.totalSent}',
+          Icons.send_outlined,
+        ),
+        _buildStatCard(
+          'Total Joined',
+          '${stats.totalJoined}',
+          Icons.people_outline,
+        ),
+        _buildStatCard(
+          'Pending',
+          '${stats.pending}',
+          Icons.hourglass_empty,
+        ),
+        _buildStatCard(
+          'Rewards Earned',
+          '${stats.rewardsIssued}',
+          Icons.card_giftcard,
+        ),
+      ],
+    );
+  }
+
+  Widget _buildStatCard(String title, String value, IconData icon) {
+    return Card(
+      elevation: 2,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(12.0),
+        child: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: Theme.of(context).primaryColor.withOpacity(0.1),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(icon, color: Theme.of(context).primaryColor),
+            ),
+            const SizedBox(width: 12),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Text(
+                  value,
+                  style: const TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                Text(
+                  title,
+                  style: const TextStyle(
+                    fontSize: 12,
+                    color: Colors.grey,
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showInviteDialog() {
+    final emailController = TextEditingController();
+    final nameController = TextEditingController();
+    final messageController = TextEditingController();
+
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Invite a Friend'),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: emailController,
+                decoration: const InputDecoration(
+                  labelText: 'Email',
+                  hintText: 'Enter email address',
+                ),
+                keyboardType: TextInputType.emailAddress,
+              ),
+              const SizedBox(height: 16),
+              TextField(
+                controller: nameController,
+                decoration: const InputDecoration(
+                  labelText: 'Name (Optional)',
+                  hintText: 'Enter name',
                 ),
               ),
-            );
-          },
-        );
-      },
+              const SizedBox(height: 16),
+              TextField(
+                controller: messageController,
+                decoration: const InputDecoration(
+                  labelText: 'Message (Optional)',
+                  hintText: 'Add a personal message',
+                ),
+                maxLines: 3,
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('CANCEL'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              final email = emailController.text.trim();
+              if (email.isEmpty) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Please enter an email address')),
+                );
+                return;
+              }
+              Navigator.pop(context);
+              _sendInvite(
+                email,
+                name: nameController.text.trim().isNotEmpty ? nameController.text.trim() : null,
+                message: messageController.text.trim().isNotEmpty ? messageController.text.trim() : null,
+              );
+            },
+            child: const Text('SEND INVITE'),
+          ),
+        ],
+      ),
     );
+  }
+
+  Future<void> _sendInvite(String email, {String? name, String? message}) async {
+    try {
+      await _referralService.sendInvite(
+        email: email,
+        fullName: name,
+        message: message,
+      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Invite sent successfully!')),
+        );
+        _loadOverview();
+      }
+    } on BackendApiException catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to send invite: ${e.message}')),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Failed to send invite. Please try again.')),
+        );
+      }
+    }
+  }
+
+  Widget _buildReferralsList(List<ReferralEntry> referrals, String inviteLink) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // Referral List
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            const Text(
+              'Recent Referrals',
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            if (referrals.isNotEmpty)
+              TextButton(
+                onPressed: () {
+                  // TODO: Navigate to full referral list
+                },
+                child: const Text('View All'),
+              ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        if (referrals.isEmpty)
+          const Padding(
+            padding: EdgeInsets.symmetric(vertical: 24.0),
+            child: Center(
+              child: Text(
+                'No referrals yet. Invite your friends to get started!',
+                style: TextStyle(color: Colors.grey),
+                textAlign: TextAlign.center,
+              ),
+            ),
+          )
+        else
+          ListView.separated(
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            itemCount: referrals.length > 3 ? 3 : referrals.length,
+            separatorBuilder: (_, __) => const Divider(height: 1),
+            itemBuilder: (context, index) {
+              final referral = referrals[index];
+              return ListTile(
+                leading: CircleAvatar(
+                  backgroundColor: Theme.of(context).primaryColor.withOpacity(0.1),
+                  child: Icon(
+                    Icons.person_outline,
+                    color: Theme.of(context).primaryColor,
+                  ),
+                ),
+                title: Text(
+                  referral.fullName?.isNotEmpty == true
+                      ? referral.fullName!
+                      : referral.email,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                subtitle: Text(
+                  referral.status.toUpperCase(),
+                  style: TextStyle(
+                    color: _getStatusColor(referral.status),
+                    fontWeight: FontWeight.w500,
+                    fontSize: 12,
+                  ),
+                ),
+                trailing: Text(
+                  _formatDate(referral.createdAt),
+                  style: const TextStyle(
+                    color: Colors.grey,
+                    fontSize: 12,
+                  ),
+                ),
+              );
+            },
+          ),
+
+        const SizedBox(height: 24),
+
+        // Share Section
+        const Text(
+          'Share Your Link',
+          style: TextStyle(
+            fontSize: 18,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+        const SizedBox(height: 12),
+        Row(
+          children: [
+            Expanded(
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                decoration: BoxDecoration(
+                  border: Border.all(color: Colors.grey.shade300),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Text(
+                  inviteLink,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            ),
+            const SizedBox(width: 8),
+            IconButton(
+              onPressed: () {
+                _copyToClipboard(
+                  inviteLink,
+                  'Referral link copied to clipboard!',
+                );
+              },
+              icon: const Icon(Icons.copy),
+              tooltip: 'Copy Link',
+            ),
+            IconButton(
+              onPressed: () {
+                Share.share(
+                  'Join me on PocketLLM using my referral code: ${_overview?.inviteCode}\n$inviteLink',
+                  subject: 'Join me on PocketLLM!',
+                );
+              },
+              icon: const Icon(Icons.share),
+              tooltip: 'Share',
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  Color _getStatusColor(String status) {
+    switch (status.toLowerCase()) {
+      case 'accepted':
+      case 'joined':
+        return Colors.green;
+      case 'pending':
+        return Colors.orange;
+      case 'rejected':
+      case 'expired':
+        return Colors.red;
+      default:
+        return Colors.grey;
+    }
+  }
+
+  String _formatDate(DateTime date) {
+    return '${date.month}/${date.day}/${date.year}';
   }
 
   void _copyToClipboard(String value, String message) {

@@ -72,7 +72,7 @@ class _SettingsPageState extends State<SettingsPage> {
             icon: Icons.card_giftcard,
             iconColor: Colors.pinkAccent,
             title: 'Referral Center',
-            // subtitle: 'Share invites and track rewards',
+            subtitle: 'Share invites and track rewards',
             onTap: () {
               Navigator.push(
                 context,
@@ -217,7 +217,7 @@ class _SettingsPageState extends State<SettingsPage> {
     required IconData icon,
     required Color iconColor,
     required String title,
-    // required String subtitle,
+    String? subtitle,
     bool showActionButtons = false,
     VoidCallback? onTap,
     VoidCallback? onAddPressed,
@@ -232,6 +232,7 @@ class _SettingsPageState extends State<SettingsPage> {
       'Search Configuration',
       'API Keys',
       'App Information',
+      'Referral Center',
     ].contains(title);
 
     return Card(
@@ -299,14 +300,16 @@ class _SettingsPageState extends State<SettingsPage> {
                         color: colorScheme.onSurface,
                       ),
                     ),
-                    SizedBox(height: 4),
-                    // Text(
-                    //   subtitle,
-                    //   style: TextStyle(
-                    //     fontSize: 14,
-                    //     color: colorScheme.onSurface.withOpacity(0.7),
-                    //   ),
-                    // ),
+                    if (subtitle != null) ...[
+                      SizedBox(height: 4),
+                      Text(
+                        subtitle,
+                        style: TextStyle(
+                          fontSize: 14,
+                          color: colorScheme.onSurface.withOpacity(0.7),
+                        ),
+                      ),
+                    ],
                   ],
                 ),
               ),

@@ -158,7 +158,18 @@ class InviteReferralService:
                 pass
 
         record = await self._issue_new_code(user_id=user_id, max_uses=max_uses)
-        await self._database.update_profile(user_id, {"invite_code": record["code"]})
+        try:
+            await self._database.update_profile(user_id, {"invite_code": record["code"]})
+        except Exception as exc:
+            # Handle the case where the invite_code column might not exist in the schema cache
+            if self._looks_like_missing_invite_columns(exc):
+                logger.warning(
+                    "Profile invite_code update skipped for %s because Supabase is missing invite columns: %s",
+                    user_id,
+                    exc,
+                )
+            else:
+                raise
         return record
 
     async def send_invite(self, user_id: UUID, payload: ReferralSendRequest) -> ReferralSendResponse:
@@ -444,7 +455,7 @@ class InviteReferralService:
         if not message:
             message = str(exc)
         lowered = message.lower()
-        return "invite_status" in lowered and ("schema" in lowered or "column" in lowered)
+        return ("invite_code" in lowered or "invite_status" in lowered) and ("schema" in lowered or "column" in lowered)
 
 
 __all__ = ["InviteReferralService", "InviteApprovalContext"]
