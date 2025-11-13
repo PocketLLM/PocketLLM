@@ -428,15 +428,14 @@ class _ProfileSettingsPageState extends State<ProfileSettingsPage> {
                     children: [
                       Text(
                         label,
-                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
                               color: colors.onSurface.withOpacity(0.7),
-                              fontWeight: FontWeight.w400,
                             ),
                       ),
                       const SizedBox(height: 4),
                       Text(
                         value,
-                        style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                               color: textColor,
                               fontWeight: FontWeight.w500,
                             ),
