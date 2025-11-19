@@ -200,10 +200,12 @@ class ThemeService extends ChangeNotifier {
 
   ThemeData _buildThemeData(Brightness brightness, AppColorScheme appColorScheme) {
     final isDark = brightness == Brightness.dark;
-
+    
     return ThemeData(
       brightness: brightness,
       useMaterial3: true,
+      
+      // Color scheme
       colorScheme: ColorScheme(
         brightness: brightness,
         primary: appColorScheme.primary,
@@ -217,7 +219,11 @@ class ThemeService extends ChangeNotifier {
         background: appColorScheme.background,
         onBackground: appColorScheme.onBackground,
       ),
+      
+      // Scaffold
       scaffoldBackgroundColor: appColorScheme.background,
+      
+      // App bar
       appBarTheme: AppBarTheme(
         backgroundColor: appColorScheme.surface,
         foregroundColor: appColorScheme.onSurface,
@@ -232,7 +238,9 @@ class ThemeService extends ChangeNotifier {
           fontWeight: FontWeight.w500,
         ),
       ),
-      cardTheme: CardTheme(
+      
+      // Cards
+      cardTheme: CardThemeData(
         color: appColorScheme.cardBackground,
         shadowColor: appColorScheme.shadow,
         elevation: 2,
@@ -241,6 +249,8 @@ class ThemeService extends ChangeNotifier {
           side: BorderSide(color: appColorScheme.cardBorder, width: 0.5),
         ),
       ),
+      
+      // Input decoration
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
         fillColor: appColorScheme.inputBackground,
@@ -263,6 +273,8 @@ class ThemeService extends ChangeNotifier {
         hintStyle: TextStyle(color: appColorScheme.hint),
         labelStyle: TextStyle(color: appColorScheme.onSurface),
       ),
+      
+      // Elevated button
       elevatedButtonTheme: ElevatedButtonThemeData(
         style: ElevatedButton.styleFrom(
           backgroundColor: appColorScheme.primary,
@@ -274,6 +286,8 @@ class ThemeService extends ChangeNotifier {
           ),
         ),
       ),
+      
+      // Text button
       textButtonTheme: TextButtonThemeData(
         style: TextButton.styleFrom(
           foregroundColor: appColorScheme.primary,
@@ -282,6 +296,8 @@ class ThemeService extends ChangeNotifier {
           ),
         ),
       ),
+      
+      // Outlined button
       outlinedButtonTheme: OutlinedButtonThemeData(
         style: OutlinedButton.styleFrom(
           foregroundColor: appColorScheme.primary,
@@ -291,10 +307,14 @@ class ThemeService extends ChangeNotifier {
           ),
         ),
       ),
+      
+      // Divider
       dividerTheme: DividerThemeData(
         color: appColorScheme.divider,
         thickness: 0.5,
       ),
+      
+      // List tile
       listTileTheme: ListTileThemeData(
         tileColor: appColorScheme.surface,
         textColor: appColorScheme.onSurface,
@@ -303,7 +323,9 @@ class ThemeService extends ChangeNotifier {
           borderRadius: BorderRadius.circular(8),
         ),
       ),
-      dialogTheme: DialogTheme(
+      
+      // Dialog
+      dialogTheme: DialogThemeData(
         backgroundColor: appColorScheme.surface,
         surfaceTintColor: appColorScheme.primary,
         elevation: 8,
@@ -312,6 +334,8 @@ class ThemeService extends ChangeNotifier {
           borderRadius: BorderRadius.circular(16),
         ),
       ),
+      
+      // Bottom sheet
       bottomSheetTheme: BottomSheetThemeData(
         backgroundColor: appColorScheme.surface,
         surfaceTintColor: appColorScheme.primary,
@@ -321,6 +345,8 @@ class ThemeService extends ChangeNotifier {
           borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
         ),
       ),
+      
+      // Snack bar
       snackBarTheme: SnackBarThemeData(
         backgroundColor: isDark ? Colors.grey[800] : Colors.grey[900],
         contentTextStyle: const TextStyle(color: Colors.white),

@@ -9,6 +9,7 @@ import '../models/user_profile.dart';
 import '../services/auth_state.dart';
 import '../services/model_service.dart';
 import '../services/theme_service.dart';
+import '../models/theme_types.dart'; // Add this import for AppThemeMode and ColorSchemeType
 import 'auth/auth_flow_screen.dart';
 import 'settings/profile/profile_settings.dart';
 import 'api_keys_page.dart';
@@ -340,8 +341,6 @@ class _SettingsPageState extends State<SettingsPage> {
     );
   }
 
-  
-  
   String _getThemeModeLabel(AppThemeMode mode) {
     switch (mode) {
       case AppThemeMode.light:
@@ -352,6 +351,8 @@ class _SettingsPageState extends State<SettingsPage> {
         return 'System';
       case AppThemeMode.highContrast:
         return 'High Contrast';
+      default:
+        return 'Unknown';
     }
   }
   
@@ -363,6 +364,8 @@ class _SettingsPageState extends State<SettingsPage> {
         return 'High Contrast';
       case ColorSchemeType.custom:
         return 'Custom';
+      default:
+        return 'Unknown';
     }
   }
 

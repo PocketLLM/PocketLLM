@@ -85,6 +85,7 @@ class _AuthPageState extends State<AuthPage> {
   bool _isSurveyActive = false;
   bool _waitlistSuccess = false;
   String? _waitlistStatusMessage;
+  bool _isProcessingAuth = false; // Add this flag to track auth processing
 
   void _log(String message) {
     debugPrint('[AuthPage] $message');
@@ -652,16 +653,15 @@ class _AuthPageState extends State<AuthPage> {
             ),
           ),
         const SizedBox(height: 16),
-        CustomButton(
-          text: isSignUp ? 'Create Account' : 'Sign In',
-          onPressed: authState.isPerformingRequest ? () {} : () => _handleSubmit(context),
-          variant: ButtonVariant.filled,
-          size: ButtonSize.large,
-        ),
-        if (authState.isPerformingRequest)
-          const Padding(
-            padding: EdgeInsets.only(top: 16),
-            child: Center(child: CircularProgressIndicator()),
+        // Modified button to show spinner when processing
+        if (_isProcessingAuth)
+          const Center(child: CircularProgressIndicator())
+        else
+          CustomButton(
+            text: isSignUp ? 'Create Account' : 'Sign In',
+            onPressed: () => _handleSubmit(context),
+            variant: ButtonVariant.filled,
+            size: ButtonSize.large,
           ),
         const SizedBox(height: 16),
         _buildDivider(),
@@ -1043,11 +1043,19 @@ class _AuthPageState extends State<AuthPage> {
   }
 
   Future<void> _handleSubmit(BuildContext context) async {
+    // Prevent multiple clicks by checking if already processing
+    if (_isProcessingAuth) return;
+    
     final authState = context.read<AuthState>();
     final form = _formKey.currentState;
     if (form == null || !form.validate()) {
       return;
     }
+
+    // Set processing flag to true and update UI
+    setState(() {
+      _isProcessingAuth = true;
+    });
 
     final email = _emailController.text.trim();
     final password = _passwordController.text;
@@ -1103,6 +1111,7 @@ class _AuthPageState extends State<AuthPage> {
                     Navigator.pop(context);
                     setState(() {
                       _mode = _AuthMode.signIn;
+                      _isProcessingAuth = false; // Reset processing flag
                     });
                   },
                 ),
@@ -1128,6 +1137,13 @@ class _AuthPageState extends State<AuthPage> {
     } catch (e) {
       _log('Unexpected error surfaced to UI: $e');
       _showSnackBar(context, 'Something went wrong: $e', success: false);
+    } finally {
+      // Reset processing flag in finally block to ensure it's always reset
+      if (mounted) {
+        setState(() {
+          _isProcessingAuth = false;
+        });
+      }
     }
   }
 
