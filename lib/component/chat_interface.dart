@@ -991,8 +991,23 @@ class ChatInterfaceState extends State<ChatInterface> {
 
   Widget _buildMessageBubble(Message message) {
     final formattedTime = '${message.timestamp.hour}:${message.timestamp.minute.toString().padLeft(2, '0')}';
-    final colorScheme = ThemeService().colorScheme;
-    
+    final themeService = ThemeService();
+    final colorScheme = themeService.colorScheme;
+    final messageRadius = themeService.messageCornerRadius;
+    final tailRadius = const Radius.circular(8);
+    final userBorderRadius = BorderRadius.only(
+      topLeft: Radius.circular(messageRadius),
+      topRight: Radius.circular(messageRadius),
+      bottomLeft: tailRadius,
+      bottomRight: Radius.circular(messageRadius),
+    );
+    final assistantBorderRadius = BorderRadius.only(
+      topLeft: Radius.circular(messageRadius),
+      topRight: Radius.circular(messageRadius),
+      bottomLeft: Radius.circular(messageRadius),
+      bottomRight: tailRadius,
+    );
+
     return Column(
       crossAxisAlignment: message.isUser ? CrossAxisAlignment.end : CrossAxisAlignment.start,
       children: [
@@ -1025,14 +1040,14 @@ class ChatInterfaceState extends State<ChatInterface> {
                   margin: const EdgeInsets.symmetric(horizontal: 8),
                   padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                   decoration: BoxDecoration(
-                    color: message.isUser 
+                    color: message.isUser
                         ? colorScheme.userMessageBackground
                         : message.isThinking 
                             ? colorScheme.assistantMessageBackground.withOpacity(0.7)
                             : message.isError
                                 ? colorScheme.error.withOpacity(0.1)
                                 : colorScheme.assistantMessageBackground,
-                    borderRadius: BorderRadius.circular(16),
+                    borderRadius: message.isUser ? userBorderRadius : assistantBorderRadius,
                     border: !message.isUser && !message.isThinking
                         ? Border.all(color: colorScheme.messageBorder)
                         : null,

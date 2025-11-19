@@ -32,6 +32,7 @@ class UserProfile(BaseModel):
     invite_approved_at: datetime | None = None
     survey_completed: bool = False
     onboarding_responses: dict | None = None
+    preferences: dict | None = None
     deletion_status: str = "active"
     deletion_requested_at: datetime | None = None
     deletion_scheduled_for: datetime | None = None
@@ -50,6 +51,7 @@ class UserProfileUpdate(BaseModel):
     profession: Optional[str] = Field(default=None, max_length=120)
     heard_from: Optional[str] = Field(default=None, max_length=120)
     avatar_url: Optional[str] = None
+    preferences: dict | None = None
 
 
 class OnboardingDetails(BaseModel):

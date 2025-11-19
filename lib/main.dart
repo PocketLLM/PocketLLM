@@ -141,7 +141,7 @@ class MyApp extends StatelessWidget {
           title: 'PocketLLM',
           theme: themeService.lightTheme,
           darkTheme: themeService.darkTheme,
-          themeMode: ThemeMode.light,
+          themeMode: themeService.materialThemeMode,
           debugShowCheckedModeBanner: false,
           home: initializationError != null
               ? ErrorScreen(

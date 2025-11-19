@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 from datetime import UTC, datetime, timedelta
+from typing import Any, Dict
 from uuid import UUID
 
 from fastapi import HTTPException, status
@@ -45,6 +46,13 @@ class UsersService:
         update_columns = {k: v for k, v in payload.model_dump().items() if v is not None}
         if not update_columns:
             return await self.get_profile(user_id)
+
+        existing: Dict[str, Any] | None = None
+        if "preferences" in update_columns and isinstance(update_columns["preferences"], dict):
+            existing = await self._get_profile_record(user_id)
+            current = dict(existing.get("preferences") or {})
+            current.update(update_columns["preferences"])
+            update_columns["preferences"] = current
 
         logger.debug("Updating profile", extra={"user_id": str(user_id), "fields": list(update_columns.keys())})
         record = await self._database.update_profile(user_id, update_columns)

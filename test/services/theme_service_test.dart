@@ -1,11 +1,14 @@
-import 'package:flutter_test/flutter_test.dart';
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
+import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:pocketllm/models/theme_types.dart';
 import 'package:pocketllm/services/theme_service.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
-  
+
   group('ThemeService', () {
     late ThemeService themeService;
 
@@ -22,39 +25,48 @@ void main() {
       });
 
       test('should load saved preferences on initialization', () async {
-        SharedPreferences.setMockInitialValues({
-          'theme_mode': AppThemeMode.dark.index,
-          'color_scheme_type': ColorSchemeType.highContrast.index,
-          'follow_system_theme': false,
+        final storedPrefs = jsonEncode({
+          'themeMode': 'dark',
+          'followSystemTheme': false,
+          'colorSchemeType': 'highContrast',
+          'messageRadius': 20,
+          'primaryColor': const Color(0xFF7C70F2).value,
+          'secondaryColor': const Color(0xFFB4A7FF).value,
         });
+        SharedPreferences.setMockInitialValues({'appearance.preferences': storedPrefs});
 
         await themeService.init();
 
         expect(themeService.themeMode, AppThemeMode.dark);
         expect(themeService.colorSchemeType, ColorSchemeType.highContrast);
         expect(themeService.followSystemTheme, false);
+        expect(themeService.messageCornerRadius, 20);
       });
     });
 
     group('Theme Mode Management', () {
       test('should set theme mode and persist to preferences', () async {
         await themeService.init();
-        
+
         await themeService.setThemeMode(AppThemeMode.dark);
-        
+
         expect(themeService.themeMode, AppThemeMode.dark);
-        
+
         final prefs = await SharedPreferences.getInstance();
-        expect(prefs.getInt('theme_mode'), AppThemeMode.dark.index);
+        final stored = prefs.getString('appearance.preferences');
+        expect(stored, isNotNull);
+        final decoded = jsonDecode(stored!) as Map<String, dynamic>;
+        expect(decoded['themeMode'], 'dark');
+        expect(decoded['followSystemTheme'], false);
       });
 
       test('should toggle between light and dark modes', () async {
         await themeService.init();
         await themeService.setThemeMode(AppThemeMode.light);
-        
+
         await themeService.toggleDarkMode();
         expect(themeService.themeMode, AppThemeMode.dark);
-        
+
         await themeService.toggleDarkMode();
         expect(themeService.themeMode, AppThemeMode.light);
       });
@@ -63,13 +75,15 @@ void main() {
     group('Color Scheme Management', () {
       test('should set color scheme type and persist to preferences', () async {
         await themeService.init();
-        
+
         await themeService.setColorSchemeType(ColorSchemeType.highContrast);
-        
+
         expect(themeService.colorSchemeType, ColorSchemeType.highContrast);
-        
+
         final prefs = await SharedPreferences.getInstance();
-        expect(prefs.getInt('color_scheme_type'), ColorSchemeType.highContrast.index);
+        final stored = prefs.getString('appearance.preferences');
+        final decoded = jsonDecode(stored!) as Map<String, dynamic>;
+        expect(decoded['colorSchemeType'], 'highContrast');
       });
     });
 
@@ -77,7 +91,7 @@ void main() {
       test('should return light brightness for light theme mode', () async {
         await themeService.init();
         await themeService.setThemeMode(AppThemeMode.light);
-        
+
         expect(themeService.effectiveBrightness, Brightness.light);
         expect(themeService.isDarkMode, false);
       });
@@ -85,7 +99,7 @@ void main() {
       test('should return dark brightness for dark theme mode', () async {
         await themeService.init();
         await themeService.setThemeMode(AppThemeMode.dark);
-        
+
         expect(themeService.effectiveBrightness, Brightness.dark);
         expect(themeService.isDarkMode, true);
       });
@@ -94,9 +108,9 @@ void main() {
     group('Theme Data Generation', () {
       test('should generate valid theme data', () async {
         await themeService.init();
-        
+
         final themeData = themeService.currentTheme;
-        
+
         expect(themeData, isA<ThemeData>());
         expect(themeData.useMaterial3, true);
         expect(themeData.colorScheme, isNotNull);

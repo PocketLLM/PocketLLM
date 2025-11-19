@@ -3,7 +3,11 @@
 ///   backend.
 /// - Backend Migration: Keep but confirm fields align with backend DTOs to
 ///   prevent divergence.
+import 'dart:convert';
+
 import 'package:equatable/equatable.dart';
+
+import 'appearance_preferences.dart';
 
 class UserProfile extends Equatable {
   final String id;
@@ -26,6 +30,7 @@ class UserProfile extends Equatable {
   final bool surveyCompleted;
   final int? age;
   final Map<String, dynamic>? onboarding;
+  final Map<String, dynamic>? preferences;
   final DateTime? createdAt;
   final DateTime? updatedAt;
   final DateTime? deletionRequestedAt;
@@ -53,6 +58,7 @@ class UserProfile extends Equatable {
     this.surveyCompleted = false,
     this.age,
     this.onboarding,
+    this.preferences,
     this.createdAt,
     this.updatedAt,
     this.deletionRequestedAt,
@@ -87,6 +93,7 @@ class UserProfile extends Equatable {
     bool? surveyCompleted,
     int? age,
     Map<String, dynamic>? onboarding,
+    Map<String, dynamic>? preferences,
     DateTime? createdAt,
     DateTime? updatedAt,
     DateTime? deletionRequestedAt,
@@ -114,6 +121,7 @@ class UserProfile extends Equatable {
       surveyCompleted: surveyCompleted ?? this.surveyCompleted,
       age: age ?? this.age,
       onboarding: onboarding ?? this.onboarding,
+      preferences: preferences ?? this.preferences,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
       deletionRequestedAt: deletionRequestedAt ?? this.deletionRequestedAt,
@@ -144,6 +152,7 @@ class UserProfile extends Equatable {
       'survey_completed': surveyCompleted,
       'age': age,
       'onboarding': onboarding,
+      'preferences': preferences != null ? Map<String, dynamic>.from(preferences!) : null,
       'created_at': createdAt?.toIso8601String(),
       'updated_at': updatedAt?.toIso8601String(),
       'deletion_requested_at': deletionRequestedAt?.toIso8601String(),
@@ -186,12 +195,21 @@ class UserProfile extends Equatable {
       surveyCompleted: _parseBool(map['survey_completed']),
       age: _parseInt(map['age']),
       onboarding: _parseOnboarding(map['onboarding']),
+      preferences: _parseJsonMap(map['preferences']),
       createdAt: parseDate(map['created_at']),
       updatedAt: parseDate(map['updated_at']),
       deletionRequestedAt: parseDate(map['deletion_requested_at']),
       deletionScheduledFor: parseDate(map['deletion_scheduled_for']),
       deletionStatus: map['deletion_status'] as String?,
     );
+  }
+
+  AppearancePreferences? get appearancePreferences {
+    final appearance = preferences?['appearance'];
+    if (appearance is Map<String, dynamic>) {
+      return AppearancePreferences.fromMap(Map<String, dynamic>.from(appearance));
+    }
+    return null;
   }
 
   static int? _parseInt(dynamic value) {
@@ -205,8 +223,22 @@ class UserProfile extends Equatable {
   }
 
   static Map<String, dynamic>? _parseOnboarding(dynamic value) {
+    return _parseJsonMap(value);
+  }
+
+  static Map<String, dynamic>? _parseJsonMap(dynamic value) {
     if (value is Map<String, dynamic>) {
       return Map<String, dynamic>.from(value);
+    }
+    if (value is String && value.isNotEmpty) {
+      try {
+        final decoded = jsonDecode(value);
+        if (decoded is Map<String, dynamic>) {
+          return Map<String, dynamic>.from(decoded);
+        }
+      } catch (_) {
+        return null;
+      }
     }
     return null;
   }
@@ -243,6 +275,7 @@ class UserProfile extends Equatable {
         surveyCompleted,
         age,
         onboarding,
+        preferences,
         createdAt,
         updatedAt,
         deletionRequestedAt,

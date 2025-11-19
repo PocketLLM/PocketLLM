@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import secrets
 import string
 import logging
@@ -152,25 +153,27 @@ class InviteReferralService:
 
         profile = await self._database.get_profile(user_id)
         existing_code = (profile or {}).get("invite_code")
+        record: Dict[str, Any] | None = None
+
         if existing_code:
             try:
-                return await self.validate_invite_code(existing_code, require_active=False)
+                record = await self.validate_invite_code(existing_code, require_active=False)
             except HTTPException:
-                pass
-
-        record = await self._issue_new_code(user_id=user_id, max_uses=max_uses)
-        try:
-            await self._database.update_profile(user_id, {"invite_code": record["code"]})
-        except Exception as exc:
-            # Handle the case where the invite_code column might not exist in the schema cache
-            if self._looks_like_missing_invite_columns(exc):
                 logger.warning(
-                    "Profile invite_code update skipped for %s because Supabase is missing invite columns: %s",
+                    "Stored invite code %s for user %s is invalid; searching issued codes",
+                    existing_code,
                     user_id,
-                    exc,
                 )
-            else:
-                raise
+
+        if record is None:
+            record = await self._find_existing_personal_code(user_id)
+
+        if record is None:
+            record = await self._issue_new_code(user_id=user_id, max_uses=max_uses)
+
+        if (profile or {}).get("invite_code") != record["code"]:
+            await self._persist_profile_invite_code(user_id, record["code"])
+
         return record
 
     async def send_invite(self, user_id: UUID, payload: ReferralSendRequest) -> ReferralSendResponse:
@@ -389,6 +392,54 @@ class InviteReferralService:
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to generate a unique invite code",
         ) from last_error
+
+    async def _find_existing_personal_code(self, user_id: UUID) -> Dict[str, Any] | None:
+        """Return an active personal code previously issued to ``user_id``."""
+
+        records = await self._database.select(
+            "invite_codes",
+            filters={"issued_by": str(user_id)},
+        )
+        if not records:
+            return None
+
+        def _parse_metadata(row: Dict[str, Any]) -> Dict[str, Any]:
+            raw_metadata = row.get("metadata") or {}
+            if isinstance(raw_metadata, str):
+                try:
+                    return json.loads(raw_metadata)
+                except ValueError:
+                    return {}
+            return raw_metadata  # type: ignore[return-value]
+
+        def _sort_key(row: Dict[str, Any]) -> datetime:
+            created_at = self._parse_datetime(row.get("created_at"))
+            return created_at or datetime.min.replace(tzinfo=UTC)
+
+        personal_records = [
+            row
+            for row in records
+            if (_parse_metadata(row) or {}).get("type") == "personal" and self._is_code_active(row)
+        ]
+
+        if not personal_records:
+            return None
+
+        ordered = sorted(personal_records, key=_sort_key)
+        return ordered[0]
+
+    async def _persist_profile_invite_code(self, user_id: UUID, code: str) -> None:
+        try:
+            await self._database.update_profile(user_id, {"invite_code": code})
+        except Exception as exc:
+            if self._looks_like_missing_invite_columns(exc):
+                logger.warning(
+                    "Profile invite_code update skipped for %s because Supabase is missing invite columns: %s",
+                    user_id,
+                    exc,
+                )
+                return
+            raise
 
     def _map_invite_info(self, record: Dict[str, Any]) -> InviteCodeInfo:
         uses_count = int(record.get("uses_count") or 0)

@@ -6,6 +6,7 @@
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 
 import '../component/appbar/about.dart';
 import '../component/appbar/chat_history.dart';
@@ -14,7 +15,9 @@ import '../pages/config_page.dart';
 import '../pages/docs_page.dart';
 import '../pages/library_page.dart';
 import '../pages/settings_page.dart';
+import '../models/theme_types.dart';
 import '../services/chat_history_service.dart';
+import '../services/auth_state.dart';
 import '../services/theme_service.dart';
 import '../theme/app_colors.dart';
 
@@ -101,16 +104,6 @@ class _SidebarState extends State<Sidebar> {
 
   void _dismissKeyboard() {
     FocusScope.of(context).unfocus();
-  }
-
-  void _showComingSoonMessage() {
-    ScaffoldMessenger.of(context)
-      ..hideCurrentSnackBar()
-      ..showSnackBar(
-        const SnackBar(
-          content: Text('Dark mode will be available in a future update.'),
-        ),
-      );
   }
 
   void _closeDrawer() {
@@ -359,7 +352,7 @@ class _SidebarState extends State<Sidebar> {
             selected: !isDark,
             colorScheme: colorScheme,
             onTap: () {
-              themeService.setThemeMode(AppThemeMode.light);
+              _handleThemeSelection(AppThemeMode.light);
             },
           ),
           const SizedBox(width: 8),
@@ -368,11 +361,37 @@ class _SidebarState extends State<Sidebar> {
             icon: Icons.dark_mode,
             selected: isDark,
             colorScheme: colorScheme,
-            onTap: _showComingSoonMessage,
+            onTap: () {
+              _handleThemeSelection(AppThemeMode.dark);
+            },
           ),
         ],
       ),
     );
+  }
+
+  Future<void> _handleThemeSelection(AppThemeMode mode) async {
+    final authState = context.read<AuthState>();
+    final themeService = ThemeService();
+    final nextPreferences = themeService.preferences.copyWith(
+      themeMode: mode,
+      followSystemTheme: mode == AppThemeMode.system,
+    );
+
+    try {
+      if (authState.isAuthenticated) {
+        await authState.saveAppearancePreferences(nextPreferences);
+      } else {
+        await themeService.applyPreferences(nextPreferences);
+      }
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Failed to update appearance: $error'),
+        ),
+      );
+    }
   }
 
   Widget _buildSearchField(AppColorScheme colorScheme) {

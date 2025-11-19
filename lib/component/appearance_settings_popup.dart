@@ -1,6 +1,11 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_colorpicker/flutter_colorpicker.dart';
+import 'package:provider/provider.dart';
+
+import '../models/appearance_preferences.dart';
+import '../models/theme_types.dart';
+import '../services/auth_state.dart';
 import '../services/theme_service.dart';
+import '../theme/app_colors.dart';
 
 class AppearanceSettingsPopup extends StatefulWidget {
   final ThemeService themeService;
@@ -15,252 +20,226 @@ class AppearanceSettingsPopup extends StatefulWidget {
 }
 
 class _AppearanceSettingsPopupState extends State<AppearanceSettingsPopup> {
-  // Theme mode options
+  static const int _minRadius = 4;
+  static const int _maxRadius = 40;
+
   late AppThemeMode _selectedThemeMode;
-  
-  // Radius options
-  static const int smallRadius = 6;
-  static const int mediumRadius = 16;
-  static const int largeRadius = 28;
-  int _selectedRadius = mediumRadius;
-  
-  // Color options - first two rows are lavender family
-  final List<Color> _primaryColors = [
-    const Color(0xFF4D43C6), // Deep lavender
-    const Color(0xFF6B62E8), // Lavender
-    const Color(0xFF7C70F2), // Primary lavender
-    const Color(0xFFA89BFF), // Light lavender
-    const Color(0xFFD8D3FF), // Very light lavender
-    const Color(0xFFF5F3FF), // Almost white
-    const Color(0xFF6750A4), // Purple
-    const Color(0xFF9A82DB), // Light purple
-    const Color(0xFFB69DF8), // Very light purple
-    const Color(0xFF00BFA6), // Teal
-    const Color(0xFF00A2FF), // Blue
-    const Color(0xFFFFC94A), // Yellow
+  late int _selectedRadius;
+  late Color _selectedPrimaryColor;
+  late Color _selectedSecondaryColor;
+  bool _isSaving = false;
+
+  final List<Color> _primaryColors = const [
+    Color(0xFF4D43C6),
+    Color(0xFF6B62E8),
+    Color(0xFF7C70F2),
+    Color(0xFFA89BFF),
+    Color(0xFFD8D3FF),
+    Color(0xFFF5F3FF),
+    Color(0xFF6750A4),
+    Color(0xFF9A82DB),
+    Color(0xFFB69DF8),
+    Color(0xFF00BFA6),
+    Color(0xFF00A2FF),
+    Color(0xFFFFC94A),
   ];
-  
-  final List<Color> _secondaryColors = [
-    const Color(0xFF4D43C6), // Deep lavender
-    const Color(0xFF6B62E8), // Lavender
-    const Color(0xFF7C70F2), // Primary lavender
-    const Color(0xFFA89BFF), // Light lavender
-    const Color(0xFFD8D3FF), // Very light lavender
-    const Color(0xFFF5F3FF), // Almost white
-    const Color(0xFF6750A4), // Purple
-    const Color(0xFF9A82DB), // Light purple
-    const Color(0xFFB69DF8), // Very light purple
-    const Color(0xFF00BFA6), // Teal
-    const Color(0xFF00A2FF), // Blue
-    const Color(0xFFFFC94A), // Yellow
+
+  final List<Color> _secondaryColors = const [
+    Color(0xFF4D43C6),
+    Color(0xFF6B62E8),
+    Color(0xFF7C70F2),
+    Color(0xFFA89BFF),
+    Color(0xFFD8D3FF),
+    Color(0xFFF5F3FF),
+    Color(0xFF6750A4),
+    Color(0xFF9A82DB),
+    Color(0xFFB69DF8),
+    Color(0xFF00BFA6),
+    Color(0xFF00A2FF),
+    Color(0xFFFFC94A),
   ];
-  
-  Color _selectedPrimaryColor = const Color(0xFF7C70F2);
-  Color _selectedSecondaryColor = const Color(0xFFB4A7FF);
-  
+
   @override
   void initState() {
     super.initState();
-    // Initialize with the current theme mode
-    _selectedThemeMode = widget.themeService.themeMode;
-    _selectedRadius = mediumRadius;
+    final prefs = widget.themeService.preferences;
+    _selectedThemeMode = prefs.followSystemTheme ? AppThemeMode.system : prefs.themeMode;
+    _selectedRadius = prefs.messageRadius.clamp(_minRadius, _maxRadius);
+    _selectedPrimaryColor = prefs.primaryColor;
+    _selectedSecondaryColor = prefs.secondaryColor;
   }
 
   @override
   Widget build(BuildContext context) {
-    _selectedThemeMode = widget.themeService.themeMode;
-    
+    final colorScheme = widget.themeService.colorScheme;
+
     return Container(
       width: 360,
       decoration: BoxDecoration(
-        color: widget.themeService.isDarkMode ? const Color(0xFF1B1726) : Colors.white,
+        color: colorScheme.surface,
         borderRadius: const BorderRadius.only(
           topLeft: Radius.circular(20),
           topRight: Radius.circular(20),
         ),
+        border: Border.all(color: colorScheme.cardBorder.withOpacity(0.4)),
         boxShadow: [
           BoxShadow(
-            color: const Color(0xFF111015).withOpacity(0.18),
+            color: colorScheme.shadow.withOpacity(0.25),
             offset: const Offset(0, 12),
             blurRadius: 24,
           ),
         ],
       ),
-      child: SingleChildScrollView(
-        child: Padding(
-          padding: const EdgeInsets.all(16.0),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // Header
-              const Text(
-                'Appearance',
-                style: TextStyle(
-                  fontSize: 20,
-                  fontWeight: FontWeight.w600,
+      child: SafeArea(
+        top: false,
+        child: SingleChildScrollView(
+          child: Padding(
+            padding: const EdgeInsets.all(20.0),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Appearance',
+                  style: TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.w600,
+                    color: colorScheme.onSurface,
+                  ),
                 ),
-              ),
-              const SizedBox(height: 4),
-              Text(
-                'Lavender accent. Live preview below.',
-                style: TextStyle(
-                  fontSize: 12,
-                  color: (widget.themeService.isDarkMode ? Colors.white : Colors.black).withOpacity(0.7),
+                const SizedBox(height: 4),
+                Text(
+                  'Lavender accents with synced preferences.',
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: colorScheme.onSurface.withOpacity(0.7),
+                  ),
                 ),
-              ),
-              const SizedBox(height: 12),
-              
-              // Theme Segmented Control
-              _buildThemeSegmentedControl(widget.themeService.isDarkMode),
-              const SizedBox(height: 12),
-              
-              // Radius Slider
-              _buildRadiusSlider(),
-              const SizedBox(height: 12),
-              
-              // Primary Color Swatches
-              _buildColorSwatchSection(
-                title: 'Primary (outgoing) color',
-                colors: _primaryColors,
-                selectedColor: _selectedPrimaryColor,
-                onColorSelected: (color) => setState(() => _selectedPrimaryColor = color),
-                isDarkMode: widget.themeService.isDarkMode,
-              ),
-              const SizedBox(height: 12),
-              
-              // Secondary Color Swatches
-              _buildColorSwatchSection(
-                title: 'Secondary (incoming) color',
-                colors: _secondaryColors,
-                selectedColor: _selectedSecondaryColor,
-                onColorSelected: (color) => setState(() => _selectedSecondaryColor = color),
-                isDarkMode: widget.themeService.isDarkMode,
-              ),
-              const SizedBox(height: 12),
-              
-              // Live Preview Card
-              _buildLivePreviewCard(widget.themeService.isDarkMode),
-              const SizedBox(height: 12),
-              
-              // Actions Row
-              _buildActionsRow(widget.themeService),
-            ],
+                const SizedBox(height: 16),
+                _buildThemeSegmentedControl(colorScheme),
+                const SizedBox(height: 20),
+                _buildRadiusSlider(colorScheme),
+                const SizedBox(height: 20),
+                _buildColorSwatchSection(
+                  title: 'Primary (outgoing) color',
+                  colors: _primaryColors,
+                  selectedColor: _selectedPrimaryColor,
+                  onColorSelected: (color) => setState(() => _selectedPrimaryColor = color),
+                  colorScheme: colorScheme,
+                ),
+                const SizedBox(height: 16),
+                _buildColorSwatchSection(
+                  title: 'Secondary (incoming) color',
+                  colors: _secondaryColors,
+                  selectedColor: _selectedSecondaryColor,
+                  onColorSelected: (color) => setState(() => _selectedSecondaryColor = color),
+                  colorScheme: colorScheme,
+                ),
+                const SizedBox(height: 20),
+                _buildLivePreviewCard(colorScheme),
+                const SizedBox(height: 24),
+                _buildActionsRow(colorScheme),
+              ],
+            ),
           ),
         ),
       ),
     );
   }
 
-  Widget _buildThemeSegmentedControl(bool isDarkMode) {
-    final options = ['System', 'Light', 'Dark'];
-    final selectedIndex = _getThemeModeIndex(_selectedThemeMode);
-    
+  Widget _buildThemeSegmentedControl(AppColorScheme colorScheme) {
+    final options = [
+      {'label': 'System', 'mode': AppThemeMode.system, 'icon': Icons.brightness_auto},
+      {'label': 'Light', 'mode': AppThemeMode.light, 'icon': Icons.light_mode},
+      {'label': 'Dark', 'mode': AppThemeMode.dark, 'icon': Icons.dark_mode},
+    ];
+
     return Container(
-      height: 36,
+      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
       decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(
-          color: const Color(0xFFE6E0FF),
-        ),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: colorScheme.cardBorder.withOpacity(0.8)),
       ),
       child: Row(
-        children: List.generate(options.length, (index) {
-          final isSelected = index == selectedIndex;
+        children: options.map((option) {
+          final mode = option['mode'] as AppThemeMode;
+          final isSelected = _selectedThemeMode == mode;
+          final label = option['label'] as String;
+          final icon = option['icon'] as IconData;
           return Expanded(
             child: GestureDetector(
-              onTap: () => setState(() => _selectedThemeMode = _getThemeModeFromIndex(index)),
-              child: Container(
+              onTap: () => setState(() => _selectedThemeMode = mode),
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 200),
+                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
                 decoration: BoxDecoration(
-                  color: isSelected ? const Color(0xFFE6E0FF) : Colors.transparent,
-                  borderRadius: BorderRadius.circular(12),
-                  border: isSelected 
-                    ? Border.all(color: const Color(0xFFB9A7FF)) 
-                    : Border.all(color: Colors.transparent),
-                ),
-                child: Center(
-                  child: Text(
-                    options[index],
-                    style: TextStyle(
-                      fontSize: 14,
-                      fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
-                      color: isSelected 
-                        ? const Color(0xFF4D43C6) 
-                        : (isDarkMode ? const Color(0xFFF5F3FF) : const Color(0xFF111111)),
-                    ),
+                  color: isSelected ? colorScheme.primary.withOpacity(0.12) : Colors.transparent,
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(
+                    color: isSelected ? colorScheme.primary : Colors.transparent,
                   ),
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(
+                      icon,
+                      size: 16,
+                      color: isSelected ? colorScheme.primary : colorScheme.onSurface.withOpacity(0.7),
+                    ),
+                    const SizedBox(width: 6),
+                    Text(
+                      label,
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: isSelected ? FontWeight.w600 : FontWeight.w500,
+                        color: isSelected ? colorScheme.primary : colorScheme.onSurface,
+                      ),
+                    ),
+                  ],
                 ),
               ),
             ),
           );
-        }),
+        }).toList(),
       ),
     );
   }
 
-  int _getThemeModeIndex(AppThemeMode mode) {
-    switch (mode) {
-      case AppThemeMode.system:
-        return 0;
-      case AppThemeMode.light:
-        return 1;
-      case AppThemeMode.dark:
-      case AppThemeMode.highContrast:
-        return 2;
-    }
-  }
-
-  AppThemeMode _getThemeModeFromIndex(int index) {
-    switch (index) {
-      case 0:
-        return AppThemeMode.system;
-      case 1:
-        return AppThemeMode.light;
-      case 2:
-        return AppThemeMode.dark;
-      default:
-        return AppThemeMode.light;
-    }
-  }
-
-  Widget _buildRadiusSlider() {
+  Widget _buildRadiusSlider(AppColorScheme colorScheme) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text(
+        Text(
           'Chat bubble corners',
           style: TextStyle(
             fontSize: 14,
-            fontWeight: FontWeight.normal,
+            fontWeight: FontWeight.w500,
+            color: colorScheme.onSurface,
           ),
         ),
-        const SizedBox(height: 8),
+        const SizedBox(height: 6),
         SliderTheme(
           data: SliderTheme.of(context).copyWith(
-            activeTrackColor: const Color(0xFF7C70F2),
-            inactiveTrackColor: const Color(0xFFE6E0FF),
-            thumbColor: const Color(0xFF7C70F2),
-            thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 8.0),
-            overlayShape: const RoundSliderOverlayShape(overlayRadius: 16.0),
-            tickMarkShape: const RoundSliderTickMarkShape(tickMarkRadius: 2.0),
-            activeTickMarkColor: const Color(0xFF7C70F2),
-            inactiveTickMarkColor: const Color(0xFFE6E0FF),
+            activeTrackColor: colorScheme.primary,
+            inactiveTrackColor: colorScheme.cardBorder.withOpacity(0.4),
+            thumbColor: colorScheme.primary,
+            overlayColor: colorScheme.primary.withOpacity(0.15),
           ),
           child: Slider(
             value: _selectedRadius.toDouble(),
-            min: 0,
-            max: 28,
-            divisions: 28,
+            min: _minRadius.toDouble(),
+            max: _maxRadius.toDouble(),
+            divisions: _maxRadius - _minRadius,
             label: '$_selectedRadius px',
-            onChanged: (value) => setState(() => _selectedRadius = value.toInt()),
+            onChanged: (value) => setState(() => _selectedRadius = value.round()),
           ),
         ),
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: const [
-            Text('0 px'),
-            Text('16 px'),
-            Text('28 px'),
+          children: [
+            Text('Rounded', style: TextStyle(fontSize: 12, color: colorScheme.onSurface.withOpacity(0.7))),
+            Text('Pill', style: TextStyle(fontSize: 12, color: colorScheme.onSurface.withOpacity(0.7))),
           ],
         ),
       ],
@@ -271,8 +250,8 @@ class _AppearanceSettingsPopupState extends State<AppearanceSettingsPopup> {
     required String title,
     required List<Color> colors,
     required Color selectedColor,
-    required Function(Color) onColorSelected,
-    required bool isDarkMode,
+    required ValueChanged<Color> onColorSelected,
+    required AppColorScheme colorScheme,
   }) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -282,103 +261,100 @@ class _AppearanceSettingsPopupState extends State<AppearanceSettingsPopup> {
           style: TextStyle(
             fontSize: 14,
             fontWeight: FontWeight.w500,
-            color: isDarkMode ? Colors.white : Colors.black,
+            color: colorScheme.onSurface,
           ),
         ),
         const SizedBox(height: 8),
-        SizedBox(
-          height: 48,
-          child: ListView.builder(
-            scrollDirection: Axis.horizontal,
-            itemCount: colors.length,
-            itemBuilder: (context, index) {
-              final color = colors[index];
-              final isSelected = color == selectedColor;
-              return Padding(
-                padding: const EdgeInsets.only(right: 12),
-                child: GestureDetector(
-                  onTap: () => onColorSelected(color),
-                  child: Container(
-                    width: 48,
-                    height: 48,
-                    decoration: BoxDecoration(
-                      color: color,
-                      shape: BoxShape.circle,
-                      border: isSelected
-                          ? Border.all(
-                              color: isDarkMode ? Colors.white : Colors.black,
-                              width: 2,
-                            )
-                          : null,
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.black.withOpacity(0.1),
-                          blurRadius: 4,
-                          offset: const Offset(0, 2),
-                        ),
-                      ],
-                    ),
+        Wrap(
+          spacing: 10,
+          runSpacing: 10,
+          children: colors.map((color) {
+            final isSelected = color.value == selectedColor.value;
+            return GestureDetector(
+              onTap: () => onColorSelected(color),
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 180),
+                width: 36,
+                height: 36,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  border: Border.all(
+                    color: isSelected ? colorScheme.primary : colorScheme.cardBorder.withOpacity(0.6),
+                    width: isSelected ? 3 : 1,
                   ),
+                  boxShadow: [
+                    BoxShadow(
+                      color: colorScheme.shadow.withOpacity(0.15),
+                      blurRadius: 6,
+                      offset: const Offset(0, 2),
+                    ),
+                  ],
                 ),
-              );
-            },
-          ),
+                child: CircleAvatar(
+                  backgroundColor: color,
+                  child: isSelected
+                      ? Icon(Icons.check, color: _getTextColor(color), size: 16)
+                      : null,
+                ),
+              ),
+            );
+          }).toList(),
         ),
       ],
     );
   }
 
-  Widget _buildLivePreviewCard(bool isDarkMode) {
+  Widget _buildLivePreviewCard(AppColorScheme colorScheme) {
+    final borderRadiusValue = _selectedRadius.toDouble();
+    final incomingRadius = BorderRadius.only(
+      topLeft: Radius.circular(borderRadiusValue),
+      topRight: Radius.circular(borderRadiusValue),
+      bottomLeft: Radius.circular(borderRadiusValue),
+      bottomRight: const Radius.circular(6),
+    );
+    final outgoingRadius = BorderRadius.only(
+      topLeft: Radius.circular(borderRadiusValue),
+      topRight: Radius.circular(borderRadiusValue),
+      bottomLeft: const Radius.circular(6),
+      bottomRight: Radius.circular(borderRadiusValue),
+    );
+
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.all(12),
+      padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: isDarkMode ? const Color(0xFF111015) : const Color(0xFFF7F6FB),
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(
-          color: const Color(0xFFE6E0FF).withOpacity(isDarkMode ? 0.2 : 1.0),
-        ),
+        color: colorScheme.background,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: colorScheme.cardBorder.withOpacity(0.5)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Incoming message (left-aligned)
           Container(
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
               color: _selectedSecondaryColor,
-              borderRadius: BorderRadius.only(
-                topLeft: Radius.circular(_selectedRadius.toDouble()),
-                topRight: Radius.circular(_selectedRadius.toDouble()),
-                bottomLeft: Radius.circular(_selectedRadius.toDouble()),
-                bottomRight: const Radius.circular(4),
-              ),
+              borderRadius: incomingRadius,
             ),
             child: Text(
-              'This is an incoming message.',
+              'Incoming messages follow this palette.',
               style: TextStyle(
                 color: _getTextColor(_selectedSecondaryColor),
                 fontSize: 14,
               ),
             ),
           ),
-          const SizedBox(height: 8),
-          // Outgoing message (right-aligned)
+          const SizedBox(height: 10),
           Align(
             alignment: Alignment.centerRight,
             child: Container(
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
                 color: _selectedPrimaryColor,
-                borderRadius: BorderRadius.only(
-                  topLeft: Radius.circular(_selectedRadius.toDouble()),
-                  topRight: Radius.circular(_selectedRadius.toDouble()),
-                  bottomLeft: const Radius.circular(4),
-                  bottomRight: Radius.circular(_selectedRadius.toDouble()),
-                ),
+                borderRadius: outgoingRadius,
               ),
               child: Text(
-                'This is your reply. Lavender stays tasteful.',
+                'Outgoing replies keep lavender energy.',
                 style: TextStyle(
                   color: _getTextColor(_selectedPrimaryColor),
                   fontSize: 14,
@@ -392,52 +368,94 @@ class _AppearanceSettingsPopupState extends State<AppearanceSettingsPopup> {
   }
 
   Color _getTextColor(Color backgroundColor) {
-    // Calculate YIQ value to determine if text should be black or white
-    final yiq = (backgroundColor.red * 299 + 
-                 backgroundColor.green * 587 + 
-                 backgroundColor.blue * 114) / 1000;
+    final yiq = (backgroundColor.red * 299 + backgroundColor.green * 587 + backgroundColor.blue * 114) / 1000;
     return yiq >= 160 ? Colors.black : Colors.white;
   }
 
-  Widget _buildActionsRow(ThemeService themeService) {
+  Widget _buildActionsRow(AppColorScheme colorScheme) {
     return Row(
       children: [
         TextButton(
-          onPressed: () {
-            // Reset to defaults
-            setState(() {
-              _selectedThemeMode = AppThemeMode.light;
-              _selectedRadius = mediumRadius;
-              _selectedPrimaryColor = const Color(0xFF7C70F2);
-              _selectedSecondaryColor = const Color(0xFFB4A7FF);
-            });
-          },
+          onPressed: _isSaving ? null : _resetToDefaults,
           child: const Text('Reset'),
         ),
         const Spacer(),
         TextButton(
-          onPressed: () => Navigator.pop(context),
+          onPressed: _isSaving ? null : () => Navigator.of(context).pop(),
           child: const Text('Cancel'),
         ),
         const SizedBox(width: 8),
         ElevatedButton(
-          onPressed: () async {
-            // Apply changes
-            await themeService.setThemeMode(_selectedThemeMode);
-            if (!mounted) return;
-            Navigator.pop(context);
-          },
+          onPressed: _isSaving ? null : _saveAppearanceSettings,
           style: ElevatedButton.styleFrom(
-            backgroundColor: const Color(0xFF7C70F2),
-            foregroundColor: Colors.white,
-            padding: const EdgeInsets.symmetric(horizontal: 16),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(10),
-            ),
+            backgroundColor: colorScheme.primary,
+            foregroundColor: colorScheme.onPrimary,
+            padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
           ),
-          child: const Text('Save'),
+          child: _isSaving
+              ? SizedBox(
+                  height: 18,
+                  width: 18,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    valueColor: AlwaysStoppedAnimation<Color>(colorScheme.onPrimary),
+                  ),
+                )
+              : const Text('Save'),
         ),
       ],
     );
+  }
+
+  void _resetToDefaults() {
+    const defaults = AppearancePreferences();
+    setState(() {
+      _selectedThemeMode = defaults.themeMode;
+      _selectedRadius = defaults.messageRadius;
+      _selectedPrimaryColor = defaults.primaryColor;
+      _selectedSecondaryColor = defaults.secondaryColor;
+    });
+  }
+
+  AppearancePreferences _buildSelectedPreferences() {
+    return widget.themeService.preferences.copyWith(
+      themeMode: _selectedThemeMode,
+      followSystemTheme: _selectedThemeMode == AppThemeMode.system,
+      messageRadius: _selectedRadius,
+      primaryColor: _selectedPrimaryColor,
+      secondaryColor: _selectedSecondaryColor,
+    );
+  }
+
+  Future<void> _saveAppearanceSettings() async {
+    if (_isSaving) return;
+    setState(() => _isSaving = true);
+
+    final authState = context.read<AuthState>();
+    final newPreferences = _buildSelectedPreferences();
+
+    try {
+      if (authState.isAuthenticated) {
+        await authState.saveAppearancePreferences(newPreferences);
+      } else {
+        await widget.themeService.applyPreferences(newPreferences);
+      }
+
+      if (mounted) {
+        Navigator.of(context).pop();
+      }
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Failed to save appearance: $error'),
+        ),
+      );
+    } finally {
+      if (mounted) {
+        setState(() => _isSaving = false);
+      }
+    }
   }
 }
