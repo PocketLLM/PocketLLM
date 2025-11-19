@@ -13,8 +13,10 @@ import 'package:http/http.dart' as http;
 import 'package:http_parser/http_parser.dart';
 import 'package:path/path.dart' as p;
 
+import '../models/appearance_preferences.dart';
 import '../models/user_profile.dart';
 import 'backend_api_service.dart';
+import 'theme_service.dart';
 
 class AuthException implements Exception {
   final String message;
@@ -104,6 +106,7 @@ class AuthStateNotifier extends ChangeNotifier {
     'heard_from',
     'age',
     'onboarding',
+    'preferences',
   };
 
   final FlutterSecureStorage _secureStorage;
@@ -195,6 +198,9 @@ class AuthStateNotifier extends ChangeNotifier {
       if (decoded is Map<String, dynamic>) {
         _profile = UserProfile.fromMap(decoded);
         _applyDeletionScheduleToProfile();
+        if (_profile != null) {
+          await _applyThemePreferencesFromProfile(_profile!);
+        }
       }
     } catch (error, stackTrace) {
       debugPrint('AuthState: Failed to restore cached profile: $error');
@@ -210,6 +216,22 @@ class AuthStateNotifier extends ChangeNotifier {
       );
     } catch (error, stackTrace) {
       debugPrint('AuthState: Failed to cache profile: $error');
+      debugPrint(stackTrace.toString());
+    }
+
+    await _applyThemePreferencesFromProfile(profile);
+  }
+
+  Future<void> _applyThemePreferencesFromProfile(UserProfile profile) async {
+    final appearance = profile.appearancePreferences;
+    if (appearance == null) {
+      return;
+    }
+
+    try {
+      await ThemeService().applyRemotePreferences(appearance);
+    } catch (error, stackTrace) {
+      debugPrint('AuthState: Failed to apply appearance preferences: $error');
       debugPrint(stackTrace.toString());
     }
   }
@@ -324,6 +346,24 @@ class AuthStateNotifier extends ChangeNotifier {
   Future<void> refreshProfile() async {
     if (!isAuthenticated) return;
     await _fetchProfile();
+    notifyListeners();
+  }
+
+  Future<void> saveAppearancePreferences(AppearancePreferences preferences) async {
+    final themeService = ThemeService();
+    await themeService.applyPreferences(preferences);
+
+    if (!isAuthenticated) {
+      return;
+    }
+
+    final payload = {
+      'preferences': {
+        'appearance': preferences.toMap(),
+      },
+    };
+
+    await _updateProfile(payload);
     notifyListeners();
   }
 

@@ -160,6 +160,67 @@ async def test_handle_post_signup_continues_when_profile_columns_missing():
 
 
 @pytest.mark.asyncio
+async def test_ensure_personal_invite_code_reuses_existing_profile_value():
+    database = FakeDatabase()
+    user_id = uuid.uuid4()
+    await database.insert(
+        "invite_codes",
+        {
+            "code": "STATIC42",
+            "status": "active",
+            "uses_count": 0,
+            "max_uses": 10,
+            "issued_by": str(user_id),
+            "metadata": {"type": "personal"},
+        },
+    )
+    database.profiles[str(user_id)] = {"id": str(user_id), "invite_code": "STATIC42"}
+    service = InviteReferralService(settings=Settings(), database=database)
+
+    record = await service.ensure_personal_invite_code(user_id)
+
+    assert record["code"] == "STATIC42"
+    assert database.profiles[str(user_id)]["invite_code"] == "STATIC42"
+
+
+@pytest.mark.asyncio
+async def test_ensure_personal_invite_code_restores_missing_profile_reference():
+    database = FakeDatabase()
+    user_id = uuid.uuid4()
+    await database.insert(
+        "invite_codes",
+        {
+            "code": "FIRST100",
+            "status": "active",
+            "uses_count": 1,
+            "max_uses": 10,
+            "issued_by": str(user_id),
+            "metadata": {"type": "personal"},
+        },
+    )
+    service = InviteReferralService(settings=Settings(), database=database)
+
+    record = await service.ensure_personal_invite_code(user_id)
+
+    assert record["code"] == "FIRST100"
+    assert database.profiles[str(user_id)]["invite_code"] == "FIRST100"
+    assert len(database.tables["invite_codes"]) == 1
+
+
+@pytest.mark.asyncio
+async def test_ensure_personal_invite_code_generates_when_missing():
+    database = FakeDatabase()
+    user_id = uuid.uuid4()
+    service = InviteReferralService(settings=Settings(), database=database)
+
+    record = await service.ensure_personal_invite_code(user_id)
+
+    assert record["issued_by"] == str(user_id)
+    assert database.profiles[str(user_id)]["invite_code"] == record["code"]
+    assert len(database.tables["invite_codes"]) == 1
+
+
+@pytest.mark.asyncio
 async def test_list_referrals_includes_share_link_and_metadata():
     database = FakeDatabase()
     user_id = uuid.uuid4()

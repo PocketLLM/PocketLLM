@@ -49,6 +49,8 @@ Validate an invite or referral code prior to sign-up.
 ### `GET /v1/users/profile`
 Fetch the authenticated user's profile.
 - **Response:** `UserProfile`
+- **Notes:** The profile response includes an optional `preferences` JSON blob. Clients should persist appearance
+  settings under the `preferences.appearance` key so chat surfaces and other devices can remain in sync.
 
 ### `PUT /v1/users/profile`
 Update profile attributes such as name, username, and avatar.
