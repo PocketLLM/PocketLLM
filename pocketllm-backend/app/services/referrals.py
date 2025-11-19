@@ -394,7 +394,7 @@ class InviteReferralService:
         ) from last_error
 
     async def _find_existing_personal_code(self, user_id: UUID) -> Dict[str, Any] | None:
-        """Return a previously issued personal code for ``user_id`` when available."""
+        """Return an active personal code previously issued to ``user_id``."""
 
         records = await self._database.select(
             "invite_codes",
@@ -403,19 +403,30 @@ class InviteReferralService:
         if not records:
             return None
 
-        def _sort_key(row: Dict[str, Any]) -> tuple[bool, datetime]:
-            created_at = self._parse_datetime(row.get("created_at"))
+        def _parse_metadata(row: Dict[str, Any]) -> Dict[str, Any]:
             raw_metadata = row.get("metadata") or {}
             if isinstance(raw_metadata, str):
                 try:
-                    raw_metadata = json.loads(raw_metadata)
+                    return json.loads(raw_metadata)
                 except ValueError:
-                    raw_metadata = {}
-            is_personal = (raw_metadata or {}).get("type") == "personal"
-            return (not is_personal, created_at or datetime.min.replace(tzinfo=UTC))
+                    return {}
+            return raw_metadata  # type: ignore[return-value]
 
-        ordered = sorted(records, key=_sort_key)
-        return ordered[0] if ordered else None
+        def _sort_key(row: Dict[str, Any]) -> datetime:
+            created_at = self._parse_datetime(row.get("created_at"))
+            return created_at or datetime.min.replace(tzinfo=UTC)
+
+        personal_records = [
+            row
+            for row in records
+            if (_parse_metadata(row) or {}).get("type") == "personal" and self._is_code_active(row)
+        ]
+
+        if not personal_records:
+            return None
+
+        ordered = sorted(personal_records, key=_sort_key)
+        return ordered[0]
 
     async def _persist_profile_invite_code(self, user_id: UUID, code: str) -> None:
         try:

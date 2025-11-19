@@ -10,6 +10,16 @@ from app.schemas.auth import AuthenticatedUser
 from app.services.referrals import InviteApprovalContext, InviteReferralService
 
 
+ANYIO_BACKEND = "asyncio"
+
+
+@pytest.fixture
+def anyio_backend():
+    """Force the anyio pytest plugin to use asyncio backend for this module."""
+
+    return ANYIO_BACKEND
+
+
 class FakeDatabase:
     def __init__(self, *, fail_profile_update: bool = False) -> None:
         self.tables: dict[str, list[dict[str, object]]] = defaultdict(list)
@@ -64,7 +74,7 @@ class FakeDatabase:
         return self.profiles.get(str(user_id))
 
 
-@pytest.mark.asyncio
+@pytest.mark.anyio(ANYIO_BACKEND)
 async def test_enforce_signup_policy_allows_invite_code():
     database = FakeDatabase()
     code_id = uuid.uuid4()
@@ -87,7 +97,7 @@ async def test_enforce_signup_policy_allows_invite_code():
     assert context.invite_record["id"] == code_id
 
 
-@pytest.mark.asyncio
+@pytest.mark.anyio(ANYIO_BACKEND)
 async def test_enforce_signup_policy_requires_invite_in_production():
     database = FakeDatabase()
     service = InviteReferralService(settings=Settings(environment="production"), database=database)
@@ -98,7 +108,7 @@ async def test_enforce_signup_policy_requires_invite_in_production():
     assert exc_info.value.status_code == 403
 
 
-@pytest.mark.asyncio
+@pytest.mark.anyio(ANYIO_BACKEND)
 async def test_handle_post_signup_consumes_invite_and_updates_profile():
     database = FakeDatabase()
     issuer_id = uuid.uuid4()
@@ -129,7 +139,7 @@ async def test_handle_post_signup_consumes_invite_and_updates_profile():
     assert referrals[0]["status"] == "joined"
 
 
-@pytest.mark.asyncio
+@pytest.mark.anyio(ANYIO_BACKEND)
 async def test_handle_post_signup_continues_when_profile_columns_missing():
     database = FakeDatabase(fail_profile_update=True)
     issuer_id = uuid.uuid4()
@@ -159,7 +169,7 @@ async def test_handle_post_signup_continues_when_profile_columns_missing():
     assert referrals[0]["status"] == "joined"
 
 
-@pytest.mark.asyncio
+@pytest.mark.anyio(ANYIO_BACKEND)
 async def test_ensure_personal_invite_code_reuses_existing_profile_value():
     database = FakeDatabase()
     user_id = uuid.uuid4()
@@ -183,7 +193,7 @@ async def test_ensure_personal_invite_code_reuses_existing_profile_value():
     assert database.profiles[str(user_id)]["invite_code"] == "STATIC42"
 
 
-@pytest.mark.asyncio
+@pytest.mark.anyio(ANYIO_BACKEND)
 async def test_ensure_personal_invite_code_restores_missing_profile_reference():
     database = FakeDatabase()
     user_id = uuid.uuid4()
@@ -207,7 +217,7 @@ async def test_ensure_personal_invite_code_restores_missing_profile_reference():
     assert len(database.tables["invite_codes"]) == 1
 
 
-@pytest.mark.asyncio
+@pytest.mark.anyio(ANYIO_BACKEND)
 async def test_ensure_personal_invite_code_generates_when_missing():
     database = FakeDatabase()
     user_id = uuid.uuid4()
@@ -220,7 +230,44 @@ async def test_ensure_personal_invite_code_generates_when_missing():
     assert len(database.tables["invite_codes"]) == 1
 
 
-@pytest.mark.asyncio
+@pytest.mark.anyio(ANYIO_BACKEND)
+async def test_ensure_personal_invite_code_ignores_non_personal_and_inactive_codes():
+    database = FakeDatabase()
+    user_id = uuid.uuid4()
+    await database.insert(
+        "invite_codes",
+        {
+            "code": "CAMPAIGN1",
+            "status": "active",
+            "uses_count": 0,
+            "max_uses": 5,
+            "issued_by": str(user_id),
+            "metadata": {"type": "campaign"},
+        },
+    )
+    await database.insert(
+        "invite_codes",
+        {
+            "code": "OLDPERSONAL",
+            "status": "revoked",
+            "uses_count": 5,
+            "max_uses": 5,
+            "issued_by": str(user_id),
+            "metadata": {"type": "personal"},
+        },
+    )
+    service = InviteReferralService(settings=Settings(), database=database)
+
+    record = await service.ensure_personal_invite_code(user_id, max_uses=2)
+
+    assert record["metadata"]["type"] == "personal"
+    assert record["status"] == "active"
+    assert record["code"] not in {"CAMPAIGN1", "OLDPERSONAL"}
+    assert database.profiles[str(user_id)]["invite_code"] == record["code"]
+    assert len(database.tables["invite_codes"]) == 3
+
+
+@pytest.mark.anyio(ANYIO_BACKEND)
 async def test_list_referrals_includes_share_link_and_metadata():
     database = FakeDatabase()
     user_id = uuid.uuid4()
