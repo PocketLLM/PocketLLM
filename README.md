@@ -8,6 +8,16 @@ PocketLLM is a cross-platform assistant that pairs a Flutter application with a 
   <img src="https://img.shields.io/badge/Backend-FastAPI-109989?style=for-the-badge&logo=fastapi" alt="FastAPI" />
 </p>
 
+## ⚠️ DEVELOPMENT STATUS DISCLAIMER ⚠️
+> IMPORTANT NOTICE — PLEASE READ BEFORE PROCEEDING
+> 🚧 Development of this application has been temporarily halted by the original author (me).
+This project is NOT abandoned, but it is not actively maintained or receiving updates at this time.
+
+If someone has forked or continued this project, feel free to use their version instead.
+
+Work is currently focused on PocketLLM Lite and Mugshot Studios both open-source and actively developed.
+This project may be resumed in the future.
+
 ## Overview
 
 PocketLLM focuses on three pillars:
