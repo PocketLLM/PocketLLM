@@ -10,6 +10,7 @@ PocketLLM is a cross-platform assistant that pairs a Flutter application with a 
 
 ## ⚠️ DEVELOPMENT STATUS DISCLAIMER ⚠️
 > IMPORTANT NOTICE — PLEASE READ BEFORE PROCEEDING
+
 > 🚧 Development of this application has been temporarily halted by the original author (me).
 This project is NOT abandoned, but it is not actively maintained or receiving updates at this time.
 
