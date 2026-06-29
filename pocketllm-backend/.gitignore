@@ -1,12 +1,47 @@
+# Python bytecode / compiled files
 __pycache__/
-*.pyc
-*.pyo
+*.py[cod]
+*$py.class
 *.pyd
-.env
+*.so
+
+# Virtual environments
 .venv/
+venv/
+env/
+ENV/
+
+# Environment / secrets
+.env
 .env.local
-.cache/
+.env.*.local
+
+# Testing & coverage
 .pytest_cache/
-.DS_Store
 .coverage
 htmlcov/
+.tox/
+.nox/
+.mypy_cache/
+.ruff_cache/
+
+# Build & distribution
+build/
+dist/
+*.egg-info/
+*.egg
+
+# IDE / editor
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS metadata
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Misc caches
+.cache/
