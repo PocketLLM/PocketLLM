@@ -20,11 +20,9 @@ class InviteCodeInfo(BaseModel):
 
     id: UUID
     code: str
-    status: str
     max_uses: int
     uses_count: int
-    remaining_uses: int | None = None
-    expires_at: datetime | None = None
+    remaining_uses: int
 
 
 class InviteCodeValidationResponse(BaseModel):
@@ -61,8 +59,6 @@ class ReferralListItem(BaseModel):
     reward_status: str
     created_at: datetime
     accepted_at: datetime | None = None
-    full_name: str | None = Field(default=None, max_length=120)
-    message: str | None = Field(default=None, max_length=500)
 
 
 class ReferralStats(BaseModel):
@@ -80,7 +76,7 @@ class ReferralListResponse(BaseModel):
     invite_code: str
     max_uses: int
     uses_count: int
-    remaining_uses: int | None = None
+    remaining_uses: int
     invite_link: str | None = None
     share_message: str | None = None
     referrals: List[ReferralListItem] = Field(default_factory=list)

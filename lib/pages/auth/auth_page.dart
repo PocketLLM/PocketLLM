@@ -652,16 +652,13 @@ class _AuthPageState extends State<AuthPage> {
             ),
           ),
         const SizedBox(height: 16),
-        // Modified button to show spinner when processing
-        if (_isProcessingAuth)
-          const Center(child: CircularProgressIndicator())
-        else
-          CustomButton(
-            text: isSignUp ? 'Create Account' : 'Sign In',
-            onPressed: () => _handleSubmit(context),
-            variant: ButtonVariant.filled,
-            size: ButtonSize.large,
-          ),
+        CustomButton(
+          text: isSignUp ? 'Create Account' : 'Sign In',
+          onPressed: authState.isPerformingRequest ? null : () => _handleSubmit(context),
+          variant: ButtonVariant.filled,
+          size: ButtonSize.large,
+          child: authState.isPerformingRequest ? const CircularProgressIndicator.adaptive() : null,
+        ),
         const SizedBox(height: 16),
         _buildDivider(),
         const SizedBox(height: 16),
