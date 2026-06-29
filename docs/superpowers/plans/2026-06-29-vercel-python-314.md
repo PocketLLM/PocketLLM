@@ -26,6 +26,7 @@
 - Create: `pocketllm-backend/vercel.json`
 
 - [ ] Set both Python declarations to the 3.14 minor line.
+- [ ] Declare every `requirements.txt` package in `project.dependencies` so the Vercel function bundle contains all runtime imports.
 - [ ] Configure Vercel with `framework: "fastapi"` and `buildCommand: null` while retaining `main:app` as the entrypoint.
 - [ ] Re-run `python -m unittest tests.test_vercel_deployment_config -v` and confirm it passes.
 

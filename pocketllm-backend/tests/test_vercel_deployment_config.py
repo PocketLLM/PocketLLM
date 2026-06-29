@@ -37,6 +37,20 @@ class VercelDeploymentConfigTests(unittest.TestCase):
         self.assertIsNone(vercel_config["buildCommand"])
         self.assertEqual(pyproject["tool"]["vercel"]["entrypoint"], "main:app")
 
+    def test_pyproject_declares_all_runtime_dependencies(self) -> None:
+        pyproject = tomllib.loads(
+            (BACKEND_ROOT / "pyproject.toml").read_text(encoding="utf-8")
+        )
+        requirements = {
+            line.strip()
+            for line in (BACKEND_ROOT / "requirements.txt")
+            .read_text(encoding="utf-8")
+            .splitlines()
+            if line.strip() and not line.lstrip().startswith("#")
+        }
+
+        self.assertSetEqual(set(pyproject["project"]["dependencies"]), requirements)
+
 
 if __name__ == "__main__":
     unittest.main()
