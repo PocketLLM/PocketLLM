@@ -25,7 +25,7 @@ source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
-direct run: `cd pocketllm-backend; venv/Scripts/activate; python -m uvicorn main:app --reload`
+Windows direct run: `cd pocketllm-backend; .venv\Scripts\activate; python -m uvicorn main:app --reload`
 ### 2. Configure environment variables
 
 Create a `.env` file (or update environment variables) with the following keys:
@@ -83,6 +83,19 @@ uvicorn main:app --reload --port 8000
 ```
 
 The hosted API is available at `https://pocket-llm-api.vercel.app`. OpenAPI documentation is exposed at `/docs`.
+
+### Vercel deployment
+
+The backend targets Python 3.14 on Vercel. The runtime is declared in both
+`.python-version` and `pyproject.toml`, and `vercel.json` selects Vercel's
+FastAPI framework preset. Vercel discovers the exported `main:app` application
+and packages it as a Function.
+
+Do not configure `python -m uvicorn main:app --reload` as the Vercel Build
+Command. That command starts a long-running development server and can also
+run under a different interpreter than the one Vercel used to install native
+dependencies. Use it only for local development; the repository explicitly
+disables a custom Vercel Build Command.
 
 ### 5. Run tests
 

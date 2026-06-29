@@ -2,7 +2,35 @@
 name = "pocketllm-backend"
 version = "0.1.0"
 description = "PocketLLM API Backend"
-requires-python = "~=3.12.0"
+requires-python = "~=3.14.0"
+dependencies = [
+    "fastapi",
+    "uvicorn[standard]",
+    "pydantic",
+    "pydantic-settings",
+    "httpx",
+    "groq",
+    "openai",
+    "anthropic>=0.3.0",
+    "mistralai>=0.0.8",
+    "langchain",
+    "langchain-classic",
+    "langchain-core",
+    "langchain-community",
+    "langgraph",
+    "cryptography",
+    "asyncpg",
+    "supabase",
+    "passlib[bcrypt]",
+    "pyjwt[crypto]",
+    "structlog",
+    "python-dotenv",
+    "python-multipart",
+    "redis",
+    "tenacity",
+    "uuid6",
+    "pydantic[email]",
+]
 
 [tool.vercel]
 entrypoint = "main:app"
