@@ -1,0 +1,8 @@
+[project]
+name = "pocketllm-backend"
+version = "0.1.0"
+description = "PocketLLM API Backend"
+requires-python = "~=3.12.0"
+
+[tool.vercel]
+entrypoint = "main:app"
