@@ -477,7 +477,7 @@ def _diagnose_connection_issue(meta: Dict[str, Any], exc: Exception) -> Dict[str
         try:
             socket.getaddrinfo(host, None)
             dns_info["resolution"] = "ok"
-        except socket.gaierror as dns_exc:  # pragma: no cover - environment dependent
+        except OSError as dns_exc:  # pragma: no cover - environment dependent
             dns_info["resolution"] = "failed"
             dns_info["error"] = str(dns_exc)
         diagnostics["dns"] = dns_info

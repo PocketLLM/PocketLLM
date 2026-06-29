@@ -32,7 +32,7 @@ if "supabase" not in sys.modules:
 os.environ.setdefault("SUPABASE_URL", "https://example.supabase.co")
 os.environ.setdefault("SUPABASE_SERVICE_ROLE_KEY", "service-role-key")
 
-from app.database.connection import SupabaseDatabase
+from app.database.connection import SupabaseDatabase, _diagnose_connection_issue
 
 
 def _dummy_supabase() -> SupabaseDatabase:
@@ -159,6 +159,21 @@ def test_test_connection_respects_skip_environment(monkeypatch, caplog) -> None:
         assert "skipping supabase test_connection" in caplog.text.lower()
     finally:
         monkeypatch.delenv("SUPABASE_SKIP_CONNECTION_TEST", raising=False)
+
+
+def test_connection_diagnostics_handle_dns_os_errors(monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    def _busy_dns(*_args, **_kwargs):  # type: ignore[no-untyped-def]
+        raise OSError(16, "Device or resource busy")
+
+    monkeypatch.setattr("app.database.connection.socket.getaddrinfo", _busy_dns)
+
+    diagnostics = _diagnose_connection_issue(
+        {"host": "example.supabase.co"},
+        OSError(16, "Device or resource busy"),
+    )
+
+    assert diagnostics["dns"]["resolution"] == "failed"
+    assert "Device or resource busy" in diagnostics["dns"]["error"]
 
 
 def test_startup_allows_unverified_connection_when_not_strict(monkeypatch) -> None:  # type: ignore[no-untyped-def]
