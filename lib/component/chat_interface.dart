@@ -147,10 +147,8 @@ class ChatInterfaceState extends State<ChatInterface> {
         final shouldContinue = await _showModelChangeConfirmation(oldModelId, newModel);
         if (!shouldContinue) {
           // Revert model selection
-          if (oldModelId != null) {
-            await _modelState.setSelectedModel(oldModelId);
-          }
-          return;
+          await _modelState.setSelectedModel(oldModelId);
+                  return;
         }
         
         // Update conversation model tracking

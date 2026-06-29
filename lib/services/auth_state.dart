@@ -419,9 +419,7 @@ class AuthStateNotifier extends ChangeNotifier {
     );
 
     final data = _extractData(response);
-    final profileData = data is Map<String, dynamic>
-        ? _extractProfilePayload(data) ?? data
-        : null;
+    final profileData = _extractProfilePayload(data) ?? data;
 
     if (profileData != null) {
       _profile = UserProfile.fromMap(_mergeProfileWithDeletion(profileData));
@@ -631,16 +629,14 @@ class AuthStateNotifier extends ChangeNotifier {
     try {
       final response = await _get('/users/profile', requiresAuth: true);
       final data = _extractData(response);
-      if (data is Map<String, dynamic>) {
-        final profile = UserProfile.fromMap(data);
-        await _synchronizeDeletionSchedule(profile);
-        _profile = profile;
-        _applyDeletionScheduleToProfile();
-        if (_profile != null) {
-          await _cacheProfile(_profile!);
-        }
+      final profile = UserProfile.fromMap(data);
+      await _synchronizeDeletionSchedule(profile);
+      _profile = profile;
+      _applyDeletionScheduleToProfile();
+      if (_profile != null) {
+        await _cacheProfile(_profile!);
       }
-    } on AuthException catch (error) {
+        } on AuthException catch (error) {
       if (error.statusCode == 404) {
         debugPrint('AuthState: No remote profile found for current user.');
         _profile = null;
@@ -656,14 +652,12 @@ class AuthStateNotifier extends ChangeNotifier {
     Future<void> sendUpdate(Map<String, dynamic> body) async {
       final response = await _put('/users/profile', body: body, requiresAuth: true);
       final data = _extractData(response);
-      if (data is Map<String, dynamic>) {
-        _profile = UserProfile.fromMap(_mergeProfileWithDeletion(data));
-        _applyDeletionScheduleToProfile();
-        if (_profile != null) {
-          await _cacheProfile(_profile!);
-        }
+      _profile = UserProfile.fromMap(_mergeProfileWithDeletion(data));
+      _applyDeletionScheduleToProfile();
+      if (_profile != null) {
+        await _cacheProfile(_profile!);
       }
-    }
+        }
 
     try {
       await sendUpdate(payload);

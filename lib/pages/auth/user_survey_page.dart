@@ -353,7 +353,7 @@ class _UserSurveyPageState extends State<UserSurveyPage> {
     final selectedValue = _answers[question.id];
     final bool isMultiSelect = question.isMultiSelect;
     final List<String> selectedList = isMultiSelect && selectedValue is List
-        ? List<String>.from((selectedValue as List).whereType<String>())
+        ? List<String>.from((selectedValue).whereType<String>())
         : <String>[];
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,

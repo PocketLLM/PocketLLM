@@ -221,7 +221,6 @@ class _SettingsPageState extends State<SettingsPage> {
     String? subtitle,
     bool showActionButtons = false,
     VoidCallback? onTap,
-    VoidCallback? onAddPressed,
   }) {
     final colorScheme = ThemeService().colorScheme;
     

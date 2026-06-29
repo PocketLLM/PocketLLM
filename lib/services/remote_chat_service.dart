@@ -16,7 +16,7 @@ class RemoteChatService {
     if (data is! List) return const [];
     return data
         .whereType<Map>()
-        .map((raw) => _mapConversationSummary(Map<String, dynamic>.from(raw as Map)))
+        .map((raw) => _mapConversationSummary(Map<String, dynamic>.from(raw)))
         .toList();
   }
 
@@ -79,7 +79,7 @@ class RemoteChatService {
     if (data is! List) return const [];
     return data
         .whereType<Map>()
-        .map((raw) => _mapMessage(Map<String, dynamic>.from(raw as Map)))
+        .map((raw) => _mapMessage(Map<String, dynamic>.from(raw)))
         .toList();
   }
 
@@ -101,7 +101,7 @@ class RemoteChatService {
     }
     final messages = (payload['messages'] as List<dynamic>? ?? const [])
         .whereType<Map>()
-        .map((raw) => _mapMessage(Map<String, dynamic>.from(raw as Map)))
+        .map((raw) => _mapMessage(Map<String, dynamic>.from(raw)))
         .toList();
     final summary = _mapConversationSummary(chat);
     return summary.copyWith(

@@ -22,7 +22,6 @@ enum _AuthMode { signIn, signUp }
 class _StaggeredCurve extends Curve {
   const _StaggeredCurve({
     required this.delayFraction,
-    this.curve = Curves.easeOutCubic,
   });
 
   final double delayFraction;

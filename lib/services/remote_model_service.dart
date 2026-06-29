@@ -32,7 +32,7 @@ class RemoteModelService {
     }
 
     final map = _castMap(settings) ?? settings;
-    if (map == null || map.isEmpty) {
+    if (map.isEmpty) {
       return null;
     }
 
