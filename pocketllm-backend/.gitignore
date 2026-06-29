@@ -19,6 +19,7 @@ ENV/
 # Testing & coverage
 .pytest_cache/
 .coverage
+.coverage.*
 htmlcov/
 .tox/
 .nox/
@@ -45,3 +46,6 @@ desktop.ini
 
 # Misc caches
 .cache/
+
+# Local Vercel project link
+.vercel/

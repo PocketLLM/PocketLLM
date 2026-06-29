@@ -61,5 +61,17 @@ app.*.map.json
 **/.pytest_cache/
 **/.mypy_cache/
 **/.ruff_cache/
+**/.tox/
+**/.nox/
 **/.coverage
+**/.coverage.*
 **/htmlcov/
+**/dist/
+**/*.egg-info/
+
+# Node / package-manager caches
+**/node_modules/
+**/.npm/
+
+# Local Vercel project links
+**/.vercel/
