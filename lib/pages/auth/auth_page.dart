@@ -22,6 +22,7 @@ enum _AuthMode { signIn, signUp }
 class _StaggeredCurve extends Curve {
   const _StaggeredCurve({
     required this.delayFraction,
+    this.curve = Curves.easeInOut,
   });
 
   final double delayFraction;
@@ -653,11 +654,11 @@ class _AuthPageState extends State<AuthPage> {
           ),
         const SizedBox(height: 16),
         CustomButton(
-          text: isSignUp ? 'Create Account' : 'Sign In',
-          onPressed: authState.isPerformingRequest ? null : () => _handleSubmit(context),
+          text: authState.isPerformingRequest ? 'Please wait…' : (isSignUp ? 'Create Account' : 'Sign In'),
+          onPressed: () => _handleSubmit(context),
           variant: ButtonVariant.filled,
           size: ButtonSize.large,
-          child: authState.isPerformingRequest ? const CircularProgressIndicator.adaptive() : null,
+          enabled: !authState.isPerformingRequest,
         ),
         const SizedBox(height: 16),
         _buildDivider(),

@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:pocketllm/models/notification_preferences_model.dart';
 import 'package:pocketllm/services/notification_preferences_service.dart';
-import 'package:pocketllm/theme/theme.dart';
 
 class NotificationSettingsPage extends StatefulWidget {
   const NotificationSettingsPage({super.key});
@@ -156,7 +155,7 @@ class _NotificationSettingsPageState extends State<NotificationSettingsPage> {
       subtitle: Text(subtitle),
       value: value,
       onChanged: onChanged,
-      activeColor: HiVpnColors.primary,
+      activeColor: Theme.of(context).colorScheme.primary,
     );
   }
 }

@@ -872,6 +872,7 @@ class _NavigationItem {
   const _NavigationItem({
     required this.icon,
     required this.label,
+    this.subtitle,
     required this.onTap,
   });
 

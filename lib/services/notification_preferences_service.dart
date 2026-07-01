@@ -11,7 +11,7 @@ class NotificationPreferencesService {
 
   Future<NotificationPreferences> updateNotificationPreferences(
       NotificationPreferencesUpdate payload) async {
-    final response = await _api.put('/v1/notification-preferences', payload.toJson());
+    final response = await _api.put('/v1/notification-preferences', body: payload.toJson());
     return NotificationPreferences.fromJson(response.data);
   }
 }

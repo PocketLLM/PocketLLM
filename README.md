@@ -8,16 +8,12 @@ PocketLLM is a cross-platform assistant that pairs a Flutter application with a 
   <img src="https://img.shields.io/badge/Backend-FastAPI-109989?style=for-the-badge&logo=fastapi" alt="FastAPI" />
 </p>
 
-## ⚠️ DEVELOPMENT STATUS DISCLAIMER ⚠️
-> IMPORTANT NOTICE — PLEASE READ BEFORE PROCEEDING
+## 🚀 DEVELOPMENT STATUS
 
-> 🚧 Development of this application has been temporarily halted by the original author (me).
-This project is NOT abandoned, but it is not actively maintained or receiving updates at this time.
+> PocketLLM is **back in active development!** Both PocketLLM and **PocketLLM Lite** are actively maintained and receiving regular updates.
 
-If someone has forked or continued this project, feel free to use their version instead.
+> The backend has been fully rebuilt with FastAPI and is production-ready. Frontend development has resumed with new features, bug fixes, and improved stability.
 
-Work is currently focused on PocketLLM Lite and Mugshot Studios both open-source and actively developed.
-This project may be resumed in the future.
 
 ## Overview
 
@@ -60,7 +56,7 @@ PocketLLM
 
 | Component | Requirement |
 |-----------|-------------|
-| Flutter   | 3.19.6 (see [`AGENTS.md`](AGENTS.md) setup script) |
+| Flutter   | 3.41+ (stable channel) |
 | Dart      | Included with Flutter SDK |
 | Python    | 3.11+ for FastAPI backend |
 | Node / pnpm | Optional for tooling around Supabase migrations |

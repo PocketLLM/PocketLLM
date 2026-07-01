@@ -19,6 +19,26 @@ class ReferralOverview {
     required this.stats,
   });
 
+  /// Alias for [maxUses] — used by the referral center UI.
+  int get totalSlots => maxUses;
+
+  /// Number of invite slots still available.
+  int get availableSlots => remainingUses;
+
+  /// Progress fraction (0.0 – 1.0) of invite usage.
+  /// Returns 0 when there is no slot cap.
+  double get usageProgress =>
+      totalSlots > 0 ? (usesCount / totalSlots).clamp(0.0, 1.0) : 0.0;
+
+  /// Build a share message from backend-provided fields, with a fallback.
+  String buildShareMessage() {
+    if (shareMessage != null && shareMessage!.isNotEmpty) {
+      return shareMessage!;
+    }
+    final link = inviteLink ?? '';
+    return 'Join me on PocketLLM! Use my invite code: $inviteCode $link'.trim();
+  }
+
   factory ReferralOverview.fromJson(Map<String, dynamic> json) {
     return ReferralOverview(
       inviteCode: json['invite_code'],
@@ -38,6 +58,7 @@ class ReferralOverview {
 class ReferralListItem {
   final String referralId;
   final String email;
+  final String? fullName;
   final String status;
   final String rewardStatus;
   final DateTime createdAt;
@@ -46,6 +67,7 @@ class ReferralListItem {
   ReferralListItem({
     required this.referralId,
     required this.email,
+    this.fullName,
     required this.status,
     required this.rewardStatus,
     required this.createdAt,
@@ -56,6 +78,7 @@ class ReferralListItem {
     return ReferralListItem(
       referralId: json['referral_id'],
       email: json['email'],
+      fullName: json['full_name'],
       status: json['status'],
       rewardStatus: json['reward_status'],
       createdAt: DateTime.parse(json['created_at']),
@@ -65,6 +88,9 @@ class ReferralListItem {
     );
   }
 }
+
+/// Backwards-compatible alias used by referral_center_page.dart.
+typedef ReferralEntry = ReferralListItem;
 
 class ReferralStats {
   final int totalSent;

@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:pocketllm/models/notification_models.dart';
 import 'package:pocketllm/services/notification_service.dart';
-import 'package:pocketllm/theme/theme.dart';
 import 'notification_settings_page.dart';
 
 class NotificationCenterScreen extends StatefulWidget {
@@ -129,8 +128,8 @@ class _NotificationCenterScreenState extends State<NotificationCenterScreen> {
             ? Container(
                 width: 8,
                 height: 8,
-                decoration: const BoxDecoration(
-                  color: HiVpnColors.primary,
+                decoration: BoxDecoration(
+                  color: theme.colorScheme.primary,
                   shape: BoxShape.circle,
                 ),
               )
@@ -146,15 +145,15 @@ class _NotificationCenterScreenState extends State<NotificationCenterScreen> {
     switch (type) {
       case 'account_deletion':
         iconData = Icons.warning_amber_rounded;
-        color = HiVpnColors.Error;
+        color = theme.colorScheme.error;
         break;
       case 'job_completed':
         iconData = Icons.check_circle_outline;
-        color = HiVpnColors.Success;
+        color = Colors.green;
         break;
       case 'subscription_renewed':
         iconData = Icons.autorenew;
-        color = HiVpnColors.primary;
+        color = theme.colorScheme.primary;
         break;
       case 'referral_bonus':
         iconData = Icons.star_outline;

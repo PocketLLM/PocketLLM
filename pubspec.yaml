@@ -41,7 +41,7 @@ dependencies:
   file_picker:
   path: 
   provider: 
-  google_fonts: 
+  google_fonts: ^8.0.0
   intl: 
   connectivity_plus: 
   crypto: 

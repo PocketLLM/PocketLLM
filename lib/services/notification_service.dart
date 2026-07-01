@@ -12,11 +12,11 @@ class NotificationService {
   }
 
   Future<void> markAsRead(String notificationId) async {
-    await _api.patch('/v1/notifications/$notificationId/read', {});
+    await _api.patch('/v1/notifications/$notificationId/read', body: {});
   }
 
   Future<void> markAllAsRead() async {
-    await _api.post('/v1/notifications/mark-all-read', {});
+    await _api.post('/v1/notifications/mark-all-read', body: {});
   }
 
   Future<int> getUnreadCount() async {

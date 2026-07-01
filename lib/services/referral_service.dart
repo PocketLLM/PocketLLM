@@ -14,7 +14,7 @@ class ReferralService {
     String? fullName,
     String? message,
   }) async {
-    await _api.post('/v1/referral/send', {
+    await _api.post('/v1/referral/send', body: {
       'email': email,
       'full_name': fullName,
       'message': message,
